@@ -6,7 +6,7 @@ import { createFolder, createFile } from "@/db/actions/action-workspace";
 import { Folder, File } from "@/db/database.types";
 import { useAppState } from "@/lib/providers/state-providers";
 import { PlusIcon } from "lucide-react";
-import { Suspense, useEffect, useState } from "react";
+import { Suspense, useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
 import { v4 } from "uuid";
 import DropDown from "./drop-down-folder";
@@ -26,8 +26,33 @@ export default function FoldersDropdownList({
   // TODO set real-time updates
   useSupabaseRealtime()
 
-  const { state, dispatch, folderId } = useAppState();
+  // NOTE: the route is /dashboard/[workspaceId]/[fileId], so this segment is the open file
+  const { state, dispatch, folderId: activeFileId } = useAppState();
   const [folders, setFolders] = useState(workspaceFolders);
+  const [openFolders, setOpenFolders] = useState<string[]>([]);
+  const [newFolderId, setNewFolderId] = useState<string | null>(null);
+  const autoOpenedFor = useRef<string | null>(null);
+
+  const toggleFolder = (id: string) =>
+    setOpenFolders((prev) =>
+      prev.includes(id) ? prev.filter((f) => f !== id) : [...prev, id]
+    );
+  const expandFolder = (id: string) =>
+    setOpenFolders((prev) => (prev.includes(id) ? prev : [...prev, id]));
+
+  // Reveal the open file: expand its folder once, without fighting manual collapses
+  useEffect(() => {
+    if (!activeFileId || autoOpenedFor.current === activeFileId) return;
+    const parent = state.workspaces
+      .find((workspace) => workspace.id === workspaceId)
+      ?.folders.find((folder) =>
+        folder.files.some((file) => file.id === activeFileId)
+      );
+    if (parent) {
+      expandFolder(parent.id);
+      autoOpenedFor.current = activeFileId;
+    }
+  }, [state, workspaceId, activeFileId]);
 
   // console.log("Workspace Folders :::  " , workspaceFolders.map((index)=>(index.title)))
 
@@ -71,8 +96,8 @@ export default function FoldersDropdownList({
     const newFolder: Folder = {
       id: v4(),
       createdAt: new Date().toISOString(),
-      title: "New Folder",
-      iconId: "📄",
+      title: "Untitled folder",
+      iconId: "📁",
       inTrash: null,
       workspaceId,
       bannerUrl: "",
@@ -83,6 +108,8 @@ export default function FoldersDropdownList({
       type: "ADD_FOLDER",
       payload: { workspaceId, folder: { ...newFolder, files: [] } },
     });
+    setNewFolderId(newFolder.id);
+    expandFolder(newFolder.id);
 
     const { data: folderData, error: folderError } = await createFolder(newFolder);
 
@@ -91,7 +118,7 @@ export default function FoldersDropdownList({
         type: "DELETE_FOLDER",
         payload: { workspaceId, folderId: newFolder.id },
       });
-      toast.error("Error", { description: "Could not create the folder" });
+      toast.error("Could not create the folder");
       return;
     }
 
@@ -102,8 +129,8 @@ export default function FoldersDropdownList({
       data: null,
       createdAt: new Date().toISOString(),
       inTrash: null,
-      title: "double click to rename!",
-      iconId: "🗽",
+      title: "Untitled",
+      iconId: "📄",
       bannerUrl: "",
       updatedAt:new Date().toISOString(),
     };
@@ -111,20 +138,19 @@ export default function FoldersDropdownList({
     const { error: fileError } = await createFile(newFile);
 
     if (fileError) {
-      toast.error("Error", { description: "Could not create the default file" });
+      toast.error("Could not create the first file in this folder");
     } else {
       dispatch({
         type: "UPDATE_FOLDER",
         payload: { workspaceId, folderId: newFolder.id, folder: { files: [newFile] } },
       });
-      toast.success("Success", { description: "Created folder and default file." });
     }
   };
 
   // Show empty state if no folders exist
   if (folders.filter(folder => !folder.inTrash).length === 0) {
     return (
-      <div className="flex flex-col items-center justify-center p-4 space-y-4 mt-8">
+      <div className="flex flex-col items-center justify-center p-4 space-y-4 mt-8 animate-fadeIn opacity-0">
         <div className="text-muted-foreground text-sm text-center">
           No folders yet. Create your first folder to get started.
         </div>
@@ -141,31 +167,38 @@ export default function FoldersDropdownList({
   return (
     <>
       <div className="flex bg-card-foreground sticky z-10 top-0 my-2 border-b w-full h-10 group/title justify-between items-center">
-        <span className="text-slate-400 font-regular text-sm text-center">
-          workspace folder
+        <span className="text-slate-400 font-medium text-xs uppercase tracking-wide">
+          Workspace folders
         </span>
-        <TooltipComponent message="Create Folder">
-          <PlusIcon
+        <TooltipComponent message="New folder">
+          <button
+            type="button"
+            aria-label="New folder"
             onClick={addFolderHandler}
-            size={16}
-            className="inline-block cursor-pointer h-fit w-fit p-[2px] rounded-sm m-2 text-slate-300 transition-[color,background-color,transform] duration-150 ease-out active:scale-90 group-hover/title:text-primary group-hover/title:bg-accent"
-          />
+            className="flex items-center justify-center h-6 w-6 rounded-sm m-2 text-slate-500 transition-[color,background-color,transform] duration-150 ease-out hover:text-primary hover:bg-accent active:scale-90"
+          >
+            <PlusIcon size={16} />
+          </button>
         </TooltipComponent>
       </div>
       <Accordion
         type="multiple"
-        defaultValue={[folderId || ""]}
+        value={openFolders}
+        onValueChange={setOpenFolders}
         className="space-y-2"
       >
         {folders
           .filter((folder) => !folder.inTrash)
           .map((folder) => (
-            <Suspense key={folder.id} fallback={<div>Loading...</div>}>
+            <Suspense key={folder.id} fallback={<div className="h-10 rounded-md bg-muted/60 animate-pulse" />}>
               <DropDown
                 title={folder.title}
                 listType="folder"
                 id={folder.id}
                 iconId={folder.iconId}
+                autoEdit={folder.id === newFolderId}
+                onToggle={toggleFolder}
+                onExpand={expandFolder}
               />
             </Suspense>
           ))}

@@ -1,12 +1,16 @@
 import { Extension } from "@tiptap/core";
 
-const INDENT = "    "; // 4 non-breaking spaces (plain spaces collapse in HTML)
+const INDENT = "\t";
 
 /**
  * Keeps Tab inside the editor. Without this, Tab outside a list falls through to
  * the browser and moves focus away from the document.
  * - In list / task items: nest (Tab) or un-nest (Shift-Tab).
- * - Elsewhere: insert an indent; Shift-Tab removes one directly before the cursor.
+ * - Elsewhere: insert a tab character; Shift-Tab removes one directly before the cursor.
+ *
+ * Text is inserted with a raw transaction, not insertContent(): the Markdown extension
+ * parses insertContent strings, which escaped whitespace into a literal "&nbsp;".
+ * The editor already renders with `white-space: pre-wrap`, so "\t" shows as indentation.
  */
 export const TabIndent = Extension.create({
   name: "tabIndent",
@@ -19,19 +23,18 @@ export const TabIndent = Extension.create({
       Tab: ({ editor }) => {
         if (editor.isActive("listItem")) return editor.commands.sinkListItem("listItem") || true;
         if (editor.isActive("taskItem")) return editor.commands.sinkListItem("taskItem") || true;
-        if (editor.isActive("codeBlock")) return editor.commands.insertContent("  ");
-        return editor.commands.insertContent(INDENT);
+        return editor.commands.command(({ tr }) => {
+          tr.insertText(INDENT);
+          return true;
+        });
       },
       "Shift-Tab": ({ editor }) => {
         if (editor.isActive("listItem")) return editor.commands.liftListItem("listItem") || true;
         if (editor.isActive("taskItem")) return editor.commands.liftListItem("taskItem") || true;
 
         const { from, empty } = editor.state.selection;
-        if (empty && from > INDENT.length) {
-          const before = editor.state.doc.textBetween(from - INDENT.length, from);
-          if (before === INDENT) {
-            return editor.commands.deleteRange({ from: from - INDENT.length, to: from });
-          }
+        if (empty && from > 1 && editor.state.doc.textBetween(from - 1, from) === INDENT) {
+          return editor.commands.deleteRange({ from: from - 1, to: from });
         }
         return true; // swallow so focus doesn't jump backwards out of the editor
       },

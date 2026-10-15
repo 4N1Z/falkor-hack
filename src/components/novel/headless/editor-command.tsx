@@ -32,7 +32,8 @@ export const EditorCommandOut: FC<EditorCommandOutProps> = ({
   }, [range, setRange]);
 
   useEffect(() => {
-    const navigationKeys = ["ArrowUp", "ArrowDown", "Enter"];
+    // Tab selects the highlighted item, same as Enter
+    const navigationKeys = ["ArrowUp", "ArrowDown", "Enter", "Tab"];
     const onKeyDown = (e: KeyboardEvent) => {
       if (navigationKeys.includes(e.key)) {
         e.preventDefault();
@@ -41,7 +42,7 @@ export const EditorCommandOut: FC<EditorCommandOutProps> = ({
         if (commandRef)
           commandRef.dispatchEvent(
             new KeyboardEvent("keydown", {
-              key: e.key,
+              key: e.key === "Tab" ? "Enter" : e.key,
               cancelable: true,
               bubbles: true,
             }),

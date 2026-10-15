@@ -2,10 +2,16 @@ import { streamText } from 'ai';
 import { openai } from '@ai-sdk/openai';
 import { match } from "ts-pattern";
 import { CoreMessage } from 'ai';
-export const runtime = "edge";
+import { auth } from '@/auth';
+// nodejs, not edge: auth() reads the session through the Postgres (Drizzle) adapter
+export const runtime = "nodejs";
 export const maxDuration = 30;
 
 export async function POST(req: Request){
+  const session = await auth();
+  if (!session?.user) {
+    return new Response("Unauthorized", { status: 401 });
+  }
 
   // Check if the OPENAI_API_KEY is set, if not return 400
   if (!process.env.OPENAI_API_KEY || process.env.OPENAI_API_KEY === "") {

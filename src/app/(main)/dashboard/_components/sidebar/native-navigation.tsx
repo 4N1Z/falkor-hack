@@ -55,19 +55,23 @@ export default function NativeNavigation({myWorkspaceId,userId,className}:Native
           {/* <NavItem link={`/dashboard/${myWorkspaceId}`} title="Dashboard" logo={<HomeIcon size={18} className="text-neura-dashboardGray" />} /> */}
         </li>
 
-        <SettingsMenu>
-          <li className={navBtnstyle}>
-            <Settings size={18} />
-            <span>Settings</span>
-          </li>
-        </SettingsMenu>
+        <li>
+          <SettingsMenu>
+            <div className={navBtnstyle}>
+              <Settings size={18} />
+              <span>Settings</span>
+            </div>
+          </SettingsMenu>
+        </li>
 
-        <Trash>
-          <li className={navBtnstyle}>
-            <ArchiveIcon size={18} />
-            <span>Archive</span>
-          </li>
-        </Trash>
+        <li>
+          <Trash>
+            <div className={navBtnstyle}>
+              <ArchiveIcon size={18} />
+              <span>Archive</span>
+            </div>
+          </Trash>
+        </li>
 
         {/* <div className="sticky bottom-0 w-full border-t z-50 p-2">
           <CustomDialogTrigger

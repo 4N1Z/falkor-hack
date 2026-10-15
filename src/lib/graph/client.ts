@@ -12,10 +12,17 @@ export function getFalkor(): Promise<FalkorDB> {
   if (!globalForFalkor.falkor) {
     const url = process.env.FALKORDB_URL;
     if (!url) throw new Error("FALKORDB_URL is not set");
-    globalForFalkor.falkor = FalkorDB.connect({ url }).catch((err) => {
-      globalForFalkor.falkor = undefined;
-      throw err;
-    });
+    globalForFalkor.falkor = FalkorDB.connect({ url })
+      .then((db) => {
+        // Without a listener, a dropped socket (e.g. FalkorDB restart) is an unhandled
+        // 'error' event and kills the whole Node process. The client reconnects on its own.
+        db.on("error", (err: unknown) => console.error("[graph] FalkorDB connection error:", err));
+        return db;
+      })
+      .catch((err) => {
+        globalForFalkor.falkor = undefined;
+        throw err;
+      });
   }
   return globalForFalkor.falkor;
 }

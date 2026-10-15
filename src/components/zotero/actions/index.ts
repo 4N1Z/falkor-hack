@@ -5,6 +5,8 @@ import { uploadPapersToStorage } from "@/lib/storage";
 import db from "@/db";
 import { papers } from "@/db/schema";
 import { auth } from "@/auth";
+import { and, eq, inArray } from "drizzle-orm";
+import { scheduleLibraryIngest } from "@/lib/graph/hooks";
 
 interface UploadProgress {
   total: number;
@@ -73,6 +75,22 @@ export async function importPapers(
 
   if (progress.failed.length > 0) {
     console.log("❌ Failed items:", progress.failed);
+  }
+
+  // Hand the newly imported papers to the Librarian (runs after the response)
+  const importedKeys = itemKeys.map((item) => item.key);
+  if (importedKeys.length) {
+    const imported = await db
+      .select()
+      .from(papers)
+      .where(
+        and(
+          eq(papers.workspaceId, workspaceId),
+          eq(papers.externalSource, "zotero"),
+          inArray(papers.externalId, importedKeys)
+        )
+      );
+    scheduleLibraryIngest(imported);
   }
 
   return {

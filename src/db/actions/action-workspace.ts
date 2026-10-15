@@ -12,6 +12,8 @@ import { validate } from "uuid";
 import { collaborators } from "../schema";
 import { and, eq, notExists } from "drizzle-orm";
 import { title } from "process";
+import { auth } from "@/auth";
+import { scheduleDocumentSync } from "@/lib/graph/hooks";
 
 export const createWorkspace = async (workspace: workspace) => {
   try {
@@ -306,6 +308,19 @@ export const updateFile = async (file: Partial<File>, fileId: string) => {
       .update(files)
       .set(file)
       .where(eq(files.id, fileId));
+
+    // Content saves also refresh the document's claims/citations in the research graph
+    if (file.data) {
+      const session = await auth();
+      if (session?.user?.id) {
+        scheduleDocumentSync({
+          fileId,
+          data: file.data,
+          userId: session.user.id,
+          userName: session.user.name ?? session.user.email ?? null,
+        });
+      }
+    }
     return { data: null, error: null };
   } catch (error) {
     console.log(error);

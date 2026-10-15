@@ -329,9 +329,13 @@ const NovelTailwindEditore = ({
               });
             },
             onAwarenessUpdate: ({ states }) => {
-              const connectedUsers = states
-                .map((state) => state.user?.name)
-                .filter(Boolean);
+              // Dedupe by user id: one person can have several tabs open
+              const byId = new Map<string, { id: string; name: string }>();
+              for (const state of states) {
+                const u = state.user as { id?: string; name?: string } | undefined;
+                if (u?.id) byId.set(u.id, { id: u.id, name: u.name || "Collaborator" });
+              }
+              const connectedUsers = [...byId.values()];
 
               dispatch({
                 type: "UPDATE_COLLABORATION_USERS",

@@ -2,10 +2,17 @@ import type { Graph } from "falkordb";
 
 export const EMBEDDING_DIM = 1536; // OpenAI text-embedding-3-small
 
+// Paper.paperId is the node key: an OpenAlex work id ("W123…"), or "local:<postgres id>"
+// when the paper couldn't be matched. doi / s2Id / arxivId are lookup keys so citations
+// inserted from Semantic Scholar or DOI links still resolve to the same node.
 const RANGE_INDEXES: Array<[label: string, prop: string]> = [
-  ["Paper", "s2Id"],
+  ["Paper", "paperId"],
   ["Paper", "doi"],
-  ["Author", "s2Id"],
+  ["Paper", "s2Id"],
+  ["Paper", "arxivId"],
+  ["Paper", "pgPaperId"],
+  ["Paper", "titleKey"],
+  ["Author", "authorId"],
   ["Concept", "name"],
   ["Venue", "name"],
   ["User", "id"],

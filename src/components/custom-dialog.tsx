@@ -12,9 +12,12 @@ import clsx from 'clsx';
 interface CustomDialogTriggerProps {
   header?: string;
   content?: React.ReactNode;
-  children: React.ReactNode;
+  children?: React.ReactNode;
   description?: string;
   className?: string;
+  // Optional controlled mode, for opening the dialog from elsewhere (e.g. a menu item)
+  open?: boolean;
+  onOpenChange?: (open: boolean) => void;
 }
 
 const CustomDialogTrigger: React.FC<CustomDialogTriggerProps> = ({
@@ -23,14 +26,18 @@ const CustomDialogTrigger: React.FC<CustomDialogTriggerProps> = ({
   children,
   description,
   className,
+  open,
+  onOpenChange,
 }) => {
   return (
-    <Dialog>
-      <DialogTrigger className={clsx('w-full', className)}>{children}</DialogTrigger>
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      {children && (
+        <DialogTrigger className={clsx('w-full', className)}>{children}</DialogTrigger>
+      )}
       <DialogContent
         className="h-[90dvh]
         sm:h-[440px]
-        overflow-scroll
+        overflow-y-auto
         w-full
         font-sans"
       >

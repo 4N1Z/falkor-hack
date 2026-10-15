@@ -328,8 +328,9 @@ const NovelTailwindEditor = ({
             },
             onAwarenessUpdate: ({ states }) => {
               const connectedUsers = states
-                .map((state) => state.user?.name)
-                .filter(Boolean);
+                .map((state) => state.user as { id?: string; name?: string } | undefined)
+                .filter((u): u is { id: string; name?: string } => !!u?.id)
+                .map((u) => ({ id: u.id, name: u.name || "Collaborator" }));
 
               dispatch({
                 type: "UPDATE_COLLABORATION_USERS",

@@ -14,7 +14,7 @@ import { LinkSelector } from '../selectors/link-selector'
 import { NodeSelector } from '../selectors/node-selector'
 import { SemanticScholarSelector } from '../selectors/reseach-paper'
 import { TextButtons } from '../selectors/text-buttons'
-import { suggestionItems } from '../slash-command'
+import { suggestionItems, slashCommand } from '../slash-command'
 import {
   EditorRoot,
   EditorContent,
@@ -31,6 +31,11 @@ import { defaultExtensions } from '../extensions'
 import { ImageResizer } from '../extensions/index'
 import Link from '@tiptap/extension-link'
 import { TabIndent } from '../extensions/tab-indent'
+
+// Stable, readable cursor colour per collaborator (was hard-coded red for everyone)
+const CURSOR_COLORS = ['#2563eb', '#db2777', '#059669', '#d97706', '#7c3aed', '#0891b2', '#dc2626', '#4d7c0f']
+const colorForUser = (key: string) =>
+  CURSOR_COLORS[[...key].reduce((h, ch) => (h * 31 + ch.charCodeAt(0)) >>> 0, 7) % CURSOR_COLORS.length]
 
 
 
@@ -241,14 +246,17 @@ const Editore = ({
           TaskList,
           TaskItem,
           TabIndent,
+          slashCommand,
           Collaboration.extend().configure({
             document: ydoc ,
           }),
           CollaborationCursor.extend().configure({
             provider,
+            // id lets agents know exactly which collaborators are on this file
             user: {
-              name: session?.user?.email,
-              color: "#FF0000",
+              id: session?.user?.id,
+              name: session?.user?.name || session?.user?.email,
+              color: colorForUser(session?.user?.id ?? session?.user?.email ?? ""),
             },
             render: (user: any) => {
               const cursor = document.createElement("span");
