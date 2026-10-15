@@ -3,7 +3,7 @@ import type { Graph } from "falkordb";
 export const EMBEDDING_DIM = 1536; // OpenAI text-embedding-3-small
 
 /** Bump when indexes change so running servers re-run ensureSchema (it caches per graph). */
-export const SCHEMA_VERSION = 2;
+export const SCHEMA_VERSION = 3;
 
 // Paper.paperId is the node key: an OpenAlex work id ("W123…"), or "local:<postgres id>"
 // when the paper couldn't be matched. doi / s2Id / arxivId are lookup keys so citations
@@ -26,6 +26,7 @@ const RANGE_INDEXES: Array<[label: string, prop: string]> = [
   ["AgentRun", "id"],
   ["Chunk", "id"],
   ["Chunk", "paperId"],
+  ["IngestStatus", "pgPaperId"],
 ];
 
 const STATEMENTS: string[] = [

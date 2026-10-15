@@ -13,7 +13,8 @@ const sourceLabel = (p: LibraryPaper) =>
 const paperHref = (p: LibraryPaper) => (p.doi ? `https://doi.org/${p.doi}` : p.uploadUrl);
 
 function PaperStatus({ paper }: { paper: LibraryPaper }) {
-  if (!paper.graph) {
+  const { state, fullText, error } = paper.index;
+  if (state === "indexing") {
     return (
       <span className="inline-flex items-center gap-1.5 whitespace-nowrap text-xs text-muted-foreground">
         <span className="size-1.5 rounded-full bg-sky-500 animate-pulse motion-reduce:animate-none" />
@@ -21,15 +22,24 @@ function PaperStatus({ paper }: { paper: LibraryPaper }) {
       </span>
     );
   }
-  if (paper.graph.chunks) {
-    return <span className="whitespace-nowrap text-xs text-emerald-700">Full text</span>;
+  if (state === "failed" || state === "not_indexed") {
+    // Re-index lives in the sidebar's Research papers dialog
+    return (
+      <span className="whitespace-nowrap text-xs text-red-700" title={error ?? "Not in the research graph yet"}>
+        {state === "failed" ? "Failed" : "Not indexed"}
+      </span>
+    );
   }
-  return null;
+  return fullText === "indexed" ? (
+    <span className="whitespace-nowrap text-xs text-emerald-700">Full text</span>
+  ) : (
+    <span className="whitespace-nowrap text-xs text-muted-foreground">Abstract only</span>
+  );
 }
 
 function PaperRow({ paper }: { paper: LibraryPaper }) {
   const href = paperHref(paper);
-  const meta = [paper.importedBy.name, sourceLabel(paper), paper.graph?.year].filter(Boolean).join(" · ");
+  const meta = [paper.importedBy.name, sourceLabel(paper), paper.index.year].filter(Boolean).join(" · ");
 
   const body = (
     <>

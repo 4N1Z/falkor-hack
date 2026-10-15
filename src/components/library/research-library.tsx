@@ -6,15 +6,16 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import ImportPaper from "@/components/zotero/components/dialog/ImportPaper";
+import type { FullTextState } from "@/lib/graph/document-index";
 import type { PaperSearchResult } from "@/lib/graph/openalex";
-import { refreshLibrary, useLibrary } from "@/lib/hooks/use-library";
+import { refreshLibrary, reindexPapers, useGraphIndex, useLibrary } from "@/lib/hooks/use-library";
 import { cn } from "@/lib/utils";
-import { Check, ExternalLink, FileText, Loader2, Plus, Search } from "lucide-react";
+import { AlertTriangle, Check, ExternalLink, FileText, Loader2, Plus, RotateCw, Search } from "lucide-react";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
 
 type SearchHit = PaperSearchResult & { inLibrary: boolean };
-type Tab = "library" | "search" | "upload";
+type Tab = "library" | "graph" | "search" | "upload";
 
 const press = "transition-transform duration-150 ease-out active:scale-[0.97]";
 
@@ -23,25 +24,59 @@ const press = "transition-transform duration-150 ease-out active:scale-[0.97]";
 const scrollArea =
   "overflow-y-auto pr-2 pb-6 [scrollbar-gutter:stable] [mask-image:linear-gradient(to_bottom,black_calc(100%-24px),transparent)]";
 
-/** Workspace library: what's in it, search OpenAlex to add more, or upload PDFs / import from Zotero. */
+/** Plain-language reason for each full-text outcome (shown as a tooltip). */
+const FULL_TEXT_REASON: Record<FullTextState, string> = {
+  indexed: "Full text is indexed as passages agents can quote.",
+  no_file: "No PDF is available for this paper, so its abstract is indexed instead.",
+  blocked: "The publisher refused the download, so the abstract is indexed instead. Upload the PDF to index its full text.",
+  unreadable: "The file has no extractable text (it may be a scan), so the abstract is indexed instead.",
+  too_large: "The file is over 25 MB, so the abstract is indexed instead.",
+  unsupported: "This file format can't be read (use PDF or DOCX), so the abstract is indexed instead.",
+};
+
+/** Workspace library: what's in it and how it's indexed, search to add more, or upload / import. */
 export default function ResearchLibrary({ workspaceId }: { workspaceId: string }) {
   const [tab, setTab] = useState<Tab>("library");
   // Shared with the dashboard card; polls by itself while papers are indexing
-  const { papers } = useLibrary(workspaceId);
+  const { papers, graphReachable } = useLibrary(workspaceId);
   const loadLibrary = useCallback(() => refreshLibrary(workspaceId), [workspaceId]);
+
+  const reindex = useCallback(
+    async (ids?: string[]) => {
+      try {
+        const n = await reindexPapers(workspaceId, ids);
+        toast.success(ids ? "Re-indexing paper" : `Re-indexing ${n} paper${n === 1 ? "" : "s"}`, {
+          description: "Rebuilding citations and full text in the research graph.",
+        });
+      } catch (e) {
+        toast.error(e instanceof Error ? e.message : "Couldn't start re-indexing");
+      }
+    },
+    [workspaceId],
+  );
 
   return (
     <Tabs value={tab} onValueChange={(v) => setTab(v as Tab)} className="flex flex-col gap-3 min-h-0 flex-1">
-      <TabsList className="w-full grid grid-cols-3">
+      <TabsList className="w-full grid grid-cols-4">
         <TabsTrigger value="library">
           Library{papers ? <span className="ml-1.5 text-muted-foreground tabular-nums">{papers.length}</span> : null}
         </TabsTrigger>
+        <TabsTrigger value="graph">In the graph</TabsTrigger>
         <TabsTrigger value="search">Search papers</TabsTrigger>
         <TabsTrigger value="upload">Upload &amp; import</TabsTrigger>
       </TabsList>
 
-      <TabsContent value="library" className={cn("mt-0 min-h-0 flex-1", scrollArea)}>
-        <LibraryList papers={papers} onFindPapers={() => setTab("search")} />
+      <TabsContent value="library" className="mt-0 min-h-0 flex-1 flex flex-col gap-2">
+        {papers && papers.length > 0 && (
+          <IndexSummary papers={papers} graphReachable={graphReachable} onReindexAll={() => reindex()} />
+        )}
+        <div className={cn("min-h-0 flex-1", scrollArea)}>
+          <LibraryList papers={papers} onFindPapers={() => setTab("search")} onReindex={(id) => reindex([id])} />
+        </div>
+      </TabsContent>
+
+      <TabsContent value="graph" className={cn("mt-0 min-h-0 flex-1", scrollArea)}>
+        <GraphIndexView workspaceId={workspaceId} indexing={!!papers?.some((p) => p.index.state === "indexing")} />
       </TabsContent>
 
       <TabsContent value="search" className="mt-0 min-h-0 flex-1 flex flex-col">
@@ -55,16 +90,66 @@ export default function ResearchLibrary({ workspaceId }: { workspaceId: string }
           <ImportPaper workspaceId={workspaceId} />
         </div>
         <p className="text-xs text-muted-foreground">
-          PDF, DOC or DOCX up to 10MB. Every paper is indexed into your team&apos;s research graph, including its
-          full text when a PDF is available, so collaborators&apos; agents can cite it.
+          PDF or DOCX up to 10MB (legacy .doc files are indexed by title and abstract only). Every paper is indexed
+          into your team&apos;s research graph, including its full text, so collaborators&apos; agents can cite it.
         </p>
       </TabsContent>
     </Tabs>
   );
 }
 
-function GraphStatus({ paper }: { paper: LibraryPaper }) {
-  if (!paper.graph) {
+/** One line of index health for the whole library, with a recovery action. */
+function IndexSummary({
+  papers,
+  graphReachable,
+  onReindexAll,
+}: {
+  papers: LibraryPaper[];
+  graphReachable: boolean;
+  onReindexAll: () => void;
+}) {
+  if (!graphReachable) {
+    return (
+      <p className="flex items-center gap-1.5 rounded-md bg-amber-50 px-3 py-2 text-xs text-amber-800">
+        <AlertTriangle className="size-3.5 shrink-0" /> The research graph (FalkorDB) is unreachable, so index status
+        can&apos;t be shown.
+      </p>
+    );
+  }
+  const count = (f: (p: LibraryPaper) => boolean) => papers.filter(f).length;
+  const indexing = count((p) => p.index.state === "indexing");
+  const failed = count((p) => p.index.state === "failed" || p.index.state === "not_indexed");
+  const fullText = count((p) => p.index.state === "done" && p.index.fullText === "indexed");
+  const abstractOnly = count((p) => p.index.state === "done" && p.index.fullText !== "indexed");
+  const parts = [
+    `${papers.length - failed - indexing}/${papers.length} in FalkorDB`,
+    fullText ? `${fullText} full text` : null,
+    abstractOnly ? `${abstractOnly} abstract only` : null,
+    indexing ? `${indexing} indexing` : null,
+  ].filter(Boolean);
+  return (
+    <div className="flex items-center justify-between gap-3 rounded-md bg-muted/50 px-3 py-1.5">
+      <p className="text-xs text-muted-foreground tabular-nums">
+        {parts.join(" · ")}
+        {failed ? <span className="text-red-700"> · {failed} not indexed</span> : null}
+      </p>
+      <Button
+        size="sm"
+        variant="ghost"
+        onClick={onReindexAll}
+        disabled={indexing > 0}
+        className={cn("h-7 px-2 text-xs", press)}
+        title="Rebuild every paper's citations and full text in the research graph"
+      >
+        <RotateCw className="mr-1 size-3.5" /> Re-index all
+      </Button>
+    </div>
+  );
+}
+
+function IndexBadge({ paper }: { paper: LibraryPaper }) {
+  const i = paper.index;
+  if (i.state === "indexing") {
     return (
       <span className="inline-flex items-center gap-1.5 text-xs text-muted-foreground whitespace-nowrap">
         <span className="size-1.5 rounded-full bg-sky-500 animate-pulse motion-reduce:animate-none" />
@@ -72,18 +157,33 @@ function GraphStatus({ paper }: { paper: LibraryPaper }) {
       </span>
     );
   }
-  const g = paper.graph;
-  const parts = [g.matched ? `${g.links} link${g.links === 1 ? "" : "s"}` : "Not matched", g.chunks ? "full text" : null];
+  if (i.state === "failed" || i.state === "not_indexed") {
+    return (
+      <span
+        className="text-xs text-red-700 whitespace-nowrap"
+        title={i.error ?? "This paper isn't in the research graph yet. Re-index to add it."}
+      >
+        {i.state === "failed" ? "Failed" : "Not indexed"}
+      </span>
+    );
+  }
+  const links = i.matched ? `${i.links} link${i.links === 1 ? "" : "s"}` : "Not matched";
+  const full = i.fullText === "indexed";
   return (
     <span
-      className={cn("text-xs whitespace-nowrap", g.matched ? "text-emerald-700" : "text-amber-700")}
-      title={
-        g.matched
-          ? `In the research graph with ${g.links} citation links${g.chunks ? ` and ${g.chunks} indexed passages` : ""}`
-          : "Couldn't match this paper on OpenAlex, so it has no citation links yet. Its text is still searchable."
-      }
+      className="text-xs whitespace-nowrap"
+      title={[
+        i.matched
+          ? `Connected to ${i.links} papers by citations.`
+          : "Couldn't match this paper on OpenAlex, so it has no citation links. Its text is still searchable.",
+        i.fullText ? FULL_TEXT_REASON[i.fullText] : "Full-text status unknown. Re-index to check.",
+      ].join(" ")}
     >
-      {parts.filter(Boolean).join(" · ")}
+      <span className={i.matched ? "text-emerald-700" : "text-amber-700"}>{links}</span>
+      <span className={full ? "text-emerald-700" : "text-muted-foreground"}>
+        {" · "}
+        {full ? "Full text" : "Abstract only"}
+      </span>
     </span>
   );
 }
@@ -91,7 +191,15 @@ function GraphStatus({ paper }: { paper: LibraryPaper }) {
 const sourceLabel = (p: LibraryPaper) =>
   p.externalSource === "openalex" ? "OpenAlex" : p.source === "zotero" ? "Zotero" : p.source === "manual" ? "Upload" : "Other";
 
-function LibraryList({ papers, onFindPapers }: { papers: LibraryPaper[] | null; onFindPapers: () => void }) {
+function LibraryList({
+  papers,
+  onFindPapers,
+  onReindex,
+}: {
+  papers: LibraryPaper[] | null;
+  onFindPapers: () => void;
+  onReindex: (paperId: string) => void;
+}) {
   if (!papers) {
     return (
       <div className="space-y-2 pt-1">
@@ -117,29 +225,115 @@ function LibraryList({ papers, onFindPapers }: { papers: LibraryPaper[] | null; 
   }
   return (
     <ul className="divide-y">
-      {papers.map((p) => (
-        <li key={p.id} className="flex items-start justify-between gap-3 py-2.5">
-          <div className="min-w-0">
-            <p className="text-sm font-medium leading-snug line-clamp-2" title={p.title}>
-              {p.title}
-            </p>
-            <p className="mt-0.5 text-xs text-muted-foreground truncate">
-              {p.importedBy.name} · {sourceLabel(p)}
-              {p.graph?.year ? ` · ${p.graph.year}` : ""}
-              {p.doi ? (
-                <>
-                  {" · "}
-                  <a href={`https://doi.org/${p.doi}`} target="_blank" rel="noreferrer" className="hover:underline">
-                    DOI
-                  </a>
-                </>
-              ) : null}
-            </p>
-          </div>
-          <GraphStatus paper={p} />
-        </li>
-      ))}
+      {papers.map((p) => {
+        const broken = p.index.state === "failed" || p.index.state === "not_indexed";
+        return (
+          <li key={p.id} className="group flex items-start justify-between gap-3 py-2.5">
+            <div className="min-w-0">
+              <p className="text-sm font-medium leading-snug line-clamp-2" title={p.title}>
+                {p.title}
+              </p>
+              <p className="mt-0.5 text-xs text-muted-foreground truncate">
+                {p.importedBy.name} · {sourceLabel(p)}
+                {p.index.year ? ` · ${p.index.year}` : ""}
+                {p.doi ? (
+                  <>
+                    {" · "}
+                    <a href={`https://doi.org/${p.doi}`} target="_blank" rel="noreferrer" className="hover:underline">
+                      DOI
+                    </a>
+                  </>
+                ) : null}
+              </p>
+            </div>
+            <div className="flex items-center gap-1">
+              <IndexBadge paper={p} />
+              {p.index.state !== "indexing" && (
+                <button
+                  type="button"
+                  onClick={() => onReindex(p.id)}
+                  aria-label={`Re-index ${p.title}`}
+                  title="Re-index this paper"
+                  className={cn(
+                    "rounded p-1 text-muted-foreground hover:bg-muted hover:text-foreground focus-visible:opacity-100",
+                    "transition-[opacity,transform] duration-150 ease-out active:scale-[0.9]",
+                    broken ? "opacity-100" : "opacity-0 group-hover:opacity-100",
+                  )}
+                >
+                  <RotateCw className="size-3.5" />
+                </button>
+              )}
+            </div>
+          </li>
+        );
+      })}
     </ul>
+  );
+}
+
+/** What FalkorDB holds for this workspace, read straight from the graph. */
+function GraphIndexView({ workspaceId, indexing }: { workspaceId: string; indexing: boolean }) {
+  const { papers, totals, error } = useGraphIndex(workspaceId, indexing);
+  if (error) {
+    return (
+      <p className="flex items-center gap-1.5 rounded-md bg-amber-50 px-3 py-2 text-xs text-amber-800">
+        <AlertTriangle className="size-3.5 shrink-0" /> {error.message}
+      </p>
+    );
+  }
+  if (!papers || !totals) {
+    return <div className="h-24 rounded-md bg-muted/60 animate-pulse motion-reduce:animate-none" />;
+  }
+  const stats: [string, number, string][] = [
+    ["Team papers", totals.library, "Papers collaborators brought in"],
+    ["Papers in graph", totals.papers, "Team papers plus the papers they cite and are cited by"],
+    ["Citations", totals.citations, "CITES links agents can traverse"],
+    ["Passages", totals.passages, "Full-text chunks agents can quote"],
+    ["Authors", totals.authors, "Author nodes"],
+    ["Concepts", totals.concepts, "Topic nodes"],
+  ];
+  const owners = [...new Set(papers.map((p) => p.importedBy))];
+  return (
+    <div className="space-y-4">
+      <div className="grid grid-cols-3 gap-2">
+        {stats.map(([label, value, hint]) => (
+          <div key={label} className="rounded-md border px-3 py-2" title={hint}>
+            <p className="text-lg font-semibold tabular-nums leading-tight">{value.toLocaleString()}</p>
+            <p className="text-xs text-muted-foreground">{label}</p>
+          </div>
+        ))}
+      </div>
+      <p className="text-xs text-muted-foreground">
+        Read live from FalkorDB: the {papers.length} papers your {owners.length} collaborator
+        {owners.length === 1 ? "" : "s"} brought in, which agents search, traverse and cite.
+        {totals.suspect ? ` ${totals.suspect} records with unreliable metadata are excluded from suggestions.` : ""}
+      </p>
+      <ul className="divide-y">
+        {papers.map((p) => (
+          <li key={`${p.importedBy}:${p.paperId}`} className="flex items-start justify-between gap-3 py-2">
+            <div className="min-w-0">
+              <p className="text-sm leading-snug line-clamp-2" title={p.title}>
+                {p.title}
+              </p>
+              <p className="mt-0.5 text-xs text-muted-foreground truncate">
+                {p.importedBy}
+                {p.year ? ` · ${p.year}` : ""}
+                {!p.pgPaperId || p.pgPaperId.startsWith("seed-") ? " · graph only (demo)" : ""}
+              </p>
+            </div>
+            <span className="text-xs whitespace-nowrap tabular-nums text-muted-foreground">
+              <span className={p.unmatched ? "text-amber-700" : undefined}>
+                {p.unmatched ? "Not matched" : `${p.links} links`}
+              </span>
+              {" · "}
+              <span className={p.chunks ? "text-emerald-700" : undefined}>
+                {p.chunks ? `${p.chunks} passages` : "abstract only"}
+              </span>
+            </span>
+          </li>
+        ))}
+      </ul>
+    </div>
   );
 }
 

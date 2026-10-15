@@ -211,11 +211,22 @@ const Editore = ({
         immediatelyRender= {false}
         className="relative min-h-[500px] w-full max-w-screen-md sm:mb-[calc(20vh)]"
         onCreate={({ editor }) => {
-          provider.on('synced', () => {
-            if (editor.isEmpty) {
-              editor.commands.setContent(data)
-            }
-          })
+          // With Collaboration, content comes from the Yjs doc, not `data`, so the saved
+          // document must be seeded in once the collaboration server has synced. The provider
+          // starts connecting before this editor exists, so 'synced' may already have fired
+          // (seed now), or never fire if the server is down (seed after a grace period).
+          // Missing both left the editor empty, and the next autosave wiped the saved doc.
+          let seeded = false
+          const seed = () => {
+            if (seeded || editor.isDestroyed) return
+            seeded = true
+            if (editor.isEmpty && data) editor.commands.setContent(data)
+          }
+          if (provider?.synced) seed()
+          else provider?.on('synced', seed)
+          setTimeout(() => {
+            if (!provider?.synced) seed()
+          }, 2500)
         }}
         initialContent={data}
         enableContentCheck={true}

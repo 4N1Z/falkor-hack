@@ -78,6 +78,10 @@ function abstractFromInvertedIndex(index?: Record<string, number[]> | null): str
   return text || null;
 }
 
+// NUL and other control characters break FalkorDB param parsing (see document-index.ts)
+// eslint-disable-next-line no-control-regex
+const stripControl = (t: string) => t.replace(/[\u0000-\u0008\u000B\u000C\u000E-\u001F\u007F]/g, "");
+
 export function toGraphPaper(work: OpenAlexWork): GraphPaper {
   const doi = normalizeDoi(work.doi ?? work.ids?.doi);
   const arxivFromDoi = doi?.match(ARXIV_DOI)?.[1] ?? null;
@@ -85,8 +89,8 @@ export function toGraphPaper(work: OpenAlexWork): GraphPaper {
     paperId: shortId(work.id),
     doi,
     arxivId: arxivFromDoi,
-    title: work.title ?? "Untitled",
-    abstract: abstractFromInvertedIndex(work.abstract_inverted_index),
+    title: stripControl(work.title ?? "Untitled"),
+    abstract: (a => a && stripControl(a))(abstractFromInvertedIndex(work.abstract_inverted_index)),
     year: work.publication_year,
     venue: work.primary_location?.source?.display_name ?? null,
     citationCount: work.cited_by_count ?? 0,

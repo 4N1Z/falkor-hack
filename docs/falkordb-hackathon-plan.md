@@ -8,7 +8,8 @@
 | Phase | Status |
 |---|---|
 | 1. Graph foundation and Librarian | ✅ Done (OpenAlex-based Librarian, hooks, sync route, seed: 518 papers / 2,921 cites) |
-| 2. Relevance layer (JEV) and editor plumbing | ✅ Done (browser checks pending sign-in) |
+| 2. Relevance layer (JEV) and editor plumbing | ✅ Done (slash menu, Tab verified in browser; 2-user presence check pending) |
+| 2.5 Research library (search, import, full-text index, index health) | ✅ Done (33 team papers, 32 with full text, 1,397 passages) |
 | 3. Cite Scout (MVP) | ⬜ |
 | 4. Citation Checker / Critic (MVP) | ⬜ |
 | 5. Depth agents (Historian, Next-Step, Ghost Writer, Router) | ⬜ |
@@ -278,6 +279,24 @@ Added on Oct 15 at the user's request. The sidebar "Research papers" dialog was 
   - Every add path calls `refreshLibrary(workspaceId)`: search **Add**, `UploadPanel`, and the Zotero import. Zotero import also gained success and error toasts; it gave no feedback at all before.
   - `MARK_INGESTED` sets `Paper.ingestedAt` after the **whole** pipeline, including full text, so "Indexing" doesn't clear before the passages are in.
   - The search input is focused one frame after its tab opens. Radix moved focus to the tab trigger, so typing went nowhere.
+- **Index visibility and recovery (follow-up, Oct 15):**
+  - **The graph records its own health.** Each library paper has an `IngestStatus {pgPaperId, state: indexing|done|failed, error, fullText}` in the workspace graph. `ingestPaperRows` writes `indexing`, then `done` (with the full-text outcome) or `failed` (with the error).
+  - **Full-text outcomes:** `indexed | no_file | blocked | unreadable | too_large | unsupported`. The UI shows a plain-language reason for each.
+  - **DOCX is supported** through `mammoth`. Legacy `.doc` is `unsupported`, so only its title and abstract are indexed.
+  - **Re-index:** `POST /api/papers/reindex {workspaceId, paperIds?}` covers one paper or the whole library. It sets `indexing` synchronously, then runs in the background in batches of 10. The dialog has a per-row ↻ button (always visible on failed papers, on hover otherwise) and **Re-index all**.
+  - **Stale runs:** an `indexing` status older than 15 minutes shows as failed, with "the server may have restarted".
+  - **Library tab summary:** "12/12 in FalkorDB · 11 full text · 1 abstract only", plus a banner when FalkorDB is unreachable.
+  - **"In the graph" tab** (`GET /api/papers/graph-index`): live from FalkorDB, every paper any collaborator brought in (including graph-only demo users), with totals for papers, citations, passages, authors and concepts.
+  - **CLI:** `scripts/graph-report.ts [workspaceId]` lists, per collaborator, each paper's passages and links, and flags library papers that never reached the graph.
+  - **Demo full text:** `scripts/seed-fulltext.ts <ws>` indexes the seeded demo papers from arXiv (21 papers, 793 passages).
+  - **Current state of "dialgen":** 33 team papers, 911 papers in the graph, 5,542 citations, **1,397 passages**, 6 draft claims. **32/33 papers have full text.** The only exception is Point Transformer (`no_file`: no open-access PDF exists).
+- **Data-loss bug fixed (pre-existing):** the collaborative editor could open a document empty, and the next autosave overwrote the saved content. **This wiped the demo draft.**
+  - **Cause:** the Hocuspocus provider can fire `synced` before the editor's `onCreate` subscribes, so the saved content was never seeded into the Yjs doc.
+  - **Client fix:** in `headless/Editore.tsx`, seed immediately if `provider.synced` is already true, otherwise on `synced`, plus a 2.5 s fallback when the collaboration server is down.
+  - **Server fix:** `updateFile` refuses to replace a document with more than 200 characters by an essentially empty one, and logs `refused to overwrite`. One side effect: deliberately emptying a long document in one save is blocked. Nobody does that in one keystroke.
+  - The draft was restored with `seed-draft.ts`.
+- **Third FalkorDB quirk:** a **NUL byte (`\u0000`) anywhere in a string parameter** fails the whole query with "Failed to parse the value of parameter". PDFs contain them. `stripControl()` removes C0 control characters in `document-index.ts` and in OpenAlex titles and abstracts.
+- **Verified in the browser:** the draft opens with its content; the slash menu opens; Tab selects in the menu and inserts a tab in text without losing focus; the library summary and the "In the graph" tab render. Re-index went done → indexing → done with the correct `no_file` reason.
 - **Effect on Phases 3–4:**
   - Cite Scout and the Checker should retrieve **`Chunk` passages** as well as `Paper` abstracts, quoting the passage as evidence.
   - `scoreSupport` should judge a claim against the best-matching passages, not only the abstract.

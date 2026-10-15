@@ -137,6 +137,47 @@ MATCH (p:Paper) WHERE p.pgPaperId IN $pgIds
 SET p.ingestedAt = $at
 RETURN count(p) AS n`;
 
+// ---------------------------------------------------------------- Ingest status (index health)
+
+/**
+ * One IngestStatus per library paper, kept in the workspace graph itself so FalkorDB is
+ * the record of what is (and isn't) indexed. state: indexing | done | failed.
+ */
+export const UPSERT_INGEST_STATUS = `
+UNWIND $rows AS r
+MERGE (s:IngestStatus {pgPaperId: r.pgPaperId})
+SET s.state = r.state, s.error = r.error, s.fullText = coalesce(r.fullText, s.fullText), s.at = r.at
+RETURN count(s) AS n`;
+
+export const INGEST_STATUS_FOR = `
+MATCH (s:IngestStatus) WHERE s.pgPaperId IN $pgIds
+RETURN s.pgPaperId AS pgPaperId, s.state AS state, s.error AS error, s.fullText AS fullText, s.at AS at`;
+
+/** Everything the graph holds for the team's libraries, straight from FalkorDB. */
+export const GRAPH_INDEX_PAPERS = `
+MATCH (u:User)-[i:IMPORTED]->(p:Paper)
+OPTIONAL MATCH (p)-[c:CITES]-(:Paper)
+WITH u, i, p, count(c) AS links
+RETURN p.paperId AS paperId, p.pgPaperId AS pgPaperId, p.title AS title, p.year AS year,
+       coalesce(u.name, 'Collaborator') AS importedBy, i.source AS source,
+       coalesce(p.chunkCount, 0) AS chunks, links, p.paperId STARTS WITH 'local:' AS unmatched
+ORDER BY i.at DESC`;
+
+export const GRAPH_INDEX_TOTALS = `
+MATCH (p:Paper)
+WITH count(p) AS papers, sum(CASE WHEN p.inLibrary THEN 1 ELSE 0 END) AS library,
+     sum(CASE WHEN p.suspect THEN 1 ELSE 0 END) AS suspect
+OPTIONAL MATCH ()-[c:CITES]->()
+WITH papers, library, suspect, count(c) AS citations
+OPTIONAL MATCH (k:Chunk)
+WITH papers, library, suspect, citations, count(k) AS passages
+OPTIONAL MATCH (a:Author)
+WITH papers, library, suspect, citations, passages, count(a) AS authors
+OPTIONAL MATCH (t:Concept)
+WITH papers, library, suspect, citations, passages, authors, count(t) AS concepts
+OPTIONAL MATCH (cl:Claim)
+RETURN papers, library, suspect, citations, passages, authors, concepts, count(cl) AS claims`;
+
 // ---------------------------------------------------------------- Documents (writes)
 
 export const UPSERT_DOCUMENT = `

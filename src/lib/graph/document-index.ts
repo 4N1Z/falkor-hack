@@ -16,35 +16,75 @@ const CHUNK_OVERLAP = 150;
 /** ~60 passages ≈ a full 15–20 page paper; keeps embedding cost per paper bounded */
 const MAX_CHUNKS = 60;
 
-export interface PdfText {
+export interface DocumentText {
   text: string;
-  pages: number;
   /** First DOI printed in the paper, if any (most papers print their own on page 1) */
   doi: string | null;
 }
 
-/** Download a PDF and extract its text. Returns null when it isn't a readable PDF. */
-export async function fetchPdfText(url: string): Promise<PdfText | null> {
+/**
+ * Why a paper does or doesn't have full text in the graph. Shown in the library UI so
+ * "abstract only" is never a mystery.
+ */
+export type FullTextState =
+  | "indexed" // passages are in the graph
+  | "no_file" // nothing to read (e.g. OpenAlex paper without an open-access PDF)
+  | "blocked" // the host refused (publisher 403s are common for servers)
+  | "unreadable" // no text layer (scanned) or a corrupt file
+  | "too_large" // over MAX_PDF_BYTES
+  | "unsupported"; // a format we can't read (e.g. legacy .doc)
+
+export type FetchTextResult = { ok: true; doc: DocumentText } | { ok: false; reason: Exclude<FullTextState, "indexed"> };
+
+const findDoi = (text: string) => {
+  const m = text.slice(0, 6000).match(/\b10\.\d{4,9}\/[^\s"<>]+/);
+  return m ? normalizeDoi(m[0].replace(/[.,;)\]]+$/, "")) : null;
+};
+
+// FalkorDB inlines query params as text and rejects any string containing a NUL byte
+// ("Failed to parse the value of parameter"); PDFs often contain them. Strip all C0
+// control characters except tab/newline.
+// eslint-disable-next-line no-control-regex
+const stripControl = (t: string) => t.replace(/[\u0000-\u0008\u000B\u000C\u000E-\u001F\u007F]/g, "");
+
+const cleanText = (t: string) => stripControl(t).replace(/\s+\n/g, "\n").replace(/[ \t]+/g, " ").trim();
+
+/** Download a paper's file (PDF or DOCX) and extract its text, or say why it couldn't. */
+export async function fetchDocumentText(url: string): Promise<FetchTextResult> {
+  let res: Response;
   try {
-    const res = await fetch(url, { redirect: "follow", signal: AbortSignal.timeout(20_000) });
-    if (!res.ok) return null;
-    const type = res.headers.get("content-type") ?? "";
-    const bytes = new Uint8Array(await res.arrayBuffer());
-    // Publisher "PDF" links sometimes return an HTML landing page instead
-    const isPdf = type.includes("pdf") || String.fromCharCode(...bytes.slice(0, 5)) === "%PDF-";
-    if (!isPdf || bytes.byteLength > MAX_PDF_BYTES) return null;
+    res = await fetch(url, { redirect: "follow", signal: AbortSignal.timeout(20_000) });
+  } catch {
+    return { ok: false, reason: "blocked" };
+  }
+  if (!res.ok) return { ok: false, reason: "blocked" };
 
-    const pdf = await getDocumentProxy(bytes);
-    const { text, totalPages } = await extractText(pdf, { mergePages: true });
-    const clean = (Array.isArray(text) ? text.join("\n") : text).replace(/\s+\n/g, "\n").replace(/[ \t]+/g, " ").trim();
-    if (clean.length < 200) return null; // scanned PDF without a text layer
+  const type = res.headers.get("content-type") ?? "";
+  const bytes = new Uint8Array(await res.arrayBuffer());
+  if (bytes.byteLength > MAX_PDF_BYTES) return { ok: false, reason: "too_large" };
+  const magic = String.fromCharCode(...bytes.slice(0, 5));
 
-    const doiMatch = clean.slice(0, 6000).match(/\b10\.\d{4,9}\/[^\s"<>]+/);
-    const doi = doiMatch ? normalizeDoi(doiMatch[0].replace(/[.,;)\]]+$/, "")) : null;
-    return { text: clean, pages: totalPages, doi };
+  try {
+    let text: string;
+    if (type.includes("pdf") || magic === "%PDF-") {
+      const pdf = await getDocumentProxy(bytes);
+      const out = await extractText(pdf, { mergePages: true });
+      text = Array.isArray(out.text) ? out.text.join("\n") : out.text;
+    } else if (type.includes("wordprocessingml") || (magic.startsWith("PK") && /\.docx(\?|$)/i.test(url))) {
+      const mammoth = await import("mammoth");
+      text = (await mammoth.extractRawText({ buffer: Buffer.from(bytes) })).value;
+    } else if (type.includes("text/html")) {
+      // Publisher "PDF" links often answer bots with an HTML landing / challenge page
+      return { ok: false, reason: "blocked" };
+    } else {
+      return { ok: false, reason: "unsupported" };
+    }
+    const clean = cleanText(text);
+    if (clean.length < 200) return { ok: false, reason: "unreadable" }; // scanned, no text layer
+    return { ok: true, doc: { text: clean, doi: findDoi(clean) } };
   } catch (err) {
-    console.error(`[graph] could not read PDF ${url}:`, err instanceof Error ? err.message : err);
-    return null;
+    console.error(`[graph] could not read ${url}:`, err instanceof Error ? err.message : err);
+    return { ok: false, reason: "unreadable" };
   }
 }
 
