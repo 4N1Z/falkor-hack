@@ -50,11 +50,12 @@ export async function GET(req: Request) {
     .where(eq(papers.workspaceId, access.workspaceId))
     .orderBy(desc(papers.createdAt));
 
-  const statusByPg = new Map<string, { paperId: string; year: number | null; venue: string | null; links: number; chunks: number }>();
+  type Status = { paperId: string; year: number | null; venue: string | null; links: number; chunks: number; done: boolean };
+  const statusByPg = new Map<string, Status>();
   if (rows.length) {
     try {
       const graph = await getWorkspaceGraph(access.workspaceId);
-      const res = await graph.roQuery<{ pgPaperId: string; paperId: string; year: number | null; venue: string | null; links: number; chunks: number }>(
+      const res = await graph.roQuery<Status & { pgPaperId: string }>(
         LIBRARY_GRAPH_STATUS,
         { params: { pgIds: rows.map((r) => r.id) } as never },
       );
@@ -66,6 +67,8 @@ export async function GET(req: Request) {
 
   const library: LibraryPaper[] = rows.map((r) => {
     const s = statusByPg.get(r.id);
+    // Papers ingested before the done-marker existed count as done once they're 10 minutes old
+    const done = !!s && (s.done || Date.now() - new Date(r.createdAt).getTime() > 10 * 60_000);
     return {
       id: r.id,
       title: r.title,
@@ -75,7 +78,7 @@ export async function GET(req: Request) {
       uploadUrl: r.uploadUrl,
       createdAt: r.createdAt,
       importedBy: { id: r.userId, name: r.userName || r.userEmail || "Collaborator" },
-      graph: s
+      graph: s && done
         ? { matched: !s.paperId.startsWith("local:"), year: s.year, venue: s.venue, links: s.links, chunks: s.chunks }
         : null,
     };

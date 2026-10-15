@@ -44,7 +44,9 @@ const TabsContent = React.forwardRef<
   <TabsPrimitive.Content
     ref={ref}
     className={cn(
-      "mt-2 ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2",
+      // data-[state=inactive]:hidden: a display class like `flex` would otherwise override the
+      // `hidden` attribute Radix puts on inactive panels, leaving them invisible but taking up space.
+      "mt-2 ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 data-[state=inactive]:hidden",
       className
     )}
     {...props}

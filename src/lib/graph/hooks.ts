@@ -5,7 +5,7 @@ import { files, papers, users } from "@/db/schema";
 import { getWorkspaceGraph } from "./client";
 import { fetchPdfText, indexPaperText, type PdfText } from "./document-index";
 import { ingestLibrary, type LibraryItem } from "./ingest";
-import { PAPERS_BY_PG_ID } from "./queries";
+import { MARK_INGESTED, PAPERS_BY_PG_ID } from "./queries";
 import { syncDocument, type DocNode } from "./sync-document";
 
 /** The subset of a `papers` row the Librarian needs. */
@@ -90,6 +90,9 @@ export async function ingestPaperRows(rows: PaperRow[]) {
       });
     }
   }
+  // Done marker last, so the library UI shows "Indexing" until full text is in as well
+  const graph = await getWorkspaceGraph(workspaceId);
+  await graph.query(MARK_INGESTED, { params: { pgIds: rows.map((r) => r.id), at: Date.now() } as never });
   return { ...result, fullText: pdfText.size, chunks };
 }
 

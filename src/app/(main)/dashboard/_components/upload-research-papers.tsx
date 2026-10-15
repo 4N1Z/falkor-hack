@@ -8,6 +8,7 @@ import { Loader2, UploadIcon, CheckCircle2, XCircle } from "lucide-react";
 import ImportPaper from "@/components/zotero/components/dialog/ImportPaper";
 import { useUser } from "@/lib/providers/user-provider";
 import { toast } from "sonner";
+import { refreshLibrary } from "@/lib/hooks/use-library";
 
 interface UploadResearchPapersProps {
   workspaceId: string;
@@ -74,6 +75,7 @@ export function UploadPanel({ workspaceId, onUploaded }: { workspaceId: string; 
         );
 
         toast.success(`Successfully uploaded ${fileInfo.file.name}`);
+        refreshLibrary(workspaceId); // dashboard card + library dialog update together
         onUploaded?.();
 
       } catch (error) {
@@ -199,8 +201,8 @@ export default function UploadResearchPapers({ workspaceId, workspaceName }: Upl
   return (
     <Dialog>
       <DialogTrigger asChild>
-        <Button size="sm" className="text-sm" variant="link">
-          <UploadIcon size={16} className="mr-1" />
+        <Button size="sm" variant="outline" className="h-8 gap-1.5 px-3 text-sm text-primary hover:text-primary">
+          <UploadIcon size={14} />
           Upload
         </Button>
       </DialogTrigger>

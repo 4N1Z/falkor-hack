@@ -272,6 +272,12 @@ Added on Oct 15 at the user's request. The sidebar "Research papers" dialog was 
   - **PDF choice:** publisher PDFs often return a 403 to servers (MIT Press did). `pickPdfUrl` prefers arXiv, then repositories, then the publisher.
 - **Security:** `/api/upload` now checks workspace membership, not just sign-in. Zotero OAuth `callback` was an open redirect and is now `safeCallback` (same origin only).
 - **Verified in the browser:** searched "Lost in the Middle", clicked Add (2.3 s). The Librarian merged it onto the existing seed node, and it shows **57 links · full text** (43 passages from the arXiv PDF). A passage search for "how are community summaries used…" returned the right GraphRAG passage.
+- **Live updates everywhere (follow-up):**
+  - The dashboard "Research papers" card was a server component and went stale until a refresh. It's now a client component.
+  - It and the library dialog share one SWR cache, `useLibrary(workspaceId)` in `src/lib/hooks/use-library.ts`. That cache polls every 3 s only while something is indexing.
+  - Every add path calls `refreshLibrary(workspaceId)`: search **Add**, `UploadPanel`, and the Zotero import. Zotero import also gained success and error toasts; it gave no feedback at all before.
+  - `MARK_INGESTED` sets `Paper.ingestedAt` after the **whole** pipeline, including full text, so "Indexing" doesn't clear before the passages are in.
+  - The search input is focused one frame after its tab opens. Radix moved focus to the tab trigger, so typing went nowhere.
 - **Effect on Phases 3–4:**
   - Cite Scout and the Checker should retrieve **`Chunk` passages** as well as `Paper` abstracts, quoting the passage as evidence.
   - `scoreSupport` should judge a claim against the best-matching passages, not only the abstract.

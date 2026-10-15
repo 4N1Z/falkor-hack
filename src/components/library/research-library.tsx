@@ -7,6 +7,7 @@ import { Input } from "@/components/ui/input";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import ImportPaper from "@/components/zotero/components/dialog/ImportPaper";
 import type { PaperSearchResult } from "@/lib/graph/openalex";
+import { refreshLibrary, useLibrary } from "@/lib/hooks/use-library";
 import { cn } from "@/lib/utils";
 import { Check, ExternalLink, FileText, Loader2, Plus, Search } from "lucide-react";
 import { useCallback, useEffect, useRef, useState } from "react";
@@ -17,27 +18,17 @@ type Tab = "library" | "search" | "upload";
 
 const press = "transition-transform duration-150 ease-out active:scale-[0.97]";
 
+// Scroll region: reserve the scrollbar's space so it never sits on top of row status text,
+// and fade the bottom edge so it's clear there's more below (padding lets the last row clear the fade).
+const scrollArea =
+  "overflow-y-auto pr-2 pb-6 [scrollbar-gutter:stable] [mask-image:linear-gradient(to_bottom,black_calc(100%-24px),transparent)]";
+
 /** Workspace library: what's in it, search OpenAlex to add more, or upload PDFs / import from Zotero. */
 export default function ResearchLibrary({ workspaceId }: { workspaceId: string }) {
   const [tab, setTab] = useState<Tab>("library");
-  const [papers, setPapers] = useState<LibraryPaper[] | null>(null);
-
-  const loadLibrary = useCallback(async () => {
-    const res = await fetch(`/api/papers?workspaceId=${workspaceId}`);
-    if (res.ok) setPapers((await res.json()).papers);
-  }, [workspaceId]);
-
-  useEffect(() => {
-    loadLibrary();
-  }, [loadLibrary]);
-
-  // While the Librarian is still indexing recent additions, refresh their status
-  const pending = papers?.some((p) => !p.graph && Date.now() - new Date(p.createdAt).getTime() < 10 * 60_000);
-  useEffect(() => {
-    if (!pending) return;
-    const t = setInterval(loadLibrary, 3000);
-    return () => clearInterval(t);
-  }, [pending, loadLibrary]);
+  // Shared with the dashboard card; polls by itself while papers are indexing
+  const { papers } = useLibrary(workspaceId);
+  const loadLibrary = useCallback(() => refreshLibrary(workspaceId), [workspaceId]);
 
   return (
     <Tabs value={tab} onValueChange={(v) => setTab(v as Tab)} className="flex flex-col gap-3 min-h-0 flex-1">
@@ -49,7 +40,7 @@ export default function ResearchLibrary({ workspaceId }: { workspaceId: string }
         <TabsTrigger value="upload">Upload &amp; import</TabsTrigger>
       </TabsList>
 
-      <TabsContent value="library" className="mt-0 min-h-0 flex-1 overflow-y-auto">
+      <TabsContent value="library" className={cn("mt-0 min-h-0 flex-1", scrollArea)}>
         <LibraryList papers={papers} onFindPapers={() => setTab("search")} />
       </TabsContent>
 
@@ -57,7 +48,7 @@ export default function ResearchLibrary({ workspaceId }: { workspaceId: string }
         <SearchPanel workspaceId={workspaceId} onImported={loadLibrary} />
       </TabsContent>
 
-      <TabsContent value="upload" className="mt-0 space-y-4">
+      <TabsContent value="upload" className={cn("mt-0 min-h-0 flex-1 space-y-4", scrollArea)}>
         <UploadPanel workspaceId={workspaceId} onUploaded={loadLibrary} />
         <div className="flex items-center justify-between gap-3 rounded-md border border-dashed p-3">
           <p className="text-sm text-muted-foreground">Already keep your papers in Zotero?</p>
@@ -159,6 +150,14 @@ function SearchPanel({ workspaceId, onImported }: { workspaceId: string; onImpor
   const [error, setError] = useState<string | null>(null);
   const [adding, setAdding] = useState<Set<string>>(new Set());
   const latest = useRef(0);
+  const inputRef = useRef<HTMLInputElement>(null);
+
+  // Opening this tab should let you type straight away. autoFocus alone loses to Radix,
+  // which moves focus to the tab trigger after the content mounts, so focus a frame later.
+  useEffect(() => {
+    const frame = requestAnimationFrame(() => inputRef.current?.focus());
+    return () => cancelAnimationFrame(frame);
+  }, []);
 
   useEffect(() => {
     const q = query.trim();
@@ -221,7 +220,7 @@ function SearchPanel({ workspaceId, onImported }: { workspaceId: string; onImpor
       <div className="relative">
         <Search className="absolute left-2.5 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
         <Input
-          autoFocus
+          ref={inputRef}
           value={query}
           onChange={(e) => setQuery(e.target.value)}
           placeholder="Search by title, topic, author — or paste a DOI"
@@ -230,7 +229,7 @@ function SearchPanel({ workspaceId, onImported }: { workspaceId: string; onImpor
         {loading && <Loader2 className="absolute right-2.5 top-1/2 size-4 -translate-y-1/2 animate-spin text-muted-foreground" />}
       </div>
 
-      <div className="min-h-0 flex-1 overflow-y-auto">
+      <div className={cn("min-h-0 flex-1", scrollArea)}>
         {error ? (
           <p className="py-8 text-center text-sm text-muted-foreground">{error}</p>
         ) : hits === null ? (

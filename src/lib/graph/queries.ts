@@ -121,12 +121,21 @@ export const PAPERS_BY_PG_ID = `
 MATCH (p:Paper) WHERE p.pgPaperId IN $pgIds
 RETURN p.pgPaperId AS pgPaperId, p.paperId AS paperId`;
 
-/** Graph status for the library UI: matched?, full text indexed?, connections. */
+/**
+ * Graph status for the library UI: matched?, full text indexed?, connections.
+ * `ingestedAt` is written only after the whole pipeline (Librarian + full text) finishes,
+ * so the UI keeps showing "Indexing" until passages are in too.
+ */
 export const LIBRARY_GRAPH_STATUS = `
 MATCH (p:Paper) WHERE p.pgPaperId IN $pgIds
 OPTIONAL MATCH (p)-[c:CITES]-(:Paper)
 RETURN p.pgPaperId AS pgPaperId, p.paperId AS paperId, p.year AS year, p.venue AS venue,
-       coalesce(p.chunkCount, 0) AS chunks, count(c) AS links`;
+       coalesce(p.chunkCount, 0) AS chunks, count(c) AS links, p.ingestedAt IS NOT NULL AS done`;
+
+export const MARK_INGESTED = `
+MATCH (p:Paper) WHERE p.pgPaperId IN $pgIds
+SET p.ingestedAt = $at
+RETURN count(p) AS n`;
 
 // ---------------------------------------------------------------- Documents (writes)
 

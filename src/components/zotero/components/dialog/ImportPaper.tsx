@@ -16,6 +16,8 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
 import { importPapers } from "../../actions";
 import { cn } from "@/lib/utils";
+import { refreshLibrary } from "@/lib/hooks/use-library";
+import { toast } from "sonner";
 import Image from "next/image";
 import Link from "next/link";
 
@@ -176,9 +178,24 @@ export default function ImportPaper({ workspaceId }: { workspaceId: string }) {
         setImportingLoading(true);
         try {
             const res = await importPapers(selectedPapers, workspaceId);
-            console.log('Import result:', res);
+            const ok = res.data?.progress.successful.length ?? 0;
+            const failed = res.data?.progress.failed.length ?? 0;
+            if (!res.status) {
+                toast.error(res.message || "Import failed");
+            } else if (failed && !ok) {
+                toast.error(`Couldn't import ${failed} paper${failed === 1 ? "" : "s"} from Zotero`);
+            } else {
+                toast.success(`Imported ${ok} paper${ok === 1 ? "" : "s"} from Zotero`, {
+                    description: failed
+                        ? `${failed} failed. The rest are being indexed into your research graph.`
+                        : "Indexing them into your team's research graph.",
+                });
+                setSelectedPapers([]);
+            }
+            refreshLibrary(workspaceId);
         } catch (error) {
             console.error('Import failed:', error);
+            toast.error("Import failed. Please try again.");
         } finally {
             setImportingLoading(false);
         }
