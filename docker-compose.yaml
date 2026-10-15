@@ -1,0 +1,68 @@
+services:
+  app:
+    build:
+      context: .
+      args:
+        DATABASE_URL: ${DATABASE_URL}
+    environment:
+      - DATABASE_URL=${DATABASE_URL}
+      - NEXT_PUBLIC_SUPABASE_URL=${NEXT_PUBLIC_SUPABASE_URL}
+      - NEXT_PUBLIC_SUPABASE_ANON_KEY=${NEXT_PUBLIC_SUPABASE_ANON_KEY}
+      - SERVICE_ROLE_KEY=${SERVICE_ROLE_KEY}
+      - PW=${PW}
+      - NEXT_PUBLIC_SITE_URL=${NEXT_PUBLIC_SITE_URL}
+      - DB_NAME=${DB_NAME}
+      - REACT_EDITOR=${REACT_EDITOR}
+      - STRAPI_API_KEY=${STRAPI_API_KEY}
+      - OPENAI_API_KEY=${OPENAI_API_KEY}
+      - ANTROPIC_API_KEY=${ANTROPIC_API_KEY}
+      - NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY=${NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY}
+      - STRIPE_SECRET_KEY=${STRIPE_SECRET_KEY}
+      - STRIPE_WEBHOOK_SECRET=${STRIPE_WEBHOOK_SECRET}
+      - AUTH_SECRET=${AUTH_SECRET}
+      - AUTH_GOOGLE_ID=${AUTH_GOOGLE_ID}
+      - AUTH_GOOGLE_SECRET=${AUTH_GOOGLE_SECRET}
+      - AUTH_DRIZZLE_URL=${AUTH_DRIZZLE_URL}
+      - UPSTASH_REDIS_REST_URL=${UPSTASH_REDIS_REST_URL}
+      - UPSTASH_REDIS_REST_TOKEN=${UPSTASH_REDIS_REST_TOKEN}
+      - SEMANTIC_SCHOLAR_URL=${SEMANTIC_SCHOLAR_URL}
+      - ZOTERO_API_ENDPOINT=${ZOTERO_API_ENDPOINT}
+      - ZOTERO_CLIENT_KEY=${ZOTERO_CLIENT_KEY}
+      - ZOTERO_CLIENT_SECRET=${ZOTERO_CLIENT_SECRET}
+      - NEXT_PUBLIC_ZOTERO_CALLBACK_URL=${NEXT_PUBLIC_ZOTERO_CALLBACK_URL}
+      - NEXT_PUBLIC_APP_URL=${NEXT_PUBLIC_APP_URL}
+      - APP_URL=${APP_URL}
+      - SHOW_OUTRAGEOUS_CONTENT=${SHOW_OUTRAGEOUS_CONTENT}
+      - NODE_ENV=${NODE_ENV}
+      - AUTH_TRUST_HOST=${AUTH_TRUST_HOST}
+      - AUTH_URL=${AUTH_URL}
+      - NEXT_PUBLIC_WS_URL=${NEXT_PUBLIC_WS_URL}
+    env_file:
+      - .env
+    networks:
+      - app-network
+      - proxy
+    labels:
+      - "traefik.enable=true"
+      - "traefik.docker.network=proxy"
+      - "traefik.http.routers.neuraquery.rule=Host(`neuraquery.com`,`www.neuraquery.com`)"
+      - "traefik.http.routers.neuraquery.entrypoints=websecure"
+      - "traefik.http.routers.neuraquery.tls.certresolver=letsencrypt"
+      - "traefik.http.routers.neuraquery.service=neuraquery"
+      - "traefik.http.services.neuraquery.loadbalancer.server.port=3000"
+      - "traefik.http.routers.neuraquery.middlewares=secure-headers@file,gzip-compress@file"
+      # WebSocket router for path prefix /ws on same host
+      - "traefik.http.routers.neuraquery-ws.rule=Host(`neuraquery.com`,`www.neuraquery.com`) && PathPrefix(`/ws`)"
+      - "traefik.http.routers.neuraquery-ws.entrypoints=websecure"
+      - "traefik.http.routers.neuraquery-ws.tls.certresolver=letsencrypt"
+      - "traefik.http.routers.neuraquery-ws.service=neuraquery"
+
+
+volumes:
+  node_modules:
+
+networks:
+  app-network:
+    driver: bridge
+  proxy:
+    external: true
