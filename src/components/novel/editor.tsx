@@ -114,7 +114,7 @@ const NovelTailwindEditor = ({
   const [sharedWorkspaces, setSharedWorkspaces] = useState<any[]>([]);
 
   const { state, workspaceId, dispatch, folderId } = useAppState();
-  const saveTimerRef = useRef<ReturnType<typeof setTimeout>>();
+  const saveTimerRef = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
   const router = useRouter();
   const supabase = createClient();
 
@@ -123,8 +123,8 @@ const NovelTailwindEditor = ({
   const pathname = usePathname();
 
   // Create refs for Y.doc and provider to persist across renders
-  const ydoc = useRef<Y.Doc>();
-  const provider = useRef<HocuspocusProvider>();
+  const ydoc = useRef<Y.Doc | undefined>(undefined);
+  const provider = useRef<HocuspocusProvider | undefined>(undefined);
 
   const file = useSelectedFile(fileId);
   // Initialize Y.doc and provider only on client-side

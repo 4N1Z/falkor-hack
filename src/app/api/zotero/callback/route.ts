@@ -35,7 +35,7 @@ export async function GET(request: Request) {
     return new Response("Missing required parameters", { status: 400 });
   }
 
-  const cookiesStore = cookies();
+  const cookiesStore = await cookies();
   const requestToken = cookiesStore.get("requestToken")?.value;
   const requestTokenSecret = cookiesStore.get("requestTokenSecret")?.value;
 

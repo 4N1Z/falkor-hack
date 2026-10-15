@@ -6,11 +6,12 @@ import SemanticScholarSuggestion from "../_components/semantic-scholar-suggestio
 import ResearchPapers from "../_components/research-papers";
 import { auth } from "@/auth";
 
-export default async function WordspaceIdPage({
-  params,
-}: {
-  params: { workspaceId: string };
-}) {
+export default async function WordspaceIdPage(
+  props: {
+    params: Promise<{ workspaceId: string }>;
+  }
+) {
+  const params = await props.params;
   const session = await auth();
   if (!session?.user || session === null) redirect("/login");
 

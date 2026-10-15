@@ -4,11 +4,12 @@ import NovelTailwindEditore from "@/components/novel/Editore";
 import NeuraAIBlock from "@/components/AI/neura-ai-block";
 import { auth } from "@/auth";
 
-export default async function FilePage({
-  params,
-}: {
-  params: { workspaceId: string; fileId: string };
-}) {
+export default async function FilePage(
+  props: {
+    params: Promise<{ workspaceId: string; fileId: string }>;
+  }
+) {
+  const params = await props.params;
 
   // const session = await auth();
   // if (!session?.user || session === null) redirect("/login");

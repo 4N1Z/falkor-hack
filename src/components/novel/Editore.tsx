@@ -130,7 +130,7 @@ const NovelTailwindEditore = ({
   const file = useSelectedFile(fileId);
   // Initialize Y.doc and provider only on client-side
   const [isCollaborationEnabled, setIsCollaborationEnabled] = useState(false);
-  const saveTimerRef = useRef<ReturnType<typeof setTimeout>>();
+  const saveTimerRef = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
 
   // Query functions
   const details = useMemo(() => {

@@ -3,14 +3,12 @@ import { zoteroClient } from "@/components/zotero/src";
 import { NextRequest } from "next/server";
 import { cookies } from "next/headers";
 
-export async function GET(
-  req: NextRequest,
-  { params }: { params: { itemKey: string } }
-) {
+export async function GET(req: NextRequest, props: { params: Promise<{ itemKey: string }> }) {
+  const params = await props.params;
   const { itemKey } = params;
 
   // Get both cookie stores for comparison
-  const cookieStore = cookies();
+  const cookieStore = await cookies();
   const requestCookies = req.cookies;
 
   // Check authentication using both methods

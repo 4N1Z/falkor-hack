@@ -23,7 +23,7 @@ export async function GET(request: Request) {
   // console.log("🔑 Zotero auth route initialized");
   const url = new URL(request.url);
   const params = url.searchParams;
-  const cookiesStore = cookies();
+  const cookiesStore = await cookies();
 
   if (params.get("callback")) {
     const callback = params.get("callback");

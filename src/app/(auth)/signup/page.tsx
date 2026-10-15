@@ -15,7 +15,7 @@
 // import clsx from "clsx";
 // import { Loader, MailCheck } from "lucide-react";
 // import Link from "next/link";
-import { redirect, useRouter, useSearchParams } from "next/navigation";
+import { redirect } from "next/navigation";
 // import { useMemo, useState } from "react";
 // import { useForm } from "react-hook-form";
 // import { z } from "zod";

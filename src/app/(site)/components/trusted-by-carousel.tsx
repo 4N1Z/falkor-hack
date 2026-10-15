@@ -1,6 +1,7 @@
 "use client";
 
 import Image from "next/image";
+import type { JSX } from "react";
 import {
   Carousel,
   CarouselContent,

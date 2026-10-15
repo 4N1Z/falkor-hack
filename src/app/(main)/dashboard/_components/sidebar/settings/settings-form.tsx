@@ -67,7 +67,7 @@ export default function SettingsForm() {
   const [collaborators, setCollaborators] = useState<User[] | []>([]);
   const [openAlertMessage, setOpenAlertMessage] = useState<boolean>(false);
   const [workspaceDetail, setWorkspaceDetail] = useState<workspace>();
-  const titleTimeRef = useRef<ReturnType<typeof setTimeout>>();
+  const titleTimeRef = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
   const [uploadingProfile, setUploadingProfile] = useState<boolean>(false);
   const [uploadingLogo, setUploadingLogo] = useState<boolean>(false);
 

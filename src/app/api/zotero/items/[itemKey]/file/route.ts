@@ -2,10 +2,8 @@ import { auth } from "@/auth";
 import { zoteroClient } from "@/components/zotero/src";
 import { cookies } from "next/headers";
 
-export async function GET(
-  req: Request,
-  { params }: { params: { itemKey: string } }
-) {
+export async function GET(req: Request, props: { params: Promise<{ itemKey: string }> }) {
+  const params = await props.params;
   const { itemKey } = params;
 
   // check if user is logged in
@@ -14,7 +12,7 @@ export async function GET(
   if (!session || !session.user || !session.user.id) {
     return Response.redirect(`${process.env.APP_URL}/login`);
   }
-  const cookieStore = cookies();
+  const cookieStore = await cookies();
   const zoteroAccessToken = cookieStore.get("zoteroAccessToken");
   const zoteroAccessTokenSecret = cookieStore.get("zoteroAccessTokenSecret");
   const zoteroUserId = cookieStore.get("zoteroUserId");

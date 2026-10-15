@@ -7,7 +7,7 @@ export async function GET(req: NextRequest) {
   // check if user is logged in
   // if not redirect to login page
   // Get both cookie stores for comparison
-  const cookieStore = cookies();
+  const cookieStore = await cookies();
   const requestCookies = req.cookies;
 
   // Check authentication using both methods

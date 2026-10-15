@@ -119,7 +119,7 @@ async function processParentItems(
   progress: UploadProgress
 ): Promise<ProcessResult[]> {
   console.log(`🔄 Processing ${parentKeys.length} parent items`);
-  const cookieStore = cookies();
+  const cookieStore = await cookies();
 
   try {
     const results = await Promise.all(
@@ -260,7 +260,7 @@ async function processAttachments(
   progress: UploadProgress
 ) {
   console.log(`🔄 Processing ${attachmentKeys.length} direct attachments`);
-  const cookieStore = cookies();
+  const cookieStore = await cookies();
 
   try {
     const attachmentResults = await Promise.all(
