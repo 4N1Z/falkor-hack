@@ -168,6 +168,145 @@ export async function getWorksByIds(ids: string[]): Promise<OpenAlexWork[]> {
   return out;
 }
 
+/** A search hit for the "Search papers" UI. */
+export interface PaperSearchResult {
+  openalexId: string;
+  title: string;
+  authors: string[];
+  year: number | null;
+  venue: string | null;
+  doi: string | null;
+  citationCount: number;
+  abstract: string | null;
+  /** Direct open-access PDF, when OpenAlex knows one */
+  pdfUrl: string | null;
+  /** OpenAlex work type → papers.paper_type */
+  paperType: "journal" | "conference" | "preprint" | "thesis" | "book" | "other";
+}
+
+const PAPER_TYPE: Record<string, PaperSearchResult["paperType"]> = {
+  article: "journal",
+  "journal-article": "journal",
+  review: "journal",
+  "conference-paper": "conference",
+  "proceedings-article": "conference",
+  preprint: "preprint",
+  "posted-content": "preprint",
+  dissertation: "thesis",
+  book: "book",
+  "book-chapter": "book",
+};
+
+type OaLocation = { pdf_url?: string | null; landing_page_url?: string | null };
+type SearchWork = OpenAlexWork & {
+  type?: string;
+  best_oa_location?: OaLocation | null;
+  locations?: OaLocation[];
+};
+
+/**
+ * Pick the open-access PDF most likely to download. Publisher sites (e.g. MIT Press) often
+ * answer automated requests with a 403 page, while arXiv and repositories serve the PDF
+ * directly, so prefer those over the "best" (usually publisher) location.
+ */
+function pickPdfUrl(w: SearchWork): string | null {
+  const urls = [w.best_oa_location, ...(w.locations ?? [])]
+    .map((l) => l?.pdf_url)
+    .filter((u): u is string => !!u && /^https?:\/\//.test(u));
+  const arxivPage = (w.locations ?? [])
+    .map((l) => l?.landing_page_url?.match(/arxiv\.org\/abs\/([0-9.]+?)(?:v\d+)?$/)?.[1])
+    .find(Boolean);
+  return (
+    urls.find((u) => u.includes("arxiv.org")) ??
+    (arxivPage ? `https://arxiv.org/pdf/${arxivPage}` : null) ??
+    urls.find((u) => /europepmc|ncbi\.nlm|hal\.science|zenodo|aclanthology|eprints|repository/.test(u)) ??
+    urls[0] ??
+    null
+  );
+}
+
+function toSearchResult(w: SearchWork): PaperSearchResult {
+  const gp = toGraphPaper(w);
+  const pdf = pickPdfUrl(w) ?? (gp.arxivId ? `https://arxiv.org/pdf/${gp.arxivId}` : null);
+  return {
+    openalexId: gp.paperId,
+    title: gp.title,
+    authors: gp.authors.map((a) => a.name),
+    year: gp.year,
+    venue: gp.venue,
+    doi: gp.doi,
+    citationCount: gp.citationCount,
+    abstract: gp.abstract,
+    pdfUrl: pdf,
+    // arXiv DOIs are preprints whatever OpenAlex labels them
+    paperType: gp.arxivId ? "preprint" : (PAPER_TYPE[w.type ?? ""] ?? "other"),
+  };
+}
+
+const SEARCH_FIELDS = `${WORK_FIELDS},type,best_oa_location,locations`;
+
+const arxivIdOf = (r: PaperSearchResult) =>
+  arxivIdFromDoi(r.doi) ?? r.pdfUrl?.match(/arxiv\.org\/(?:pdf|abs)\/([0-9.]+?)(?:v\d+)?(?:\.pdf)?$/)?.[1] ?? null;
+
+/**
+ * OpenAlex sometimes shows an unrelated title on an otherwise-correct record (seen on the
+ * GraphRAG paper itself). For arXiv papers, arXiv's own API is authoritative, so overwrite
+ * titles from it in one batched call. Best effort: on failure the OpenAlex title stays.
+ */
+async function correctArxivTitles(results: PaperSearchResult[]): Promise<PaperSearchResult[]> {
+  const ids = [...new Set(results.map(arxivIdOf).filter((x): x is string => !!x))];
+  if (!ids.length) return results;
+  try {
+    const res = await fetch(`https://export.arxiv.org/api/query?id_list=${ids.join(",")}&max_results=${ids.length}`, {
+      signal: AbortSignal.timeout(6000),
+    });
+    if (!res.ok) return results;
+    const xml = await res.text();
+    const titles = new Map<string, string>();
+    for (const entry of xml.split("<entry>").slice(1)) {
+      const id = entry.match(/<id>https?:\/\/arxiv\.org\/abs\/([0-9.]+?)(?:v\d+)?<\/id>/)?.[1];
+      const title = entry.match(/<title>([\s\S]*?)<\/title>/)?.[1]?.replace(/\s+/g, " ").trim();
+      if (id && title) titles.set(id, title);
+    }
+    return results.map((r) => {
+      const id = arxivIdOf(r);
+      const title = id ? titles.get(id) : undefined;
+      return title ? { ...r, title, paperType: "preprint" as const } : r;
+    });
+  } catch {
+    return results;
+  }
+}
+
+/** Relevance search for the "Search papers" tab (title, abstract, full text where available). */
+export async function searchWorks(query: string, perPage = 12): Promise<PaperSearchResult[]> {
+  const q = query.trim();
+  if (q.length < 3) return [];
+  // A pasted DOI goes straight to the exact work
+  const doi = normalizeDoi(q.match(/10\.\d{4,9}\/\S+/)?.[0]);
+  if (doi) {
+    const w = await openAlexFetch<SearchWork>(`/works/doi:${doi}`, { select: SEARCH_FIELDS });
+    return w ? correctArxivTitles([toSearchResult(w)]) : [];
+  }
+  const res = await openAlexFetch<{ results: SearchWork[] }>("/works", {
+    search: q,
+    "per-page": String(perPage),
+    select: SEARCH_FIELDS,
+  });
+  return correctArxivTitles((res?.results ?? []).filter((w) => w.title).map(toSearchResult));
+}
+
+/** Fetch works by OpenAlex id with search-result fields (for importing a selection). */
+export async function getSearchResultsByIds(ids: string[]): Promise<PaperSearchResult[]> {
+  if (!ids.length) return [];
+  const res = await openAlexFetch<{ results: SearchWork[] }>("/works", {
+    filter: `openalex:${ids.slice(0, 50).join("|")}`,
+    "per-page": "50",
+    select: SEARCH_FIELDS,
+  });
+  return correctArxivTitles((res?.results ?? []).map(toSearchResult));
+}
+
 /** Most-cited works that cite `workId` (the "cited by" frontier). */
 export async function getCitingWorks(workId: string, limit: number): Promise<OpenAlexWork[]> {
   const res = await openAlexFetch<{ results: OpenAlexWork[] }>("/works", {

@@ -1,8 +1,11 @@
 import { after } from "next/server";
 import { eq, inArray } from "drizzle-orm";
 import db from "@/db";
-import { files, users } from "@/db/schema";
+import { files, papers, users } from "@/db/schema";
+import { getWorkspaceGraph } from "./client";
+import { fetchPdfText, indexPaperText, type PdfText } from "./document-index";
 import { ingestLibrary, type LibraryItem } from "./ingest";
+import { PAPERS_BY_PG_ID } from "./queries";
 import { syncDocument, type DocNode } from "./sync-document";
 
 /** The subset of a `papers` row the Librarian needs. */
@@ -14,12 +17,24 @@ export interface PaperRow {
   userId: string;
   workspaceId: string;
   source: string | null;
+  uploadUrl?: string | null;
 }
 
 const toSource = (s: string | null): LibraryItem["source"] =>
   s === "zotero" || s === "manual" ? s : "other";
 
-/** Ingest papers into the workspace graph now (awaits). Rows may span users, not workspaces. */
+/** Text between an "Abstract" heading and the introduction, for PDFs uploaded without one. */
+function abstractFromText(text: string): string | null {
+  const m = text.slice(0, 8000).match(/abstract[\s.:—-]*\n?([\s\S]{200,2500}?)(?:\n\s*(?:\d\.?\s*)?(?:introduction|keywords|index terms)\b)/i);
+  return m ? m[1].replace(/\s+/g, " ").trim() : null;
+}
+
+/**
+ * Ingest papers into the workspace graph now (awaits). Rows may span users, not workspaces.
+ * 1. Read each PDF once: fills a missing DOI / abstract (also saved back to Postgres)
+ * 2. Librarian: OpenAlex resolution, citations, authors, concepts, embeddings
+ * 3. Full-text: PDF passages → (:Chunk)-[:CHUNK_OF]->(:Paper) for passage-level retrieval
+ */
 export async function ingestPaperRows(rows: PaperRow[]) {
   if (!rows.length) return null;
   const workspaceId = rows[0].workspaceId;
@@ -30,7 +45,24 @@ export async function ingestPaperRows(rows: PaperRow[]) {
     .where(userIds.length === 1 ? eq(users.id, userIds[0]) : inArray(users.id, userIds));
   const nameOf = new Map(names.map((u) => [u.id, u.name || u.email]));
 
-  return ingestLibrary(
+  // 1. PDFs (sequential: bounded memory, and these are usually 1–10 papers)
+  const pdfText = new Map<string, PdfText>();
+  for (const r of rows) {
+    if (!r.uploadUrl) continue;
+    const pdf = await fetchPdfText(r.uploadUrl);
+    if (!pdf) continue;
+    pdfText.set(r.id, pdf);
+    const doi = r.doi || pdf.doi;
+    const abstract = r.abstract?.trim() || abstractFromText(pdf.text);
+    if ((doi && doi !== r.doi) || (abstract && abstract !== r.abstract)) {
+      r.doi = doi;
+      r.abstract = abstract;
+      await db.update(papers).set({ doi, abstract }).where(eq(papers.id, r.id)).catch(() => {});
+    }
+  }
+
+  // 2. Librarian
+  const result = await ingestLibrary(
     workspaceId,
     rows.map((r) => ({
       pgPaperId: r.id,
@@ -42,6 +74,23 @@ export async function ingestPaperRows(rows: PaperRow[]) {
       source: toSource(r.source),
     })),
   );
+
+  // 3. Full text, attached to whichever node the Librarian settled on for each paper
+  let chunks = 0;
+  if (pdfText.size) {
+    const graph = await getWorkspaceGraph(workspaceId);
+    const nodes =
+      (await graph.roQuery<{ pgPaperId: string; paperId: string }>(PAPERS_BY_PG_ID, {
+        params: { pgIds: [...pdfText.keys()] } as never,
+      })).data ?? [];
+    for (const { pgPaperId, paperId } of nodes) {
+      chunks += await indexPaperText(workspaceId, paperId, pdfText.get(pgPaperId)!.text).catch((err) => {
+        console.error(`[graph] full-text indexing failed for ${paperId}`, err);
+        return 0;
+      });
+    }
+  }
+  return { ...result, fullText: pdfText.size, chunks };
 }
 
 /**

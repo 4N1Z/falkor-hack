@@ -11,7 +11,7 @@ const nextConfig = {
   // Load these with Node's own require instead of bundling them. falkordb pulls in
   // @js-temporal/polyfill → jsbi, whose CJS default export breaks under Turbopack
   // bundling ("e.BigInt is not a function").
-  serverExternalPackages: ["falkordb", "@typesafe-ai/sdk"],
+  serverExternalPackages: ["falkordb", "@typesafe-ai/sdk", "unpdf"],
   images: {
     remotePatterns: [
       { hostname: "images.unsplash.com", protocol: "https" },

@@ -22,7 +22,8 @@ interface UploadingFile {
   error?: string;
 }
 
-export default function UploadResearchPapers({ workspaceId, workspaceName }: UploadResearchPapersProps) {
+/** Dropzone + upload queue. Reused by the dashboard upload dialog and the Research Library. */
+export function UploadPanel({ workspaceId, onUploaded }: { workspaceId: string; onUploaded?: () => void }) {
   const [uploadQueue, setUploadQueue] = useState<UploadingFile[]>([]);
   const [isUploading, setIsUploading] = useState(false);
   const { session } = useUser();
@@ -73,6 +74,7 @@ export default function UploadResearchPapers({ workspaceId, workspaceName }: Upl
         );
 
         toast.success(`Successfully uploaded ${fileInfo.file.name}`);
+        onUploaded?.();
 
       } catch (error) {
         console.error(`Error uploading ${fileInfo.file.name}:`, error);
@@ -165,6 +167,36 @@ export default function UploadResearchPapers({ workspaceId, workspaceName }: Upl
   );
 
   return (
+    <>
+      <div
+        {...getRootProps()}
+        className={`
+          flex flex-col min-h-12 gap-2 items-center justify-center
+          border-dashed border-2 border-sky-100 rounded-md p-5
+          font-sans transition-colors duration-150
+          ${isDragActive ? 'bg-sky-50/10 border-sky-500' : ''}
+          ${isUploading ? 'opacity-50' : 'cursor-pointer hover:border-sky-300'}
+        `}
+      >
+        <input {...getInputProps()} />
+        {isDragActive ? (
+          <p className="text-sky-500">Drop your papers here</p>
+        ) : (
+          <div className="text-center">
+            <p className="text-sm mb-1">
+              {isUploading ? 'Uploading...' : "Drag and drop your research papers here"}
+            </p>
+            <p className="text-xs text-muted-foreground">or click to browse</p>
+          </div>
+        )}
+      </div>
+      <FileList />
+    </>
+  );
+}
+
+export default function UploadResearchPapers({ workspaceId, workspaceName }: UploadResearchPapersProps) {
+  return (
     <Dialog>
       <DialogTrigger asChild>
         <Button size="sm" className="text-sm" variant="link">
@@ -179,35 +211,8 @@ export default function UploadResearchPapers({ workspaceId, workspaceName }: Upl
             Upload your research papers to {workspaceName}
           </DialogDescription>
         </DialogHeader>
-        
-        <div 
-          {...getRootProps()} 
-          className={`
-            flex flex-col min-h-12 gap-2 items-center justify-center 
-            border-dashed border-2 border-sky-100 rounded-md p-5 
-            font-sans transition-colors duration-150
-            ${isDragActive ? 'bg-sky-50/10 border-sky-500' : ''}
-            ${isUploading ? 'opacity-50' : 'cursor-pointer hover:border-sky-300'}
-          `}
-        >
-          <input {...getInputProps()} />
-          {isDragActive ? (
-            <p className="text-sky-500">Drop your papers here</p>
-          ) : (
-            <div className="text-center">
-              <p className="text-sm mb-1">
-                {isUploading 
-                  ? 'Uploading...' 
-                  : "Drag and drop your research papers here"}
-              </p>
-              <p className="text-xs text-muted-foreground">
-                or click to browse
-              </p>
-            </div>
-          )}
-        </div>
 
-        <FileList />
+        <UploadPanel workspaceId={workspaceId} />
 
         <DialogFooter className="flex justify-between items-center font-sans">
           <div className="text-xs text-muted-foreground">

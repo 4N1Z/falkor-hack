@@ -241,6 +241,42 @@ Phases 1–4 are the **MVP**. Phases 5–7 add depth and can be cut. Always leav
 
 > ⚠️ **Second FalkorDB engine quirk (Oct 15):** `MATCH … DELETE r WITH count(*) AS x UNWIND $rows … MERGE …` creates **nothing**, even though each half works on its own and `count(*)` returns a row. Keep deletes and inserts in separate statements (`DELETE_CLAIM_CITES` and then `INSERT_CLAIM_CITES`).
 
+### Phase 2.5: Research library (search, import, full-text indexing) ✅
+
+Added on Oct 15 at the user's request. The sidebar "Research papers" dialog was dead: "Add Research Paper" was a plain `<div>` with no handler.
+
+- **UI:** `src/components/library/research-library.tsx` is the new sidebar dialog (`researchPaper-main.tsx`). The old `researchPaper-menu.tsx` was removed. It has three tabs:
+  - **Library:** every workspace paper with who imported it, its source, year and DOI, plus its graph status:
+    - *Indexing* (pulsing dot; the list polls every 3 s while anything is pending)
+    - *N links*
+    - *full text*
+    - *Not matched*
+  - **Search papers:** OpenAlex search (debounced 350 ms, a newer query cancels an older one). Pasting a DOI jumps straight to that work. Each result shows authors, venue, citations and an open-access PDF badge, and has an **Add** button that updates the list straight away.
+  - **Upload & import:** the shared `UploadPanel`, split out of `upload-research-papers.tsx`, plus the Zotero import.
+- **API** (all go through `requireWorkspaceMember`):
+  - `GET /api/papers?workspaceId`: the library with graph status.
+  - `GET /api/papers/search?workspaceId&q`: search, flagging papers already `inLibrary`.
+  - `POST /api/papers/import {workspaceId, openalexIds[]}`: inserts `papers` rows with `source: other` and `externalSource: openalex`. Title is unique per workspace, so a re-import is a no-op. Then it runs `scheduleLibraryIngest`.
+- **Full-text indexing** (`src/lib/graph/document-index.ts`):
+  - Fetches the PDF and extracts its text with `unpdf` (an external server package). Skips HTML disguised as a PDF, scanned PDFs and files over 25 MB.
+  - Splits the text into passages of about 1,200 characters with 150 overlap, at paragraph or sentence breaks, dropping the references section, with at most 60 passages.
+  - Embeds them and writes `(:Chunk {text, embedding})-[:CHUNK_OF]->(:Paper)`.
+  - New indexes: VECTOR and FULLTEXT on `Chunk`. `SCHEMA_VERSION` makes running servers re-check the schema.
+- **`ingestPaperRows` pipeline:**
+  1. Read the PDF once.
+  2. Fill in a missing DOI and abstract from the PDF text, and save them back to Postgres. This lets uploads match on OpenAlex.
+  3. Run the Librarian.
+  4. Index the passages onto the paper's canonical node.
+- **Data-quality fixes:**
+  - **arXiv titles:** OpenAlex showed GraphRAG's DOI as "Advancing Intelligent Personal Assistants…". Search and import now take titles from arXiv's own API, batched (`correctArxivTitles`).
+  - **PDF choice:** publisher PDFs often return a 403 to servers (MIT Press did). `pickPdfUrl` prefers arXiv, then repositories, then the publisher.
+- **Security:** `/api/upload` now checks workspace membership, not just sign-in. Zotero OAuth `callback` was an open redirect and is now `safeCallback` (same origin only).
+- **Verified in the browser:** searched "Lost in the Middle", clicked Add (2.3 s). The Librarian merged it onto the existing seed node, and it shows **57 links · full text** (43 passages from the arXiv PDF). A passage search for "how are community summaries used…" returned the right GraphRAG passage.
+- **Effect on Phases 3–4:**
+  - Cite Scout and the Checker should retrieve **`Chunk` passages** as well as `Paper` abstracts, quoting the passage as evidence.
+  - `scoreSupport` should judge a claim against the best-matching passages, not only the abstract.
+  - Papers without full text fall back to the abstract.
+
 ### Phase 3: Cite Scout (MVP agent 1)
 
 10. **Agent and route:** `cite-scout.ts` plus `POST /api/agents/cite-scout`.

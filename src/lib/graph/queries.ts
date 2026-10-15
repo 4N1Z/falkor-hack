@@ -97,6 +97,37 @@ WITH p, count(q) AS citers,
 SET p.suspect = (NOT p.inLibrary AND (coalesce(p.metaSuspect, false) OR (citers >= 3 AND older * 2 > citers)))
 RETURN sum(CASE WHEN p.suspect THEN 1 ELSE 0 END) AS n`;
 
+// ---------------------------------------------------------------- Full text (writes)
+
+export const DELETE_PAPER_CHUNKS = `
+MATCH (c:Chunk {paperId: $paperId})
+DETACH DELETE c`;
+
+export const UPSERT_CHUNKS = `
+MATCH (p:Paper {paperId: $paperId})
+UNWIND $rows AS r
+MERGE (c:Chunk {id: r.id})
+SET c.paperId = $paperId, c.idx = r.idx, c.text = r.text, c.embedding = vecf32(r.embedding)
+MERGE (c)-[:CHUNK_OF]->(p)
+RETURN count(c) AS n`;
+
+export const SET_PAPER_INDEXED = `
+MATCH (p:Paper {paperId: $paperId})
+SET p.chunkCount = $chunks, p.indexedAt = $at
+RETURN p.paperId AS paperId`;
+
+/** Map Postgres paper ids to their (canonical) graph nodes. */
+export const PAPERS_BY_PG_ID = `
+MATCH (p:Paper) WHERE p.pgPaperId IN $pgIds
+RETURN p.pgPaperId AS pgPaperId, p.paperId AS paperId`;
+
+/** Graph status for the library UI: matched?, full text indexed?, connections. */
+export const LIBRARY_GRAPH_STATUS = `
+MATCH (p:Paper) WHERE p.pgPaperId IN $pgIds
+OPTIONAL MATCH (p)-[c:CITES]-(:Paper)
+RETURN p.pgPaperId AS pgPaperId, p.paperId AS paperId, p.year AS year, p.venue AS venue,
+       coalesce(p.chunkCount, 0) AS chunks, count(c) AS links`;
+
 // ---------------------------------------------------------------- Documents (writes)
 
 export const UPSERT_DOCUMENT = `

@@ -1,5 +1,5 @@
 import { FalkorDB, type Graph } from "falkordb";
-import { ensureSchema } from "./schema";
+import { SCHEMA_VERSION, ensureSchema } from "./schema";
 
 // FalkorDB client is Node-only (TCP). Any route importing this must use the nodejs runtime.
 // Cached on globalThis so Next dev HMR doesn't open a new connection per reload.
@@ -36,9 +36,10 @@ export async function getWorkspaceGraph(workspaceId: string): Promise<Graph> {
   const graph = db.selectGraph(name);
 
   globalForFalkor.falkorSchemaReady ??= new Set();
-  if (!globalForFalkor.falkorSchemaReady.has(name)) {
+  const readyKey = `${name}@v${SCHEMA_VERSION}`;
+  if (!globalForFalkor.falkorSchemaReady.has(readyKey)) {
     await ensureSchema(graph);
-    globalForFalkor.falkorSchemaReady.add(name);
+    globalForFalkor.falkorSchemaReady.add(readyKey);
   }
   return graph;
 }
