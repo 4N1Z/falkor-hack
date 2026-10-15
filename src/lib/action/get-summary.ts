@@ -59,17 +59,27 @@ export async function getResearchPaperSummary() {
     // `${process.env.SEMANTIC_SCHOLAR_URL!}/paper/search?query=${encodeURIComponent(field)}i&limit=5&year=2005-2024&fields=title,abstract,authors,year,externalIds&sort=relevance`,
     `https://api.semanticscholar.org/graph/v1/paper/search?query=${encodeURIComponent(
       userContext.researchAreas
-    )}i&limit=5&year=2005-2024&fields=title,abstract,authors,year,externalIds&sort=relevance`,
+    )}&limit=5&year=2005-2024&fields=title,abstract,authors,year,externalIds&sort=relevance`,
     {
       headers: {
         "Content-Type": "application/json",
+        ...(process.env.SEMANTIC_SCHOLAR_API_KEY && {
+          "x-api-key": process.env.SEMANTIC_SCHOLAR_API_KEY,
+        }),
       },
       next: { revalidate: 3600 },
     }
-  );
+  ).catch(() => null);
 
-  if (!semanticScholarResponse.ok) {
-    throw new Error(`Failed to fetch papers for ${userContext.researchAreas}`);
+  // Don't throw: a failed suggestion widget shouldn't 500 the whole dashboard
+  if (!semanticScholarResponse?.ok) {
+    console.error(
+      `Semantic Scholar search failed (${semanticScholarResponse?.status ?? "network"}) for ${userContext.researchAreas}`
+    );
+    return {
+      data: "Couldn't load paper suggestions right now. Please try again later.",
+      error: String(semanticScholarResponse?.status ?? "network"),
+    };
   }
 
   const { data: papersData } = await semanticScholarResponse.json();
@@ -91,12 +101,21 @@ export async function getResearchPaperSummary() {
          userContext.name
        }'s research areas.`;
 
-  const summary = await generateText({
-    model: openai("gpt-4o-mini"),
-    system: `You are an AI specialized in analyzing research papers and providing personalized summaries based on the user's academic background and research interests.`,
-    prompt,
-    temperature: 0.3,
-  });
+  let summary;
+  try {
+    summary = await generateText({
+      model: openai("gpt-4o-mini"),
+      system: `You are an AI specialized in analyzing research papers and providing personalized summaries based on the user's academic background and research interests.`,
+      prompt,
+      temperature: 0.3,
+    });
+  } catch (error) {
+    console.error("Summary generation failed:", error);
+    return {
+      data: "Couldn't generate a summary right now. Please try again later.",
+      error: "generation",
+    };
+  }
 
   // console.log("Summary :: ,", summary.text);
   return { data: summary.text, error: null };

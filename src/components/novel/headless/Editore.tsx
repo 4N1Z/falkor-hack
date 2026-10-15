@@ -30,6 +30,7 @@ import { useAppState } from '@/lib/providers/state-providers'
 import { defaultExtensions } from '../extensions'
 import { ImageResizer } from '../extensions/index'
 import Link from '@tiptap/extension-link'
+import { TabIndent } from '../extensions/tab-indent'
 
 
 
@@ -239,6 +240,7 @@ const Editore = ({
           Highlight,
           TaskList,
           TaskItem,
+          TabIndent,
           Collaboration.extend().configure({
             document: ydoc ,
           }),

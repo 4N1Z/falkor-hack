@@ -37,7 +37,10 @@ export function useResearchSummary() {
     }
 
     // If no cache or cache is invalid, get fresh data
-    const { data: newSummary } = await getResearchPaperSummary();
+    const { data: newSummary, error } = await getResearchPaperSummary();
+
+    // Show the message, but don't cache a failure for two days
+    if (error) return { data: newSummary };
 
     // Update both state and localStorage
     const newData = {
