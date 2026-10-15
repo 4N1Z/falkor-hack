@@ -6,6 +6,7 @@ import db from "@/db";
 import { auth } from "@/auth";
 import { users } from "@/db/schema";
 import { eq } from "drizzle-orm";
+import { safeCallback } from "@/components/zotero/safe-callback";
 
 // Create an OAuth instance
 const oauth = new OAuth({
@@ -28,7 +29,7 @@ export async function GET(request: Request) {
   if (params.get("callback")) {
     const callback = params.get("callback");
     if (callback) {
-      cookiesStore.set("callback", callback);
+      cookiesStore.set("callback", safeCallback(callback));
       // console.log("📍 Callback URL saved:", callback);
     }
   }
@@ -51,7 +52,7 @@ export async function GET(request: Request) {
       const callback = cookiesStore.get("callback")?.value;
       if (callback) {
         // console.log("↪️ Redirecting to callback:", callback);
-        return Response.redirect(callback);
+        return Response.redirect(safeCallback(callback));
       }
     }
 
@@ -87,7 +88,7 @@ export async function GET(request: Request) {
       const callback = cookiesStore.get("callback")?.value;
       if (callback) {
         // console.log("↪️ Redirecting to callback:", callback);
-        return Response.redirect(callback);
+        return Response.redirect(safeCallback(callback));
       }
     }
 

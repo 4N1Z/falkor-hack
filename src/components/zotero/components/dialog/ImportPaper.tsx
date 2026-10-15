@@ -33,6 +33,12 @@ export default function ImportPaper({ workspaceId }: { workspaceId: string }) {
         status: 200,
         message: ''
     });
+    // Zotero not linked yet: the list, search and Import button can't do anything, so the
+    // dialog shows only the connect step instead of a broken-looking empty list.
+    const notConnected = fetchError.active && fetchError.status === 401;
+    // Return to this exact page after OAuth (set client-side to avoid an SSR mismatch)
+    const [returnTo, setReturnTo] = useState(`${process.env.NEXT_PUBLIC_APP_URL}/dashboard`);
+    useEffect(() => setReturnTo(window.location.href), []);
 
     const fetchPapers = async ({ limit, start, signal }: { limit: number, start: number, signal?: AbortSignal }) => {
         // Set loading state before any operation
@@ -209,15 +215,41 @@ export default function ImportPaper({ workspaceId }: { workspaceId: string }) {
             <DialogContent className="sm:max-w-[425px] font-sans">
                 <DialogHeader>
                     <DialogTitle>Import Papers from Zotero</DialogTitle>
-                    <DialogDescription className="flex justify-between items-center gap-2">
-                        <Input
-                            placeholder="Search for papers by title or author"
-                            className="my-2"
-                            value={searchTerm}
-                            onChange={(e) => setSearchTerm(e.target.value)}
-                        />
+                    <DialogDescription className={cn("flex justify-between items-center gap-2", notConnected && "sr-only")}>
+                        {notConnected ? (
+                            "Connect your Zotero account to import papers."
+                        ) : (
+                            <Input
+                                placeholder="Search for papers by title or author"
+                                className="my-2"
+                                value={searchTerm}
+                                onChange={(e) => setSearchTerm(e.target.value)}
+                            />
+                        )}
                     </DialogDescription>
                 </DialogHeader>
+                {notConnected ? (
+                    <div className="flex flex-col items-center text-center gap-4 pt-2 pb-1">
+                        <Image src="/zotero.png" alt="" width={40} height={40} className="rounded-md" />
+                        <div className="space-y-1.5">
+                            <p className="font-medium text-foreground">Connect Zotero to import your library</p>
+                            <p className="text-sm text-muted-foreground text-balance">
+                                You&apos;ll sign in on zotero.org and come straight back here.
+                                Imported papers join your team&apos;s research graph automatically.
+                            </p>
+                        </div>
+                        <Link
+                            href={`/api/zotero/auth?callback=${encodeURIComponent(returnTo)}`}
+                            className={cn(
+                                buttonVariants({ variant: "neuraShadow" }),
+                                "w-full justify-center font-medium text-primary transition-transform duration-150 ease-out active:scale-[0.97]"
+                            )}
+                        >
+                            Connect Zotero
+                        </Link>
+                    </div>
+                ) : (
+                <>
                 <div className="w-full flex items-center justify-between">
                     <p className="text-base select-none pl-2">
                         Name of the paper
@@ -247,15 +279,6 @@ export default function ImportPaper({ workspaceId }: { workspaceId: string }) {
                         {(loading || !initialLoadComplete) ? (
                             <CarouselItem className="basis-full text-center">
                                 <p className="py-8">Loading papers...</p>
-                            </CarouselItem>
-                        ) : fetchError.active && fetchError.status === 401 ? (
-                            <CarouselItem className="basis-full text-center">
-                                <div className="flex flex-col items-center gap-4 py-8">
-                                    <p>Connect your Zotero account to import papers.</p>
-                                    <Link href={`/api/zotero/auth?callback=${process.env.NEXT_PUBLIC_APP_URL}/dashboard`} className={cn(buttonVariants({ variant: 'neuraShadow' }))}>
-                                        Connect Zotero
-                                    </Link>
-                                </div>
                             </CarouselItem>
                         ) : filteredPapers.length > 0 ? (
                             filteredPapers.map((paper) => (
@@ -314,10 +337,13 @@ export default function ImportPaper({ workspaceId }: { workspaceId: string }) {
                         type="submit"
                         onClick={handleImport}
                         disabled={selectedPapers.length === 0 || importingLoading}
+                        className="transition-transform duration-150 ease-out active:scale-[0.97]"
                     >
                         {importingLoading ? 'Importing...' : `Import (${selectedPapers.length})`}
                     </Button>
                 </DialogFooter>
+                </>
+                )}
             </DialogContent>
         </Dialog>
     )

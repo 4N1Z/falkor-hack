@@ -42,9 +42,9 @@ export async function GET(req: NextRequest, props: { params: Promise<{ itemKey: 
     !zoteroUserId?.value
   ) {
     console.error("Zotero tokens missing", {
-      hasAccessToken: !!zoteroAccessToken,
-      hasSecret: !!zoteroAccessTokenSecret,
-      hasUserId: !!zoteroUserId,
+      hasAccessToken: !!zoteroAccessToken?.value,
+      hasSecret: !!zoteroAccessTokenSecret?.value,
+      hasUserId: !!zoteroUserId?.value,
     });
     return Response.json(
       {
