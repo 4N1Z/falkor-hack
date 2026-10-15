@@ -212,7 +212,7 @@ export default function WorkspaceDropdown({
             />}
             description="Workspaces give you the power to collaborate with others."
           >
-            <div className="flex transition-all hover:bg-muted justify-center items-center gap-2 text-primary p-2 w-full rounded-md">
+            <div className="flex transition-colors duration-150 hover:bg-muted justify-center items-center gap-2 text-primary p-2 w-full rounded-md">
               New workspace <span className="font-bold">+</span>
             </div>
           </CustomDialogTrigger>

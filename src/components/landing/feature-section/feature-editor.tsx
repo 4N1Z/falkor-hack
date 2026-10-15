@@ -45,7 +45,7 @@ export default function FeatureEditor({ className }: { className?: string }) {
           text-foreground
           
          
-          duration-500 hover:duration-500
+          duration-150
           border-2 border-sky-100
           cursor-guest ring-4 ring-white/40
     `,
@@ -69,7 +69,7 @@ export default function FeatureEditor({ className }: { className?: string }) {
               "bg-[linear-gradient(140deg,#EEF4FB_7.44%,#93C7FB_92.29%)]",
               "shadow-[inset_-5.471px_-5.471px_10.941px_rgba(238,244,251,0.50),0px_8.206px_13.677px_rgba(109,205,247,0.52)]",
               "flex items-center justify-center",
-              "transition-all duration-300",
+              "transition-transform duration-150 ease-out",
               "hover:scale-[1.02]",
               "hover:shadow-[inset_-5.471px_-5.471px_10.941px_rgba(238,244,251,0.60),0px_10px_15px_rgba(109,205,247,0.60)]"
             )}

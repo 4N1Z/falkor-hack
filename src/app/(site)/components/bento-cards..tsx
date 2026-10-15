@@ -4,7 +4,7 @@ import { cva, type VariantProps } from "class-variance-authority";
 import { cn } from "@/lib/utils";
 import { cloudLogo } from "@/lib/logos";
 
-const cardVariants = cva("rounded-xl transition-all duration-200", {
+const cardVariants = cva("rounded-xl transition-colors duration-150", {
   variants: {
     variant: {
       square: "min-h-[40vh] w-full",

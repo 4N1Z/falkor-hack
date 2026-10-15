@@ -26,7 +26,9 @@ const MobileSidebar: React.FC<MobileSidebarProps> = ({ children }) => {
   const [selectedNav, setSelectedNav] = useState("");
   return (
     <>
-      {selectedNav === "sidebar" && <>{children}</>}
+      {selectedNav === "sidebar" && (
+        <div className="animate-fadeIn">{children}</div>
+      )}
       <nav
         className="bg-black/10
       backdrop-blur-lg
@@ -45,25 +47,23 @@ const MobileSidebar: React.FC<MobileSidebarProps> = ({ children }) => {
         p-4"
         >
           {nativeNavigations.map((item) => (
-            <li
-              className="flex
-              items-center
-              flex-col
-              justify-center
-            "
-              key={item.id}
+            <li key={item.id}>
+            <button
+              type="button"
+              className="flex items-center flex-col justify-center transition-transform duration-150 ease-out active:scale-95"
               onClick={() => {
                 setSelectedNav(item.id);
               }}
             >
               <item.customIcon></item.customIcon>
               <small
-                className={clsx("", {
+                className={clsx("transition-colors duration-150", {
                   "text-muted-foreground": selectedNav !== item.id,
                 })}
               >
                 {item.title}
               </small>
+            </button>
             </li>
           ))}
         </ul>

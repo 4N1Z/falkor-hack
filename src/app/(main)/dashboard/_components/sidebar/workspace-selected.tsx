@@ -65,7 +65,7 @@ export default function WorkspaceSelected({
       items-center 
       bg-white
       rounded-lg
-      transition-all 
+      transition-colors duration-150 
       p-1
       border-transparent
       ${

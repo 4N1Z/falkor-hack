@@ -64,7 +64,7 @@ export default function ResearchTrendsSummary() {
     bg-[linear-gradient(0deg,rgba(255,255,255,0.70)_0%,rgba(255,255,255,0.70)_100%),linear-gradient(140deg,#FFF_24.44%,#93C7FB_92.29%)]
     backdrop-blur-sm
     shadow-[inset_5.471px_5.471px_10.941px_rgba(238,244,251,0.50),0px_8.206px_13.677px_rgba(109,205,247,0.52)]
-    ring-4 ring-white/40 duration-500 hover:duration-500
+    ring-4 ring-white/40
     border-2 border-sky-100
     relative overflow-hidden
   `}

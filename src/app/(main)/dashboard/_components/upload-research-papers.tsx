@@ -185,7 +185,7 @@ export default function UploadResearchPapers({ workspaceId, workspaceName }: Upl
           className={`
             flex flex-col min-h-12 gap-2 items-center justify-center 
             border-dashed border-2 border-sky-100 rounded-md p-5 
-            font-sans transition-all duration-200
+            font-sans transition-colors duration-150
             ${isDragActive ? 'bg-sky-50/10 border-sky-500' : ''}
             ${isUploading ? 'opacity-50' : 'cursor-pointer hover:border-sky-300'}
           `}

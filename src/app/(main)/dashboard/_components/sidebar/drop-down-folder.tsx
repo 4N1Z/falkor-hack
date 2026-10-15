@@ -351,10 +351,10 @@ export default function DropDown({
   const hoverStyles = useMemo(
     () =>
       clsx(
-        "h-full hidden rounded-sm absolute right-0 space-x-2 flex items-center justify-center",
+        "h-full rounded-sm absolute right-0 space-x-2 flex items-center justify-center opacity-0 pointer-events-none transition-opacity duration-150 ease-out focus-within:opacity-100 focus-within:pointer-events-auto",
         {
-          "group-hover/file:inline-flex group-hover/file:justify-center  ": listType === "file",
-          "group-hover/folder:inline-flex group-hover/folder:justify-center ": listType === "folder",
+          "group-hover/file:opacity-100 group-hover/file:pointer-events-auto": listType === "file",
+          "group-hover/folder:opacity-100 group-hover/folder:pointer-events-auto": listType === "folder",
         }
       ),
     [isFolder]
@@ -374,10 +374,10 @@ export default function DropDown({
         value={id}
         className={cn(
           `p-1`,
-         "font-medium transition-all duration-500 hover:duration-500 gap-2  rounded-md",
+         "font-medium transition-colors duration-150 gap-2 rounded-md border border-transparent",
           listStyles,
-          'bg-white data-[state=open]:bg-white hover:border-primary hover:border',
-          listType === 'file' && 'hover:bg-neura-dashboardBG transition-colors duration-200'
+          'bg-white data-[state=open]:bg-white hover:border-primary',
+          listType === 'file' && 'hover:bg-neura-dashboardBG'
         )}
         onDoubleClick={handleDoubleClick}
         onBlur={handleBlur}
@@ -436,7 +436,7 @@ export default function DropDown({
                 <Trash
                   onClick={moveToTrash}
                   size={16}
-                  className="hover:text-red-600  rounded-sm  text-slate-400 transition-colors"
+                  className="hover:text-red-600 rounded-sm text-slate-400 transition-[color,transform] duration-150 active:scale-90"
                 />
               </TooltipComponent>
 
@@ -445,7 +445,7 @@ export default function DropDown({
                   <PlusIcon
                     onClick={addNewFile}
                     size={15}
-                    className="hover:text-primary text-slate-400  transition-colors"
+                    className="hover:text-primary text-slate-400 transition-[color,transform] duration-150 active:scale-90"
                   />
                 </TooltipComponent>
               )}

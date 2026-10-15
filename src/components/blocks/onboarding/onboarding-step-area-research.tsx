@@ -94,7 +94,7 @@ export function StepAreaOfResearch({
             onClick={() => handleAreaToggle(area)}
             disabled={value.length >= 4 && !value.includes(area)}
             className={`
-              px-4 py-1.5 rounded-full text-sm transition-colors duration-200
+              px-4 py-1.5 rounded-full text-sm transition-colors duration-150
               ${
                 value.includes(area)
                   ? "border-sky-100 bg-sky-50/30 text-primary text-opacity-50"
@@ -126,13 +126,13 @@ export function StepAreaOfResearch({
           text-primary placeholder:text-secondary-foreground
           focus:outline-none outline-none
           shadow-[inset_5.471px_5.471px_10.941px_rgba(238,244,251,0.50)]
-          transition-all duration-200 disabled:bg-white disabled:cursor-not-allowed disabled:placeholder:text-card"
+          transition-colors duration-150 disabled:bg-white disabled:cursor-not-allowed disabled:placeholder:text-card"
       />
         <Button
           type="submit"
           disabled={!customArea.trim() || value.length >= 4}
           className={`
-            px-4 rounded-xl transition-colors duration-200
+            px-4 rounded-xl transition-colors duration-150
             ${
               !customArea.trim() || value.length >= 4 
                 ? "bg-gray-50/20 text-primary/40 cursor-not-allowed"

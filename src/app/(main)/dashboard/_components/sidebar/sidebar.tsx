@@ -16,6 +16,7 @@ import UserProfile from "./user-profile";
 import { redirect } from "next/navigation";
 import { auth } from "@/auth";
 import TestBtn from "@/components/test-btn";
+import { TooltipProvider } from "@/components/ui/tooltip";
 
 interface SidebarProps {
   params: {
@@ -73,6 +74,7 @@ export default async function Sidebar({ params, className }: SidebarProps) {
   // ];
 
   return (
+    <TooltipProvider delayDuration={400} skipDelayDuration={300}>
     <aside
       className={cn(
         "hidden sm:flex m-2 border rounded-sm border-sky-100 sm:flex-col w-[320px] shrink-0 p-4 gap-4 bg-card-foreground font-sans h-full max-h-[97vh]",
@@ -142,6 +144,7 @@ export default async function Sidebar({ params, className }: SidebarProps) {
         </div>
       </div>
     </aside>
+    </TooltipProvider>
   );
 
   // redirect("/dashboard");

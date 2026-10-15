@@ -123,7 +123,7 @@
 }
 
 .ce-popover-item:hover {
-  @apply bg-muted/40 transition-all !important;
+  @apply bg-muted/40 !important;
 }
 
 .ce-popover--opened {
@@ -199,11 +199,11 @@ ul {
 }
 
 .animate-slideIn {
-  animation: slideIn 0.5s ease-out forwards;
+  animation: slideIn 250ms cubic-bezier(0.23, 1, 0.32, 1) forwards;
 }
 
 .animate-fadeIn {
-  animation: fadeIn 0.5s ease-out forwards;
+  animation: fadeIn 250ms cubic-bezier(0.23, 1, 0.32, 1) forwards;
 }
 
 
@@ -211,5 +211,28 @@ ul {
 .hover-subtle-shadow-blue:hover {
   background: linear-gradient(to bottom right, white, rgb(240, 249, 255));
   border-color: rgb(224, 242, 254);
-  transition: ease-in 500ms
+}
+
+.hover-subtle-shadow-blue {
+  transition: background-color 150ms ease, border-color 150ms ease;
+}
+
+:root {
+  --ease-out: cubic-bezier(0.23, 1, 0.32, 1);
+  --ease-in-out: cubic-bezier(0.77, 0, 0.175, 1);
+  --ease-drawer: cubic-bezier(0.32, 0.72, 0, 1);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    scroll-behavior: auto !important;
+  }
+  [class*="hover:scale"]:hover,
+  [class*="active:scale"]:active {
+    transform: none !important;
+  }
 }

@@ -19,7 +19,7 @@ export default function ProgressIndicator({
             className={`
               relative flex h-10 w-10 items-center justify-center
               rounded-md text-xl font-medium
-              transition-all duration-200
+              transition-colors duration-150
               ${
                 index <= currentStep
                   ? `
@@ -58,7 +58,7 @@ export default function ProgressIndicator({
           {index < steps.length - 1 && (
             <div
               className={`
-                mx-2 h-0.5 w-8 rounded-full transition-all duration-300
+                mx-2 h-0.5 w-8 rounded-full transition-colors duration-200
                 ${
                   index < currentStep 
                     ? `bg-secondary`

@@ -18,7 +18,7 @@ export default function ResearchPaperMain({
       <div
         className={cn(
           " flex gap-2 justify-start items-center p-1.5  border border-accent bg-white ",
-          "transition-all duration-500 hover:duration-500 gap-2 hover:bg-accent rounded-md"
+          "transition-colors duration-150 gap-2 hover:bg-accent rounded-md"
         )}
       >
         <div className="bg-black p-2 text-amber-500 rounded-sm">

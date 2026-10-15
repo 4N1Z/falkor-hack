@@ -28,7 +28,7 @@ const NavItem = ({
   return (
     <Link
       className={cn(
-        `group/native flex items-start justify-start w-full text-neura-dashboardGray  transition-all gap-2`,
+        `group/native flex items-start justify-start w-full text-neura-dashboardGray gap-2`,
         buttonVariants({ variant: "ghost" })
       )}
       href={link}
@@ -76,7 +76,7 @@ export default function NativeNavigation({myWorkspaceId,userId,className}:Native
             description="Workspaces give you the power to collaborate with others. You can change your workspace privacy settings after creating the workspace too.">
             <div
               className="flex 
-                  transition-all 
+                  transition-colors duration-150 
                   hover:bg-muted 
                   justify-center 
                   items-center 

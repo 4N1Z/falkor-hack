@@ -130,7 +130,7 @@ export default function FoldersDropdownList({
         </div>
         <button
           onClick={addFolderHandler}
-          className="flex items-center gap-2 px-3 py-2 text-sm text-primary hover:bg-primary/10 rounded-md transition-colors">
+          className="flex items-center gap-2 px-3 py-2 text-sm text-primary hover:bg-primary/10 rounded-md transition-[background-color,transform] duration-150 active:scale-[0.97]">
           <PlusIcon size={16} />
           Create Folder
         </button>
@@ -148,7 +148,7 @@ export default function FoldersDropdownList({
           <PlusIcon
             onClick={addFolderHandler}
             size={16}
-            className="inline-block cursor-pointer h-fit w-fit p-[2px] rounded-sm m-2 text-slate-300 group-hover/title:text-primary group-hover/title:bg-accent"
+            className="inline-block cursor-pointer h-fit w-fit p-[2px] rounded-sm m-2 text-slate-300 transition-[color,background-color,transform] duration-150 ease-out active:scale-90 group-hover/title:text-primary group-hover/title:bg-accent"
           />
         </TooltipComponent>
       </div>

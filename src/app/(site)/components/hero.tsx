@@ -44,7 +44,7 @@ export default function Hero() {
                 <span
                   className={`
                     text-primary font-serif font-medium italic
-                    transition-opacity duration-700 linear
+                    transition-opacity duration-300 ease-out
                     ${isVisible ? "opacity-100" : "opacity-0"}
                   `}
                 >

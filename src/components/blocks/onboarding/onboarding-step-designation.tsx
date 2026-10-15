@@ -58,7 +58,7 @@ export function StepDesignation({
             variant="zotero"
             onClick={() => handleDesignationSelect(designation)}
             className={`
-              relative p-3 text-left transition-all duration-300
+              relative p-3 text-left transition-colors duration-150
               rounded-md border-2 backdrop-blur-sm  ring-1 ring-sky-100
               ${
                 value === designation && !showCustomInput
@@ -67,7 +67,7 @@ export function StepDesignation({
                     bg-[linear-gradient(0deg,rgba(255,255,255,0.70)_0%,rgba(255,255,255,0.70)_100%),linear-gradient(140deg,#FFF_24.44%,#93C7FB_92.29%)]
                     text-primary font-medium
                     shadow-[inset_5.471px_5.471px_10.941px_rgba(238,244,251,0.30),0px_8.206px_13.677px_rgba(109,205,247,0.30)]
-                    ring-2 ring-white/40 duration-500 
+                    ring-2 ring-white/40 
                     border 
                   `
                   : `
@@ -94,7 +94,7 @@ export function StepDesignation({
             text-primary placeholder:text-secondary-foreground
             focus:outline-none outline-none
             shadow-[inset_5.471px_5.471px_10.941px_rgba(238,244,251,0.50)]
-            transition-all duration-200"
+            transition-colors duration-150"
         />
       )}
 
