@@ -18,6 +18,8 @@ const AGENT_NAMES: Record<string, string> = {
   synthesis: "Synthesis",
   "scout-watcher": "Scout Watcher",
 };
+/** Stored traces name the internal model ("jev.classify", source "jev"); show it as Neura. */
+const brandTrace = (s: string) => s.replace(/\bjev\b/gi, "neura");
 const VIEW_HELP: Record<GraphView, string> = {
   team: "Who has which papers, and the outside papers that connect your libraries. Click a paper to focus on it.",
   focus: "Everything this paper cites and is cited by in your graph. Coloured nodes are in a collaborator's library.",
@@ -179,14 +181,14 @@ export default function ResearchGraphView({ workspaceId }: { workspaceId: string
                       {r.trace.map((t, i) => (
                         <li key={i} className="rounded bg-white/70 px-2 py-1">
                           <p className="flex justify-between gap-2">
-                            <span className="font-mono">{t.tool}</span>
+                            <span className="font-mono">{brandTrace(t.tool)}</span>
                             <span className="shrink-0 tabular-nums text-muted-foreground">
                               {t.ms}ms{t.rows !== undefined ? ` · ${t.rows} rows` : ""}
                             </span>
                           </p>
                           {(t.cypher || t.source) && (
                             <p className="text-muted-foreground">
-                              {t.source ?? ""}
+                              {t.source ? brandTrace(t.source) : ""}
                               {t.cypher ? ` · ${t.cypher}` : ""}
                             </p>
                           )}

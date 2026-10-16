@@ -13,7 +13,7 @@ import GenerativeMenuSwitch from '../generative/generative-menu-switch'
 import { ColorSelector } from '../selectors/color-selector'
 import { LinkSelector } from '../selectors/link-selector'
 import { NodeSelector } from '../selectors/node-selector'
-import { SemanticScholarSelector } from '../selectors/reseach-paper'
+import { FindPapersButton } from '../selectors/find-papers-button'
 import { TextButtons } from '../selectors/text-buttons'
 import { suggestionItems, slashCommand } from '../slash-command'
 import {
@@ -65,7 +65,6 @@ const Editore = ({
   const [openLink, setOpenLink] = useState(false);
   const [openColor, setOpenColor] = useState(false);
   const [openAI, setOpenAI] = useState(false);
-  const [openScholar, setOpenScholar] = useState(false)
 
   const baseExtensions = [...defaultExtensions];
   let totalExtensions: any[] = baseExtensions;
@@ -347,7 +346,7 @@ const Editore = ({
             <GhostWriter />
 
             <GenerativeMenuSwitch open={openAI} onOpenChange={setOpenAI}>
-              <SemanticScholarSelector open={openScholar} onOpenChange={setOpenScholar}/>
+              <FindPapersButton />
               <NodeSelector open={openNode} onOpenChange={setOpenNode} />
               <LinkSelector open={openLink} onOpenChange={setOpenLink} />
               <ColorSelector open={openColor} onOpenChange={setOpenColor} />

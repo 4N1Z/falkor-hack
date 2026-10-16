@@ -396,7 +396,7 @@ function Compose({ onSave }: { onSave: (text: string, kind?: MemoryKind) => Prom
               </button>
             );
           })}
-          {!kind && <span className="ml-1 hidden text-[11px] text-muted-foreground sm:inline">or let JEV decide</span>}
+          {!kind && <span className="ml-1 hidden text-[11px] text-muted-foreground sm:inline">or let Neura decide</span>}
         </div>
         <Button size="sm" onClick={submit} disabled={!ready || saving} className={cn("h-7 gap-1 px-2.5 text-xs", press)}>
           {saving ? <Loader2 className="size-3.5 animate-spin" /> : <CornerDownLeft className="size-3.5" />}

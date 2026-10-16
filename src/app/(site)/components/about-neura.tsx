@@ -2,7 +2,7 @@ import TextRevealByWord from "@/components/ui/text-reveal";
 
 const aboutNeura = `**Neura Query** eliminates the countless hurdles researchers face, bringing everything from paper organization to live collaboration into a single, intuitive workspace.
 \n\n
-With powerful **AI** to expand your ideas, seamless **Zotero** integration, and citation support via **Semantic Scholar**, we make research simpler, smarter, and more connected. Avoid the torments of scattered tools—Neura Query is your **all-in-one** solution to focus on discovery, not distractions.`;
+With powerful **AI** to expand your ideas, seamless **Zotero** integration, and citation support via **OpenAlex**, we make research simpler, smarter, and more connected. Avoid the torments of scattered tools—Neura Query is your **all-in-one** solution to focus on discovery, not distractions.`;
 
 const aboutNeura2 = `
     NeuraQuery simplifies mundane tasks by bringing **intelligent assistants** to your workspace. Effortlessly organize your papers, literature reviews, and notes in a system designed to work for you.

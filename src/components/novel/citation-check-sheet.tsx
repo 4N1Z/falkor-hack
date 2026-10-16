@@ -157,7 +157,7 @@ export function CitationCheckSheet({ fileId }: { fileId: string }) {
               })}
             </ul>
             <p className="text-[11px] text-muted-foreground tabular-nums">
-              Judged by JEV on the cited papers&apos; full text · {(result.ms / 1000).toFixed(1)}s · Verdicts saved to FalkorDB
+              Judged by Neura on the cited papers&apos; full text · {(result.ms / 1000).toFixed(1)}s · Verdicts saved to FalkorDB
             </p>
           </>
         ) : null}

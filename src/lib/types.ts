@@ -97,11 +97,6 @@ export interface UserContext {
 
 
 
-export interface SemanticScholarSelectorProps {
-  open: boolean;
-  onOpenChange: (open: boolean) => void;
-}
-
 export interface Author {
   authorId: string;
   name: string;
@@ -114,12 +109,3 @@ export interface ExternalIds {
   CorpusId?: number;
 }
 
-export interface Paper {
-  paperId: string;
-  title: string;
-  year: number;
-  authors: Author[];
-  externalIds: ExternalIds;
-}
-
-export type CitationFormat = "APA" | "MLA" | "IEEE";

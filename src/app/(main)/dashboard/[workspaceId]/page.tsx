@@ -2,7 +2,7 @@ import { getWorkspaceDetail } from "@/db/actions/action-workspace";
 import { getGreeting } from "@/lib/utils";
 import { redirect } from "next/navigation";
 import RecentCreateFiles from "../_components/recent-create-files";
-import SemanticScholarSuggestion from "../_components/semantic-scholar-suggestion";
+import ResearchSuggestion from "../_components/research-suggestion";
 import ResearchPapers from "../_components/research-papers";
 import { auth } from "@/auth";
 
@@ -51,7 +51,7 @@ export default async function WordspaceIdPage(
             <RecentCreateFiles workspaceId={data[0].id} />
           </div>
           <div className=" col-span-2 row-span-2 col-start-3 row-start-2 mx-4 ">
-            <SemanticScholarSuggestion />
+            <ResearchSuggestion />
           </div>
           <div className="col-span-2 row-span-2 col-start-1 row-start-2 mx-4">
             <ResearchPapers workspaceId={params.workspaceId} />

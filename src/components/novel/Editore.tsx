@@ -59,7 +59,6 @@ import Collaboration from "@tiptap/extension-collaboration";
 import CollaborationCursor from "@tiptap/extension-collaboration-cursor";
 import { useSelectedFile } from "@/lib/hooks/state-management-hooks";
 import { Separator } from "../ui/separator";
-import { SemanticScholarSelector } from "./selectors/reseach-paper";
 import { generateHTML } from '@tiptap/core'
 import Document from '@tiptap/extension-document'
 import Paragraph from '@tiptap/extension-paragraph'
