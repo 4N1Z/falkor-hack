@@ -1,0 +1,234 @@
+// adam Cypher templates. Agents and routes never write free-form Cypher: every statement
+// lives here, is parameterised, and carries $projectId so the range indexes apply.
+// FalkorDB rules observed throughout: no nulls inside returned lists (coalesce everything),
+// DELETE and MERGE in separate statements, shortestPath only in WITH/RETURN.
+
+// ---------------------------------------------------------------- Projects
+
+const PROJECT_FIELDS = `
+  p.id AS id, p.workspaceId AS workspaceId, p.title AS title, coalesce(p.topic, '') AS topic,
+  coalesce(p.understanding, '') AS understanding, coalesce(p.constraints, '{}') AS constraints,
+  coalesce(p.seeds, '[]') AS seeds, p.phase AS phase, p.status AS status, coalesce(p.pass, 1) AS pass,
+  coalesce(p.budget, '{}') AS budget, coalesce(p.spentPapers, 0) AS spentPapers, coalesce(p.spentLlmCalls, 0) AS spentLlmCalls,
+  coalesce(p.maxConcurrency, 3) AS maxConcurrency,
+  p.gate AS gate, p.createdBy AS createdBy, p.createdAt AS createdAt, p.updatedAt AS updatedAt`;
+
+export const CREATE_PROJECT = `
+CREATE (p:AdamProject {
+  id: $id, workspaceId: $workspaceId, title: $title, topic: $topic, understanding: $understanding,
+  constraints: $constraints, seeds: $seeds, phase: 'question', status: 'idle', pass: 1,
+  budget: $budget, spentPapers: 0, spentLlmCalls: 0, maxConcurrency: 3, gate: null,
+  createdBy: $userId, createdAt: $at, updatedAt: $at
+})
+RETURN ${PROJECT_FIELDS}`;
+
+/** Atomic spend counters (several workers may be running jobs for one project). */
+export const INCREMENT_SPENT = `
+MATCH (p:AdamProject {id: $id})
+SET p.spentPapers = coalesce(p.spentPapers, 0) + $papers, p.spentLlmCalls = coalesce(p.spentLlmCalls, 0) + $llmCalls
+RETURN p.spentPapers AS spentPapers, p.spentLlmCalls AS spentLlmCalls`;
+
+/** A new pass resets the per-pass spend (the budget rule is per pass). */
+export const RESET_SPENT = `
+MATCH (p:AdamProject {id: $id})
+SET p.spentPapers = 0, p.spentLlmCalls = 0
+RETURN p.id AS id`;
+
+// ---------------------------------------------------------------- Question page (Scoper, gate 1)
+
+const QUESTION_FIELDS = `
+  q.id AS id, q.projectId AS projectId, q.pass AS pass, coalesce(q.hunch, '') AS hunch, coalesce(q.why, '') AS why,
+  coalesce(q.subquestions, '[]') AS subquestions, coalesce(q.vocabulary, '{}') AS vocabulary,
+  coalesce(q.scopeFence, '{}') AS scopeFence, coalesce(q.checks, '{}') AS checks, q.state AS state,
+  q.runId AS runId, q.approvedBy AS approvedBy, q.approvedAt AS approvedAt, q.createdAt AS createdAt, q.updatedAt AS updatedAt`;
+
+/** One page per pass. Re-running the Scoper replaces an unapproved page; an approved one is never overwritten by an agent. */
+export const UPSERT_QUESTION_PAGE = `
+MATCH (p:AdamProject {id: $projectId})
+MERGE (q:QuestionPage {projectId: $projectId, pass: $pass})
+ON CREATE SET q.id = $id, q.createdAt = $at
+SET q.hunch = $hunch, q.why = $why, q.subquestions = $subquestions, q.vocabulary = $vocabulary,
+    q.scopeFence = $scopeFence, q.checks = $checks, q.state = $state, q.runId = $runId, q.updatedAt = $at
+MERGE (q)-[:OF]->(p)
+RETURN ${QUESTION_FIELDS}`;
+
+export const GET_QUESTION_PAGE = `
+MATCH (q:QuestionPage {projectId: $projectId})
+RETURN ${QUESTION_FIELDS}
+ORDER BY q.pass DESC
+LIMIT 1`;
+
+/** Researcher edits outrank agent output: the page becomes human_approved on save. */
+export const EDIT_QUESTION_PAGE = `
+MATCH (q:QuestionPage {projectId: $projectId, pass: $pass})
+SET q.hunch = coalesce($hunch, q.hunch), q.why = coalesce($why, q.why), q.subquestions = coalesce($subquestions, q.subquestions),
+    q.vocabulary = coalesce($vocabulary, q.vocabulary), q.scopeFence = coalesce($scopeFence, q.scopeFence),
+    q.state = 'human_approved', q.editedBy = $userId, q.updatedAt = $at
+RETURN ${QUESTION_FIELDS}`;
+
+export const APPROVE_QUESTION_PAGE = `
+MATCH (q:QuestionPage {projectId: $projectId, pass: $pass})
+SET q.approvedBy = $userId, q.approvedAt = $at, q.state = 'human_approved', q.updatedAt = $at
+RETURN ${QUESTION_FIELDS}`;
+
+export const LIST_PROJECTS = `
+MATCH (p:AdamProject {workspaceId: $workspaceId})
+RETURN ${PROJECT_FIELDS}
+ORDER BY p.updatedAt DESC`;
+
+export const GET_PROJECT = `
+MATCH (p:AdamProject {id: $id})
+RETURN ${PROJECT_FIELDS}`;
+
+/** Researcher edits: any field left null keeps its value. */
+export const UPDATE_PROJECT = `
+MATCH (p:AdamProject {id: $id})
+SET p.title = coalesce($title, p.title), p.topic = coalesce($topic, p.topic),
+    p.understanding = coalesce($understanding, p.understanding), p.constraints = coalesce($constraints, p.constraints),
+    p.seeds = coalesce($seeds, p.seeds), p.budget = coalesce($budget, p.budget),
+    p.maxConcurrency = coalesce($maxConcurrency, p.maxConcurrency), p.updatedAt = $at
+RETURN ${PROJECT_FIELDS}`;
+
+export const SET_PROJECT_STATE = `
+MATCH (p:AdamProject {id: $id})
+SET p.status = coalesce($status, p.status), p.phase = coalesce($phase, p.phase),
+    p.gate = CASE WHEN $clearGate THEN null ELSE coalesce($gate, p.gate) END,
+    p.pass = coalesce($pass, p.pass), p.updatedAt = $at
+RETURN ${PROJECT_FIELDS}`;
+
+export const DELETE_PROJECT = `
+MATCH (p:AdamProject {id: $id})
+DETACH DELETE p`;
+
+/** Everything owned by a project (nodes carry projectId). Jobs and events included. */
+export const DELETE_PROJECT_NODES = `
+MATCH (n) WHERE n.projectId = $id
+DETACH DELETE n`;
+
+// ---------------------------------------------------------------- Jobs
+
+const JOB_FIELDS = `
+  j.id AS id, j.projectId AS projectId, j.kind AS kind, j.subject AS subject, j.dedupeKey AS dedupeKey,
+  coalesce(j.payload, '{}') AS payload, j.status AS status, coalesce(j.priority, 100) AS priority,
+  coalesce(j.runAfter, 0) AS runAfter, coalesce(j.attempts, 0) AS attempts, coalesce(j.maxAttempts, 3) AS maxAttempts,
+  j.lockedBy AS lockedBy, j.lockedAt AS lockedAt, j.heartbeatAt AS heartbeatAt, j.error AS error,
+  j.result AS result, j.createdAt AS createdAt, j.finishedAt AS finishedAt`;
+
+/**
+ * Enqueue once per dedupeKey. A re-tick that enqueues the same key is a no-op (the spec's
+ * orchestrator is driven by graph state, so it may ask for the same work many times).
+ * `created` tells the caller whether this call made the job.
+ */
+export const ENQUEUE_JOB = `
+MERGE (j:AdamJob {dedupeKey: $dedupeKey})
+ON CREATE SET j.id = $id, j.projectId = $projectId, j.kind = $kind, j.subject = $subject, j.payload = $payload,
+              j.status = 'queued', j.priority = $priority, j.runAfter = $runAfter, j.attempts = 0,
+              j.maxAttempts = $maxAttempts, j.createdAt = $at
+RETURN j.id AS id, j.status AS status, j.createdAt = $at AS created`;
+
+/** Put an existing job (e.g. the project's single orchestrate job) back on the queue. */
+export const RESCHEDULE_JOB = `
+MATCH (j:AdamJob {id: $id})
+SET j.status = 'queued', j.runAfter = $runAfter, j.lockedBy = null, j.lockedAt = null, j.heartbeatAt = null,
+    j.error = null, j.payload = coalesce($payload, j.payload)
+RETURN j.id AS id`;
+
+/**
+ * Atomic claim: one query takes the oldest, highest-priority runnable job. Jobs only run for
+ * projects that are running (pause stops the queue without cancelling), except noop jobs.
+ * $busyProjects are projects already at their concurrency limit.
+ */
+export const CLAIM_JOB = `
+MATCH (j:AdamJob {status: 'queued'})
+WHERE j.runAfter <= $now AND NOT j.projectId IN $busyProjects
+OPTIONAL MATCH (p:AdamProject {id: j.projectId})
+WITH j, p
+WHERE j.kind = 'noop' OR p.status = 'running'
+WITH j ORDER BY j.priority ASC, j.createdAt ASC LIMIT 1
+SET j.status = 'running', j.lockedBy = $worker, j.lockedAt = $now, j.heartbeatAt = $now, j.attempts = coalesce(j.attempts, 0) + 1
+RETURN ${JOB_FIELDS}`;
+
+export const HEARTBEAT_JOB = `
+MATCH (j:AdamJob {id: $id, status: 'running'})
+SET j.heartbeatAt = $now, j.progress = coalesce($progress, j.progress)
+RETURN j.id AS id`;
+
+export const COMPLETE_JOB = `
+MATCH (j:AdamJob {id: $id})
+SET j.status = 'done', j.result = $result, j.finishedAt = $now, j.error = null
+RETURN j.id AS id`;
+
+/** Retry with backoff until maxAttempts, then failed. The caller computes status and runAfter. */
+export const FAIL_JOB = `
+MATCH (j:AdamJob {id: $id})
+SET j.status = $status, j.error = $error, j.runAfter = $runAfter, j.lockedBy = null,
+    j.finishedAt = CASE WHEN $status = 'failed' THEN $now ELSE null END
+RETURN j.id AS id`;
+
+/** A worker died mid-job: anything without a heartbeat for $staleMs goes back on the queue. */
+export const REQUEUE_STALE_JOBS = `
+MATCH (j:AdamJob {status: 'running'})
+WHERE coalesce(j.heartbeatAt, j.lockedAt, 0) < $now - $staleMs
+SET j.status = 'queued', j.lockedBy = null, j.error = 'requeued: worker lost'
+RETURN count(j) AS n`;
+
+export const RUNNING_PER_PROJECT = `
+MATCH (j:AdamJob {status: 'running'})
+RETURN j.projectId AS projectId, count(j) AS n`;
+
+export const JOB_COUNTS = `
+MATCH (j:AdamJob {projectId: $projectId})
+RETURN j.status AS status, j.kind AS kind, count(j) AS n`;
+
+export const RECENT_JOBS = `
+MATCH (j:AdamJob {projectId: $projectId})
+RETURN ${JOB_FIELDS}
+ORDER BY coalesce(j.finishedAt, j.lockedAt, j.createdAt) DESC
+LIMIT $limit`;
+
+export const JOBS_BY_KIND_STATUS = `
+MATCH (j:AdamJob {projectId: $projectId})
+WHERE j.kind IN $kinds AND j.status IN $statuses
+RETURN ${JOB_FIELDS}`;
+
+export const CANCEL_QUEUED_JOBS = `
+MATCH (j:AdamJob {projectId: $projectId, status: 'queued'})
+WHERE $kinds = [] OR j.kind IN $kinds
+SET j.status = 'cancelled', j.finishedAt = $now
+RETURN count(j) AS n`;
+
+export const GET_JOB = `
+MATCH (j:AdamJob {id: $id})
+RETURN ${JOB_FIELDS}`;
+
+// ---------------------------------------------------------------- Events
+
+export const EMIT_EVENT = `
+CREATE (e:AdamEvent {id: $id, projectId: $projectId, kind: $kind, payload: $payload, at: $at})
+RETURN e.id AS id`;
+
+export const RECENT_EVENTS = `
+MATCH (e:AdamEvent {projectId: $projectId})
+RETURN e.id AS id, e.projectId AS projectId, e.kind AS kind, coalesce(e.payload, '{}') AS payload, e.at AS at
+ORDER BY e.at DESC
+LIMIT $limit`;
+
+// ---------------------------------------------------------------- Status / counts
+
+/** Node counts by label and state for a project (one UNION branch per indexed label). */
+export const NODE_COUNTS = ["Claim", "Evidence", "Method", "Procedure", "Instrument", "Assumption", "Result", "OpenQuestion", "Hypothesis", "Candidate", "Attack", "ExperimentPlan"]
+  .map((l) => `MATCH (n:${l} {projectId: $projectId}) RETURN '${l}' AS label, coalesce(n.state, '') AS state, count(n) AS n`)
+  .join("\nUNION ALL\n");
+
+export const TRIAGE_COUNTS = `
+MATCH (:AdamProject {id: $projectId})-[t:TRIAGED]->(p:Paper)
+RETURN coalesce(t.label, 'unlabelled') AS label, coalesce(t.ring, 'seed') AS ring,
+       sum(CASE WHEN coalesce(p.chunkSchema, 0) >= 2 THEN 1 ELSE 0 END) AS fullText, count(p) AS n`;
+
+/** Open exception-queue items: what the researcher still has to look at. */
+export const QUEUE_OPEN_COUNT = ["Claim", "Evidence", "Method", "Assumption", "Procedure"]
+  .map(
+    (l) =>
+      `MATCH (n:${l} {projectId: $projectId}) WHERE (n.state IN ['conflict', 'low_confidence'] OR coalesce(n.loadBearing, false) = true OR coalesce(n.stateReason, '') = 'quote_not_found') AND coalesce(n.queueDecided, false) = false RETURN count(n) AS n`,
+  )
+  .join("\nUNION ALL\n");

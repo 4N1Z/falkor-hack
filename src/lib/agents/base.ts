@@ -19,7 +19,19 @@ export type AgentName =
   | "historian"
   | "synthesis"
   | "scout-watcher"
-  | "router";
+  | "router"
+  // adam (docs/adam-spec-creation.md): producers and their checkers
+  | "adam-scoper"
+  | "adam-searcher"
+  | "adam-extractor"
+  | "adam-verifier"
+  | "adam-methods-hunter"
+  | "adam-runnability"
+  | "adam-analyst"
+  | "adam-writer"
+  | "adam-falsifier"
+  | "adam-designer"
+  | "adam-orchestrator";
 
 export type Outcome =
   /** Answered from graph paths */
@@ -33,7 +45,7 @@ export type Outcome =
 
 /** One step of explanation: a chain of graph nodes, e.g. paper → cites → paper. */
 export interface ProvenancePath {
-  nodes: { id: string; label: string; kind: "Paper" | "User" | "Claim" | "Concept" | "Author" | "Hypothesis" }[];
+  nodes: { id: string; label: string; kind: "Paper" | "User" | "Sentence" | "Claim" | "Concept" | "Author" | "Hypothesis" | "Method" | "Assumption" | "Procedure" }[];
   /** Relationship types between consecutive nodes */
   rels: string[];
 }

@@ -27,7 +27,7 @@ async function main() {
       console.log(`  ✗ ${p.title.slice(0, 60)} — ${res.reason}`);
       continue;
     }
-    const n = await indexPaperText(workspaceId, p.paperId, res.doc.text);
+    const n = await indexPaperText(workspaceId, p.paperId, res.doc);
     total += n;
     console.log(`  ✓ ${String(n).padStart(2)} passages  ${p.title.slice(0, 60)}  (${Date.now() - t}ms)`);
     await new Promise((r) => setTimeout(r, 1000)); // be polite to arXiv

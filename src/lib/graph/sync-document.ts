@@ -1,6 +1,7 @@
 // Mirrors a neura-query document into the workspace graph:
-//   (User)-[:EDITS]->(Document)-[:CONTAINS]->(Claim)-[:CITES]->(Paper)
-// Claims are sentences, keyed by a hash of their text, so unchanged sentences keep their
+//   (User)-[:EDITS]->(Document)-[:CONTAINS]->(Sentence)-[:CITES]->(Paper)
+// Sentences (labelled `Claim` before schema 8; `Claim` now means a statement extracted from
+// a paper by adam) are keyed by a hash of their text, so unchanged sentences keep their
 // id (and any agent verdicts attached to them) across saves. Citations are the link marks
 // the editor inserts (doi.org / arxiv.org / semanticscholar.org URLs).
 

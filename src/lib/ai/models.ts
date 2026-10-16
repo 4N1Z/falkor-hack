@@ -31,4 +31,11 @@ const withThinkingFlag: typeof fetch = async (url, init) => {
 
 const deepseek = createDeepSeek({ apiKey: process.env.DEEPSEEK_API_KEY, fetch: withThinkingFlag });
 
-export const chatModel = () => deepseek(CHAT_MODEL);
+/**
+ * `heavy` is for the adam agents that reason over whole papers (extractor, methods hunter,
+ * hypothesis writer, falsifier): set DEEPSEEK_HEAVY_MODEL=deepseek-v4-pro to give them the
+ * larger model while everything else stays on flash.
+ */
+export const HEAVY_MODEL = process.env.DEEPSEEK_HEAVY_MODEL || CHAT_MODEL;
+
+export const chatModel = (tier: "fast" | "heavy" = "fast") => deepseek(tier === "heavy" ? HEAVY_MODEL : CHAT_MODEL);
