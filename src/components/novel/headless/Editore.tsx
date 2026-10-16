@@ -31,6 +31,10 @@ import { defaultExtensions } from '../extensions'
 import { ImageResizer } from '../extensions/index'
 import Link from '@tiptap/extension-link'
 import { TabIndent } from '../extensions/tab-indent'
+import { FindPapersDialog } from '../find-papers-dialog'
+import { CiteScoutPanel } from '../cite-scout-panel'
+import { GhostText } from '../extensions/ghost-text'
+import { GhostWriter } from '../ghost-writer'
 
 // Stable, readable cursor colour per collaborator (was hard-coded red for everyone)
 const CURSOR_COLORS = ['#2563eb', '#db2777', '#059669', '#d97706', '#7c3aed', '#0891b2', '#dc2626', '#4d7c0f']
@@ -50,6 +54,10 @@ const Editore = ({
   onUpdate: any;
   collabEnabled: boolean;
 }) => {
+  // Which file each editor instance was created for. When navigating between documents the
+  // old instance can still emit an update after `fileId` has changed; without this check its
+  // content was autosaved into the NEW file (seen when opening a draft from a link).
+  const editorFile = useRef(new WeakMap<object, string>())
   const [status, setStatus] = useState('connecting')
   const [saving, setSaving] = useState<boolean>(false);
   const [openNode, setOpenNode] = useState(false);
@@ -211,6 +219,7 @@ const Editore = ({
         immediatelyRender= {false}
         className="relative min-h-[500px] w-full max-w-screen-md sm:mb-[calc(20vh)]"
         onCreate={({ editor }) => {
+          editorFile.current.set(editor, fileId)
           // With Collaboration, content comes from the Yjs doc, not `data`, so the saved
           // document must be seeded in once the collaboration server has synced. The provider
           // starts connecting before this editor exists, so 'synced' may already have fired
@@ -220,7 +229,9 @@ const Editore = ({
           const seed = () => {
             if (seeded || editor.isDestroyed) return
             seeded = true
-            if (editor.isEmpty && data) editor.commands.setContent(data)
+            // addToHistory:false — loading the saved doc must not be undoable, or Ctrl+Z
+            // past the user's own edits strips it (it removed citation links in testing)
+            if (editor.isEmpty && data) editor.chain().setMeta('addToHistory', false).setContent(data).run()
           }
           if (provider?.synced) seed()
           else provider?.on('synced', seed)
@@ -230,7 +241,10 @@ const Editore = ({
         }}
         initialContent={data}
         enableContentCheck={true}
-        onUpdate={onUpdate}
+        onUpdate={(props: { editor: object }) => {
+          if (editorFile.current.get(props.editor) !== fileId) return
+          onUpdate(props)
+        }}
         editorProps={{
           handleDOMEvents: {
             keydown: (_view: any, event: KeyboardEvent) =>
@@ -257,6 +271,7 @@ const Editore = ({
           TaskList,
           TaskItem,
           TabIndent,
+          GhostText,
           slashCommand,
           Collaboration.extend().configure({
             document: ydoc ,
@@ -342,6 +357,10 @@ const Editore = ({
                 ))}
               </EditorCommandList>
             </EditorCommand>
+
+            <FindPapersDialog />
+            <CiteScoutPanel fileId={fileId} />
+            <GhostWriter />
 
             <GenerativeMenuSwitch open={openAI} onOpenChange={setOpenAI}>
               <SemanticScholarSelector open={openScholar} onOpenChange={setOpenScholar}/>

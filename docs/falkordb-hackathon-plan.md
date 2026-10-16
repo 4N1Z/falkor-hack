@@ -10,11 +10,11 @@
 | 1. Graph foundation and Librarian | ✅ Done (OpenAlex-based Librarian, hooks, sync route, seed: 518 papers / 2,921 cites) |
 | 2. Relevance layer (JEV) and editor plumbing | ✅ Done (slash menu, Tab verified in browser; 2-user presence check pending) |
 | 2.5 Research library (search, import, full-text index, index health) | ✅ Done (33 team papers, 32 with full text, 1,397 passages) |
-| 3. Cite Scout (MVP) | ⬜ |
-| 4. Citation Checker / Critic (MVP) | ⬜ |
-| 5. Depth agents (Historian, Next-Step, Ghost Writer, Router) | ⬜ |
-| 6. Research Graph page | ⬜ |
-| 7. Stretch (Synthesis, Scout Watcher, MCP) | ⬜ |
+| 3. Cite Scout (MVP) | ✅ Done (in-editor panel + /search Find papers; HippoRAG from Bea's library at 99% with a citation path) |
+| 4. Citation Checker / Critic (MVP) | ✅ Done (Check citations panel: contradicted / not supported / needs citation / supported, judged by JEV on full-text passages) |
+| 5. Depth agents (Historian, Next-Step, Ghost Writer, Router) | ✅ Done (Notebook, /hypothesis, ghost text with Tab, JEV router: 6/6 intents) |
+| 6. Research Graph page | ✅ Done (@falkordb/canvas: team map, paper focus, agent provenance tree + trace panel) |
+| 7. Stretch (Synthesis, Scout Watcher, MCP) | ✅ Done (CDLP-grouped review drafts, new-paper watcher with vector-fit + JEV contradiction flag, read-only MCP server) |
 | 8. Submission (README, video, blog) | ⬜ |
 
 **Platform upgrade (branch `chore/next-16`):**
@@ -313,6 +313,29 @@ Added on Oct 15 at the user's request. The sidebar "Research papers" dialog was 
 
 **Exit check:** A's claim gets a suggestion for B's paper with a path, and accepting it creates the edge.
 
+**Phase 3 as built (Oct 15):**
+- **`src/lib/graph/team-search.ts`:** team-library search over FalkorDB using three signals: Paper vector, **Chunk (full-text passage) vector** and full-text keywords, merged with reciprocal-rank fusion. It returns owners, authors in byline order (`WROTE.position`) and the best matching passage.
+- **`src/lib/agents/cite-scout.ts`:**
+  1. Picks the last uncited sentence.
+  2. JEV `needsCitation` gate (skip below 0.5).
+  3. Team search, excluding papers already cited or dismissed for this claim.
+  4. JEV `scoreRelevance`, judged on the best passage (keep at 0.5 or above, top 3).
+  5. `PATHS_TO_USER_LIBRARY`: the shortest CITES chain (up to 2 hops) to the user's own papers.
+  6. `SUGGESTS_CITE {status: suggested}` proposals on the Claim.
+  7. An AgentRun trace.
+- **API:** `POST /api/agents/cite-scout` (suggest) and `PATCH` (accept/dismiss by claim and paper, via `DECIDE_CITE_PROPOSAL`).
+- **UI:**
+  - `cite-scout-panel.tsx`: fixed right, xl+ only. The editor column reserves `xl:pr-[324px]`. It re-checks after a 1.5 s pause or a paragraph change. Each card shows the owner, the % match, the passage quote and the citation chain, with Cite and Dismiss buttons and an On/Off toggle.
+  - `find-papers-dialog.tsx`: the **/Search Papers** slash command. The query is pre-filled with the current sentence, team library first, then OpenAlex (citing an OpenAlex paper also imports it).
+- **Shared:** `src/lib/citations.ts` holds the citation label, href and TipTap content. sync-document now resolves `openalex.org/W…` links too.
+- **Verified:**
+  - "Personalized PageRank…" gives **HippoRAG from Bea's library, 99% match, path HippoRAG ← SiReRAG → your "Lost in the Middle"**.
+  - "Dense passage retrievers…" gives [Karpukhin et al., 2020], 100%.
+  - The filler sentence is skipped (JEV 0.06).
+  - Cite inserts the citation and records an accepted proposal plus the CITES edge.
+  - End to end in about 1–2 s, of which graph search is ~20 ms.
+- **Ops note:** Turbopack dev sometimes keeps a half-edited server module after rapid edits (symptoms: `X is not a function` or a query that is `undefined`). Restart `pnpm dev:all`.
+
 ### Phase 4: Citation Checker / Critic (MVP agent 2)
 
 13. **Agent and route:** `citation-checker.ts` plus `POST /api/agents/citation-check`.
@@ -320,6 +343,24 @@ Added on Oct 15 at the user's request. The sidebar "Research papers" dialog was 
 14. **UI:** a "Check citations" button and side panel in the `Editore.tsx` header, optionally run before PDF export.
 
 **Exit check:** the seed draft's unsupported and uncited claims are flagged with their paths. **The MVP is complete here.**
+
+**Phase 4 as built (Oct 15):**
+- **`src/lib/agents/citation-checker.ts`:** reads every Claim and its CITES edges from the graph (`DOCUMENT_CLAIMS`).
+  - **Cited claims:** for each cited paper, it finds the passage closest to the claim (`BEST_PASSAGES_IN_PAPERS` over the Chunk vectors, falling back to the abstract), then runs JEV `scoreSupport` and maps the result to supported / weak / unsupported / contradicted. Any contradiction wins.
+  - **Links not in the graph:** unknown-source.
+  - **Uncited claims:** JEV `needsCitation`. Above 0.5 the claim is "uncited" and gets the best team-library paper as a suggestion.
+  - **Recording:** verdicts are stored as `(Claim)-[:SUPPORTED_BY {level, score, confidence, runId, status:'suggested'}]->(Paper)`.
+- **API:** `POST /api/agents/citation-check {workspaceId, fileId}`.
+- **UI:** `citation-check-sheet.tsx`. A **Check citations** button next to Export opens a right-side sheet: worst first, with a summary of counts, the reason, the evidence passage and the suggested citation. Clicking a verdict scrolls to the sentence and flashes it.
+- **Demo draft result (2.2 s):**
+  - supported: RAG
+  - **contradicted:** GraphRAG
+  - not supported: CoT cited for "lost in the middle"
+  - needs citation: DPR (yours) and HippoRAG (Bea's)
+  - no citation needed: the intro sentence
+- **Fixes along the way:**
+  - **Claim parsing:** a citation after the full stop stays with the sentence it follows (it used to become its own claim). Claim IDs hash the sentence without its trailing citation, so adding a citation keeps the claim, along with its proposals and verdicts.
+  - **Undo safety:** the editor loads saved content with `addToHistory: false`. Ctrl+Z could otherwise undo the load and strip the citation links (it happened during testing; the draft was re-seeded).
 
 ### Phase 5: Depth agents
 
@@ -338,22 +379,94 @@ Added on Oct 15 at the user's request. The sidebar "Research papers" dialog was 
 - Ghost text works with Tab.
 - The router routes correctly.
 
-### Phase 6: Research Graph page
+**Phase 5 as built (Oct 15):**
+- **Historian** (`src/lib/agents/historian.ts`):
+  - Each note is a `Memory {kind, status, validFrom, validTo, reason}` node with a vector index. It's linked `ABOUT` to its 3 nearest team papers, and `DROPPED_BECAUSE` to a paper when dropped.
+  - JEV `classify` picks hypothesis / finding / question.
+  - `recall()` finds similar memories, with `SAME_IDEA_DISTANCE = 0.32`. **Cite Scout and Next-Step warn when you're about to revisit a dropped hypothesis.**
+- **Next-Step** (`src/lib/agents/next-steps.ts`):
+  - Evidence comes only from the graph: `LITERATURE_GAPS`, `BRIDGE_PAPERS` (e.g. SiReRAG connects all 3 collaborators), `INFLUENTIAL_UNREAD` (`algo.pageRank`), and active memories.
+  - gpt-4o-mini drafts ideas that must cite evidence IDs. A grounding guard drops ideas without evidence and replaces IDs with names.
+  - JEV scores novelty and feasibility, 6 questions in 1 call.
+  - Ideas are stored as `(Idea {status:'suggested'})-[:GROUNDED_IN]->(Paper|Concept)`; the plan is the accepted ideas.
+- **Ghost Writer** (`ghost-writer.ts` and the `GhostText` extension):
+  - Runs after a 1.2 s pause at the end of a block.
+  - JEV `worthContinuing` gate, team-passage context, gpt-4o-mini with at most one sentence.
+  - Grey widget decoration: Tab accepts (priority 1000), Esc dismisses, any edit or cursor move clears it. No AgentRun is recorded, because it runs too often.
+- **Router** (`src/lib/agents/router.ts` and `/api/neura-ai`):
+  - JEV `choice` picks cite_scout, citation_checker, next_steps, historian, team_library or general.
+  - It runs the agent, and the chat streams an answer **only from that agent's evidence**. Naming a collaborator filters to their papers.
+  - 6/6 intents routed correctly at confidence 0.99–1.00.
+  - The chat renderer now shows every tool invocation.
+- **UI:**
+  - **Notebook** sheet: a Memory timeline with Remember / Confirm / Drop with reason / Reopen, and Next steps with Add to plan / Dismiss plus the research plan.
+  - **`/hypothesis`** slash command.
+  - **Ghost on/off** toggle in the Cite Scout header.
+- **Verified in the browser:**
+  - Ghost text "…can encapsulate broader contexts and relationships within the data." was accepted with Tab.
+  - Cite Scout suggested [Edge et al., 2024] from Bea's library at 100% at the same moment.
+  - `/hypothesis` showed "Saved as a hypothesis · Linked to LightRAG".
+  - The Notebook timeline shows the dropped hypothesis with its reason.
 
-19. **`dashboard/[workspaceId]/graph/page.tsx`:** built with `react-force-graph-2d` (`ssr:false`).
-    - Colour by node type or by owner.
-    - Suggested items drawn dashed.
-    - An `AgentRun` trace with path highlighting.
-20. **The data route:** `GET /api/graph/[workspaceId]`, capped at about 500 nodes.
-21. **Navigation:** a sidebar link plus a "Build graph" button.
+### Phase 6: Research Graph page ✅
 
-### Phase 7: Stretch (in order)
+**Decision:** a full "hairball" of 900+ papers looks impressive but helps no one. The page answers three researcher questions instead, each drawn with FalkorDB's own renderer, **`@falkordb/canvas`** (a web component created imperatively, client-only).
 
-1. Synthesis agent
-2. Scout Watcher
-3. An MCP server at `src/app/api/mcp/route.ts` (read-only graph tools)
+| View | Question it answers | Layout | Data |
+|---|---|---|---|
+| **Team map** | Who has which papers, and which outside papers connect our libraries? | force | `VIEW_TEAM` + `VIEW_BRIDGES` (cited by ≥ 2 collaborators' papers) |
+| **Paper focus** | What does this paper cite and what cites it, and who on the team owns those? | force, centred | `VIEW_FOCUS` (up to 40 neighbours) |
+| **Agent provenance** | Why did the agent suggest this? | tree | the `highlight` node IDs each `AgentRun` records + `VIEW_PAPERS_BY_ID` / `VIEW_NOTES_BY_ID` |
 
-### Phase 8: Submission
+19. **`src/components/graph/research-graph-view.tsx`:**
+    - Owner colours are stable across views.
+    - Nodes are sized by kind, and bridge papers by how many libraries they connect.
+    - Suggested edges are dashed.
+    - A node card has "Focus on this paper".
+    - The Agent activity panel shows each run's step trace (tool, source, Cypher template, rows, ms). Clicking a run opens its provenance tree.
+20. **`GET /api/graph/[workspaceId]?view=team|focus|provenance`:**
+    - Citations are only drawn among shown nodes.
+    - Outside↔outside citations are hidden in the team and focus views. Provenance keeps them, because they are the chain the agent walked.
+21. **Navigation:** "Research graph" sidebar link.
+
+**Verified in the browser:**
+- The team map shows 3 colour-coded libraries joined by bridge papers.
+- Focusing on ReAct (Chen) shows the 25 papers citing it.
+- The Cite Scout run's provenance tree shows HippoRAG ← SiReRAG → Lost in the Middle with the owners.
+- No console errors.
+
+### Phase 7: Stretch ✅
+
+1. **Synthesis agent** (`src/lib/agents/synthesis.ts`, `POST /api/agents/synthesis`, "Draft review" in the editor header, router intent `synthesis`):
+   - **Scope:** the whole team library, or a topic. For a topic, it uses team search and keeps only papers JEV scores as relevant.
+   - **Structure:** CDLP citation communities (`algo.labelPropagation`) and PageRank. Sections never mix communities, and the LLM only names and splits them.
+   - **Grounding:** each section is written from full-text passages (`BEST_PASSAGES_IN_PAPERS`). It may cite only that section's papers, and unknown ids are dropped.
+   - **Output:** a NEW file whose citations are real graph links. Sync, Cite Scout and the Checker understand it immediately.
+   - **Verified:** 3 sections from 13 papers in about 10 s, opened in the editor. With a topic, JEV cut the scope from 22 papers to 13 and dropped the vision-transformer papers.
+2. **Scout Watcher** (`src/lib/agents/scout-watcher.ts`, `POST /api/agents/scout-watcher`, "New papers" tab in the research library, router intent `scout_watcher`):
+   - **Fetch:** one OR'd OpenAlex `cites:` query over the team's papers, ranked by PageRank.
+   - **Filters:** a paper is kept only if it cites ≥ 2 team papers, isn't already in the library, and its nearest team paper in the **vector index** is within 0.4 cosine distance. Citing two RAG papers in passing isn't enough.
+   - **JEV check:** a `noul` asks whether it contradicts the team paper it is closest to. Those papers are flagged first.
+   - **Ordering:** collaborator overlap, then topical fit. Add imports the paper through the normal Librarian path.
+   - **Lesson:** JEV's 3-way "challenges/extends/applies" choice over a long state was unreliable (surveys were labelled "challenges"), so a single yes/no against the closest paper replaced it.
+   - **Verified:** the top result is a 2026 RAG survey citing 6 team papers that connects all 3 collaborators.
+3. **MCP server** (`src/app/api/mcp/route.ts`), with no SDK dependency:
+   - **Transport:** stateless Streamable-HTTP JSON-RPC (`initialize`, `tools/list`, `tools/call`, `ping`), with a Bearer `MCP_TOKEN` compared in constant time.
+   - **Tools (read-only, parameterised Cypher):** `list_workspaces`, `search_team_library`, `find_papers`, `paper_neighbourhood`, `citation_path` (`allShortestPaths` over CITES), `research_frontier` (gaps, bridges, PageRank) and `team_memory`.
+   - **Verified with curl:** 401 without a token, all tools return data, and a bad `workspaceId` is rejected.
+   - **Use it with:** `claude mcp add --transport http neura http://localhost:3000/api/mcp --header "Authorization: Bearer $MCP_TOKEN"`
+
+**Also fixed in Phase 7:**
+- **Cross-document autosave:** with client-side navigation, the previous editor's debounced update was saved into the newly opened file. `headless/Editore.tsx` now tags each editor instance with its `fileId` and drops updates from a mismatched instance.
+- **Router intents:** the router now has 8 intents, and 5 of 5 new test messages routed correctly.
+
+### Phase 8: Submission (docs ✅, recording and submitting are left to the team)
+
+- ✅ `README.md`: the pitch, why a graph, the architecture, the graph model (matching the Cypher), the agent table, JEV's role, local setup, demo seeding, MCP, the code map, hackathon vs. pre-existing work, and FalkorDB quirks.
+- ✅ `docs/demo-script.md`: a timed ~4-minute shot list with narration.
+- ✅ `docs/blog-post.md`: a draft for the blog side prize.
+- ⬜ Record the video, publish the blog, and submit before 11:59 PM IST on Oct 18.
+- ⬜ Optional: file FalkorDB GitHub issues for the engine quirks (null-list crash, DELETE…MERGE no-op).
 
 22. **README:** architecture, graph model, agents, JEV, setup, and what was pre-existing versus built during the hackathon.
 23. **Demo video (about 4 min):**

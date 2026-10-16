@@ -17,6 +17,8 @@ export type AgentName =
   | "next-steps"
   | "ghost-writer"
   | "historian"
+  | "synthesis"
+  | "scout-watcher"
   | "router";
 
 export type Outcome =
@@ -81,6 +83,9 @@ export class AgentRunRecorder {
   }
 
   /** Persist the run (best effort; a trace write must never fail the agent). */
+  /** Node ids this run touched (papers, provenance paths), for highlighting on the graph page. */
+  readonly highlight = new Set<string>();
+
   async finish<T>(outcome: Outcome, items: T[], userId?: string): Promise<AgentResult<T>> {
     const ms = Date.now() - this.started;
     try {
@@ -95,6 +100,7 @@ export class AgentRunRecorder {
           input: JSON.stringify(this.input).slice(0, 2000),
           trace: JSON.stringify(this.trace).slice(0, 8000),
           items: items.length,
+          highlight: [...this.highlight].slice(0, 60),
         } as never,
       });
     } catch (err) {

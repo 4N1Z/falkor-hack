@@ -108,6 +108,27 @@ export function needsCitation(sentence: string, context?: string) {
   );
 }
 
+/** Is the author mid-thought, so a short continuation would help? (Ghost Writer gate) */
+export function worthContinuing(paragraph: string) {
+  const tail = paragraph.slice(-600);
+  return withFallback<Judgement>(
+    "worthContinuing",
+    async (c) => {
+      const { answers } = await c.systemOne({
+        state: tail,
+        questions: {
+          go: noul("The paragraph stops mid-thought and the author would most likely keep writing about the same point", {
+            false: "The paragraph reads as complete, or the next words are impossible to anticipate",
+          }),
+        },
+      });
+      return { value: answers.go.noul, confidence: Math.abs(answers.go.noul - 0.5) * 2 };
+    },
+    // Without JEV: suggest only when the text doesn't end a sentence
+    async () => ({ value: /[.!?]["')\]]?\s*$/.test(tail) ? 0.3 : 0.7, confidence: 0.3 }),
+  );
+}
+
 /** Relevance of each candidate paper as a citation for `sentence`, in one request. */
 export function scoreRelevance(sentence: string, candidates: Candidate[]) {
   return withFallback<Map<string, Judgement>>(
@@ -194,6 +215,41 @@ export function classify<const L extends string>(text: string, instructions: str
         prompt: `${instructions}\nOptions:\n${keys.map((k) => `- ${k}: ${labels[k]}`).join("\n")}\n\nText: ${text}`,
       });
       return { label: object.label as L, confidence: 0.5 };
+    },
+  );
+}
+
+/**
+ * Does each new paper contradict or question the team paper it is closest to? (Scout Watcher)
+ * One request; candidates carry the closest team paper in their text.
+ */
+export function challengesTeam(candidates: Candidate[]) {
+  return withFallback<Map<string, Judgement>>(
+    "challengesTeam",
+    async (c) => {
+      if (!candidates.length) return new Map();
+      const questions = Object.fromEntries(
+        candidates.map((cand, i) => [
+          `c${i}`,
+          noul(`This new paper reports results or arguments that contradict, refute or seriously question the team paper it is compared with.\n${paperText(cand)}`, {
+            false: "It agrees with, builds on, surveys or applies the team paper",
+          }),
+        ]),
+      );
+      const { answers } = await c.systemOne({ state: "Screening new papers for a research team", questions });
+      return new Map(candidates.map((cand, i) => {
+        const v = (answers[`c${i}`] as { noul: number }).noul;
+        return [cand.id, { value: v, confidence: Math.abs(v - 0.5) * 2 }];
+      }));
+    },
+    async () => {
+      if (!candidates.length) return new Map();
+      const { object } = await generateObject({
+        model: fallbackModel(),
+        schema: z.object({ probabilities: z.array(z.number().min(0).max(1)).length(candidates.length) }),
+        prompt: `For each new paper, in order, give the probability (0-1) that it contradicts or seriously questions the team paper it is compared with.\n\n${candidates.map((c, i) => `${i + 1}. ${paperText(c)}`).join("\n")}`,
+      });
+      return new Map(candidates.map((c, i) => [c.id, { value: object.probabilities[i], confidence: 0.5 }]));
     },
   );
 }

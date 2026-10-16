@@ -11,6 +11,9 @@ import {
   type JSONContent,
 } from "./headless/index";
 import { defaultEditorContent } from "./content";
+import { CitationCheckSheet } from "./citation-check-sheet";
+import { NotebookSheet } from "./notebook-sheet";
+import { SynthesisSheet } from "./synthesis-sheet";
 import { defaultExtensions } from "./extensions";
 import { slashCommand, suggestionItems } from "./slash-command";
 import {
@@ -527,7 +530,8 @@ const NovelTailwindEditore = ({
         </div>
       )}
 
-      <div className="flex justify-center items-center flex-col mt-2 relative">
+      {/* xl:pr reserves room for the Cite Scout panel (fixed, right, xl+ only) so it never covers text */}
+      <div className="flex justify-center items-center flex-col mt-2 relative xl:pr-[324px]">
         {" "}
         {/* Need to chnage it to a different component */}
         <div className="w-full  items-start max-w-[800px] flex flex-col md:flex-row gap-3 px-7  lg:my-8">
@@ -579,6 +583,9 @@ const NovelTailwindEditore = ({
                   Remove Banner
                 </Button>
               )}
+              <NotebookSheet fileId={fileId} />
+              <SynthesisSheet fileId={fileId} />
+              <CitationCheckSheet fileId={fileId} />
               <DropdownMenu>
                 <DropdownMenuTrigger asChild>
                   <Button

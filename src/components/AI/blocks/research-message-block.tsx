@@ -100,11 +100,13 @@ const ResearchMessage = ({ message }: { message: Message }) => {
       </div>
 
       {/* Show papers if there are tool invocations */}
-      {hasToolInvocation && message.toolInvocations?.[0].state === "result" && (
-        <div className="mt-4">
+      {/* Every completed paper search (a reply can make several tool calls, not just one) */}
+      {message.toolInvocations
+        ?.filter((inv) => inv.toolName === "getResearchPaper" && inv.state === "result")
+        .map((inv) => (
+        <div key={inv.toolCallId} className="mt-4">
           {(() => {
-            const result = message.toolInvocations[0]
-              .result as ResearchToolResponse;
+            const result = (inv as { result: unknown }).result as ResearchToolResponse;
 
             if (result.status === "SUCCESS" && result.papers?.length) {
               return (
@@ -191,10 +193,10 @@ const ResearchMessage = ({ message }: { message: Message }) => {
             return null;
           })()}
         </div>
-      )}
+      ))}
 
-      {/* Show loading state if tool is still running */}
-      {hasToolInvocation && message.toolInvocations?.[0].state !== "result" && (
+      {/* Show loading state while any tool is still running */}
+      {hasToolInvocation && message.toolInvocations?.some((inv) => inv.state !== "result") && (
         <div className="flex items-center gap-2 text-muted-foreground animate-pulse">
           <div className="h-4 w-4 rounded-full border-2 border-current border-r-transparent animate-spin" />
           Searching for papers...

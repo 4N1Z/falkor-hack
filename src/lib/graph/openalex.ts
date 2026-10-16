@@ -321,3 +321,27 @@ export async function getCitingWorks(workId: string, limit: number): Promise<Ope
   });
   return res?.results ?? [];
 }
+
+export type CitingWork = PaperSearchResult & { publicationDate: string | null; references: string[] };
+
+/**
+ * Recent works that cite any of `workIds` (OR'd into one request per 50 ids), with their
+ * reference lists so callers can see which of the given works each one cites.
+ */
+export async function getRecentCitingWorks(workIds: string[], sinceDate: string, perBatch = 200): Promise<CitingWork[]> {
+  const out = new Map<string, CitingWork>();
+  for (let i = 0; i < workIds.length; i += BATCH_SIZE) {
+    const res = await openAlexFetch<{ results: (SearchWork & { publication_date?: string })[] }>("/works", {
+      filter: `cites:${workIds.slice(i, i + BATCH_SIZE).join("|")},from_publication_date:${sinceDate}`,
+      sort: "cited_by_count:desc",
+      "per-page": String(Math.min(perBatch, 200)),
+      select: `${SEARCH_FIELDS},publication_date`,
+    });
+    for (const w of res?.results ?? []) {
+      if (!w.title) continue;
+      const r = toSearchResult(w);
+      out.set(r.openalexId, { ...r, publicationDate: w.publication_date ?? null, references: (w.referenced_works ?? []).map(shortId) });
+    }
+  }
+  return [...out.values()];
+}

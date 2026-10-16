@@ -3,7 +3,7 @@ import type { Graph } from "falkordb";
 export const EMBEDDING_DIM = 1536; // OpenAI text-embedding-3-small
 
 /** Bump when indexes change so running servers re-run ensureSchema (it caches per graph). */
-export const SCHEMA_VERSION = 3;
+export const SCHEMA_VERSION = 4;
 
 // Paper.paperId is the node key: an OpenAlex work id ("W123…"), or "local:<postgres id>"
 // when the paper couldn't be matched. doi / s2Id / arxivId are lookup keys so citations
@@ -27,6 +27,8 @@ const RANGE_INDEXES: Array<[label: string, prop: string]> = [
   ["Chunk", "id"],
   ["Chunk", "paperId"],
   ["IngestStatus", "pgPaperId"],
+  ["Memory", "id"],
+  ["Idea", "status"],
 ];
 
 const STATEMENTS: string[] = [
@@ -36,6 +38,8 @@ const STATEMENTS: string[] = [
   // Passage-level retrieval over full text (document-index.ts)
   `CREATE VECTOR INDEX FOR (c:Chunk) ON (c.embedding) OPTIONS {dimension: ${EMBEDDING_DIM}, similarityFunction: 'cosine'}`,
   "CREATE FULLTEXT INDEX FOR (c:Chunk) ON (c.text)",
+  // Research memory (Historian): recall similar hypotheses / findings
+  `CREATE VECTOR INDEX FOR (m:Memory) ON (m.embedding) OPTIONS {dimension: ${EMBEDDING_DIM}, similarityFunction: 'cosine'}`,
 ];
 
 const isAlreadyExists = (err: unknown) =>

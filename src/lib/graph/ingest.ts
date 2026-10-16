@@ -269,7 +269,8 @@ export async function ingestLibrary(
     graph,
     UPSERT_AUTHORS,
     "rows",
-    allPapers.flatMap((p) => p.authors.slice(0, 12).map((a) => ({ paperId: p.paperId, ...a }))),
+    // position keeps author order, so citations read "[FirstAuthor et al., Year]"
+    allPapers.flatMap((p) => p.authors.slice(0, 12).map((a, position) => ({ paperId: p.paperId, ...a, position }))),
   );
   await writeRows(
     graph,

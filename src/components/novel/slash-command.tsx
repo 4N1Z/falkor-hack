@@ -11,10 +11,13 @@ import {
   ImageIcon,
   MessageSquare,
   Search,
+  Lightbulb,
 } from "lucide-react";
 import { createSuggestionItems } from "./extensions/slash-command";
 import { Command, renderItems } from "./extensions/slash-command";
 import { uploadFn } from "./image-upload";
+import { FIND_PAPERS_EVENT, type FindPapersDetail } from "./find-papers-dialog";
+import { REMEMBER_EVENT, type RememberDetail } from "./notebook-sheet";
 
 
 export const suggestionItems = createSuggestionItems([
@@ -152,16 +155,36 @@ export const suggestionItems = createSuggestionItems([
     command: ({ editor, range }) => {
       // Remove the slash command text
       editor.chain().focus().deleteRange(range).run();
-      
-      // Get the current paragraph text
-      const { from } = editor.state.selection;
-      const resolvedPos = editor.state.doc.resolve(from);
-      const paragraph = editor.state.doc.textBetween(
-        resolvedPos.before(),
-        resolvedPos.after()
-      );
 
-      // Show the semantic scholar command menu
+      // Pre-fill the search with the sentence being written (text before the cursor),
+      // so team-library results are about the claim that needs a citation
+      const { from } = editor.state.selection;
+      const $pos = editor.state.doc.resolve(from);
+      const before = editor.state.doc.textBetween($pos.start(), from, " ");
+      const sentences = before.split(/(?<=[.!?])\s+/).filter((s) => s.trim().length > 0);
+      const query = (sentences.pop() ?? "").replace(/\[[^\]]*\]/g, "").trim();
+
+      window.dispatchEvent(
+        new CustomEvent<FindPapersDetail>(FIND_PAPERS_EVENT, { detail: { query, pos: from } })
+      );
+    },
+  },
+  {
+    title: "Hypothesis",
+    description: "Save this sentence to the team's research memory",
+    searchTerms: ["hypothesis", "remember", "memory", "note", "idea", "claim"],
+    icon: <Lightbulb size={14} />,
+    command: ({ editor, range }) => {
+      editor.chain().focus().deleteRange(range).run();
+      // The sentence just written (before the cursor), without citation labels
+      const { from } = editor.state.selection;
+      const $pos = editor.state.doc.resolve(from);
+      const before = editor.state.doc.textBetween($pos.start(), from, " ");
+      const sentences = before.split(/(?<=[.!?])\s+/).filter((s) => s.trim().length > 0);
+      const text = (sentences.pop() ?? "").replace(/\[[^\]]*\]/g, "").trim();
+      if (text.length >= 8) {
+        window.dispatchEvent(new CustomEvent<RememberDetail>(REMEMBER_EVENT, { detail: { text, kind: "hypothesis" } }));
+      }
     },
   },
 ]);

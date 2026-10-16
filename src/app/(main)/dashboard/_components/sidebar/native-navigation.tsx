@@ -1,4 +1,4 @@
-import { ArchiveIcon, Diamond, HomeIcon, Settings, Trash2 } from "lucide-react";
+import { ArchiveIcon, Diamond, HomeIcon, Network, Settings, Trash2 } from "lucide-react";
 import Link from "next/link";
 import React from "react";
 import Trash from "./trash/trash-main";
@@ -53,6 +53,13 @@ export default function NativeNavigation({myWorkspaceId,userId,className}:Native
           </Link>
 
           {/* <NavItem link={`/dashboard/${myWorkspaceId}`} title="Dashboard" logo={<HomeIcon size={18} className="text-neura-dashboardGray" />} /> */}
+        </li>
+
+        <li>
+          <Link className={cn(navBtnstyle)} href={`/dashboard/${myWorkspaceId}/graph`}>
+            <Network size={18} className="text-neura-dashboardGray" />
+            <p className="text-neura-dashboardGray">Research graph</p>
+          </Link>
         </li>
 
         <li>

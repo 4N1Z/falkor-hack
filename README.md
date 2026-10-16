@@ -1,36 +1,196 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# Neura Query
 
-## Getting Started
+**A collaborative research editor where a team's papers live in one FalkorDB graph, and small single-purpose agents help at each step of writing. Every suggestion they make comes with the graph path behind it.**
 
-First, run the development server:
+When three people write a paper together, each one brings a different reading list. Neura Query puts all of those lists into one research graph per workspace: papers, citations, authors, concepts, full-text passages, who imported what, and the team's own hypotheses. Agents in the editor then draw on that graph:
 
-```bash
-npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
+- **Cite Scout** suggests a citation for the sentence you're writing, drawn from *any* collaborator's library, and shows the citation path that connects it to your own papers.
+- **Citation Checker** reads the cited paper's text and tells you whether each claim is supported, contradicted or uncited.
+- **Next-Step** proposes what to do next, using only evidence from the graph: literature gaps, papers that bridge collaborators' libraries, and influential papers nobody has read.
+- **Historian** keeps a time-aware research notebook, so a hypothesis the team dropped in March isn't suggested again in May.
+- **Ghost Writer, Synthesis, Scout Watcher** and an **MCP server** are covered below.
+
+Agents only *propose*. Nothing is inserted until a person accepts it, so the researcher stays the author.
+
+> Built for the **WeMakeDevs × FalkorDB hackathon** (Oct 15–18 2026), Track 01: *Agents That Act on Connected Data*.
+> The full phase-by-phase plan, decisions and verification notes are in [`docs/falkordb-hackathon-plan.md`](docs/falkordb-hackathon-plan.md).
+
+---
+
+## Why a graph
+
+Most "chat with your papers" tools use vector search over chunks. That answers *"which passage is similar to this?"* It can't answer the questions a research team actually has:
+
+| Question | What it takes in FalkorDB |
+|---|---|
+| Which of **Bea's** papers supports the sentence **I** just wrote, and how does it connect to my reading? | Vector + full-text search, then `(:User)-[:IMPORTED]->(:Paper)` ownership, then a 1–2 hop `CITES` path to my own papers |
+| Does the paper I cited actually say this? | Vector search over that paper's `Chunk` passages only, then JEV support scoring |
+| What is the field around us working on that none of us has read? | `algo.pageRank` over `CITES`, concepts reached by the neighbourhood but not by the library, papers cited by several collaborators' libraries |
+| How should a literature review of our papers be organised? | `algo.labelPropagation` citation communities, with PageRank ordering papers inside each one |
+| Has anything new come out that builds on (or contradicts) our work? | Recent works citing ≥ 2 team papers, filtered by distance to the nearest team paper in the vector index |
+| Didn't we already try this? | Vector search over `Memory` nodes with status `dropped`, plus the `DROPPED_BECAUSE` reason |
+
+## Architecture
+
+```
+ Editor (TipTap + Yjs/Hocuspocus)            Research library · Graph page · Neura AI chat
+   gutter cards · ghost text · check panel          │
+          │                                         │
+          ▼                                         ▼
+ ┌──────────────────── Agent API routes (Next.js, Node runtime) ────────────────────┐
+ │ cite-scout · citation-check · next-steps · ghost · memory · synthesis ·          │
+ │ scout-watcher · router (/api/neura-ai) · graph views · MCP (/api/mcp)            │
+ │ each agent: one job, fixed parameterised Cypher templates, AgentRun trace        │
+ └───────┬────────────────────────────┬────────────────────────────┬────────────────┘
+         ▼                            ▼                            ▼
+   FalkorDB  ws:{workspaceId}     JEV (TypeSafe System One)    OpenAI
+   one graph per workspace,       typed relevance / support /  embeddings (1536-d),
+   shared by every agent          routing judgements, ~100ms   prose where text is needed
+         ▲
+   Librarian pipeline: OpenAlex metadata + references + authors + concepts,
+   PDF/DOCX full text → passages → embeddings (runs in `after()` on import)
+
+ Postgres (Drizzle/Supabase): auth, workspaces, files (TipTap JSON), library rows
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+### Graph model
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+```
+(:User)-[:IMPORTED {at, source}]->(:Paper {paperId, doi, arxivId, title, abstract, year, inLibrary, embedding})
+(:Paper)-[:CITES]->(:Paper)          (:Author)-[:WROTE {position}]->(:Paper)
+(:Paper)-[:ABOUT]->(:Concept)        (:Paper)-[:PUBLISHED_IN]->(:Venue)
+(:Chunk {text, embedding})-[:CHUNK_OF]->(:Paper)                     ← full-text passages
+(:User)-[:EDITS]->(:Document)-[:CONTAINS]->(:Claim {text})-[:CITES]->(:Paper)
+(:Claim)-[:SUPPORTED_BY {level, score, status}]->(:Paper)          ← Citation Checker verdicts
+(:Claim)-[:SUGGESTS_CITE {relevance, status}]->(:Paper)            ← Cite Scout proposals
+(:User)-[:RECORDED]->(:Memory {kind: hypothesis|finding|question, status, validFrom, validTo})-[:ABOUT]->(:Paper)
+(:Memory)-[:DROPPED_BECAUSE]->(:Paper)                               ← Historian
+(:Idea {status, novelty, feasibility})-[:GROUNDED_IN]->(:Paper|:Concept)   ← Next-Step
+(:AgentRun {agent, trace, highlight, ms})                            ← every agent run, for provenance
+```
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+The exact Cypher is in [`src/lib/graph/queries.ts`](src/lib/graph/queries.ts) and the indexes are in [`src/lib/graph/schema.ts`](src/lib/graph/schema.ts).
 
-## Learn More
+**FalkorDB features used:**
+- **Multi-graph tenancy:** one graph per workspace.
+- **Vector indexes:** `Paper`, `Chunk` and `Memory`, each 1536-d with cosine similarity.
+- **Full-text indexes:** `Paper` title and abstract, and `Chunk` text.
+- **Range indexes.**
+- **Graph algorithms:** `algo.pageRank`, `algo.labelPropagation` (CDLP) and `allShortestPaths`.
+- **Variable-length paths.**
+- **Rendering:** [`@falkordb/canvas`](https://www.npmjs.com/package/@falkordb/canvas) draws the Research graph page.
 
-To learn more about Next.js, take a look at the following resources:
+### Two rules every agent follows
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+1. **Provenance.**
+   - Every result carries the graph path or passage behind it.
+   - Every run is stored as an `AgentRun` with its step trace (tool, Cypher template, rows, ms) and the node IDs it used.
+   - The Research graph page renders any run as a provenance tree.
+2. **Proposals, not facts.**
+   - Agent-written edges and nodes start with `status: 'suggested'` and `by: 'agent:<name>'`. They are promoted only when a person accepts them.
+   - Grounding queries read accepted, ingested or user-created data, so agent guesses never pollute the knowledge base.
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+## The agents
 
-## Deploy on Vercel
+| Agent | Its one job | Graph | JEV |
+|---|---|---|---|
+| **Librarian** (pipeline) | Turn imports/uploads into graph nodes: OpenAlex metadata, references, authors (in byline order), concepts, full-text passages | `MERGE` templates, chunk vectors | – |
+| **Cite Scout** | Citation suggestions for the sentence being written, from every collaborator's library | Hybrid search (paper vectors + passage vectors + full-text, RRF), owner lookup, `CITES*1..2` path to *your* papers, dropped-hypothesis check | `noul` "needs a citation" gate, then `score` relevance of every candidate in one call |
+| **Citation Checker** | Verdict per claim: supported / partly / contradicted / not supported / needs citation | Claim→cited paper, best passages *within the cited papers* | `score` support rubric on the passage, `noul` for uncited claims |
+| **Next-Step** | 3 grounded next steps (read / experiment / write / ask) | Literature gaps, bridge papers, PageRank-influential unread papers, open hypotheses | `score` novelty and feasibility |
+| **Ghost Writer** | Grey inline continuation, Tab to accept | Cite Scout's top passages as context | `noul` "worth continuing now" gate |
+| **Historian** | Time-aware notebook: `/hypothesis`, findings, questions, why something was dropped | `Memory` vector index, `DROPPED_BECAUSE`, timeline | `choice` hypothesis / finding / question |
+| **Synthesis** | Draft a literature review into a new document | CDLP communities + PageRank structure the sections; passages ground the prose; citations restricted to the team's papers | `score` topic relevance for scoped reviews |
+| **Scout Watcher** | New papers the team should know about | OpenAlex works citing ≥ 2 team papers, then vector-index distance to the nearest team paper | `noul` "contradicts the closest team paper" |
+| **Router** | Send a chat message to the right agent | – | `choice` over 8 intents |
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+**MCP server** (`/api/mcp`, read-only)
+- **Tools:** `list_workspaces`, `search_team_library`, `find_papers`, `paper_neighbourhood`, `citation_path`, `research_frontier` and `team_memory`.
+- **Clients:** gives Claude Code, Claude Desktop or Cursor the same graph tools the agents use.
 
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+### Where JEV fits
+
+[JEV (TypeSafe System One)](https://typesafe.ai/blog/introducing-system-one-models-and-jev) answers typed questions about a piece of text:
+- `noul`: a probability.
+- `score`: a rubric level.
+- `choice`: a label.
+
+It returns many named questions in one ~100–500 ms request, which suits the per-keystroke decisions an editor needs. Scoring 8 citation candidates is one call, not 8 LLM calls. The agents use it for every *judgement*, and use an LLM only where prose is needed.
+
+Every helper in [`src/lib/jev.ts`](src/lib/jev.ts) has a fallback (embeddings, or a small structured `gpt-4o-mini` call), so the product never depends on one vendor.
+
+## Running it locally
+
+**Requirements:**
+- Node 20+ and pnpm.
+- Docker (for FalkorDB).
+- A Postgres database (Supabase works).
+- An OpenAI API key.
+- Optional: a TypeSafe (JEV) key.
+
+```bash
+pnpm install
+cp .env.example .env.local        # fill in DATABASE_URL, AUTH_*, OPENAI_API_KEY, FALKORDB_URL, …
+docker compose up -d falkordb      # FalkorDB on :6379, FalkorDB Browser on http://localhost:3001
+pnpm push                          # create the Postgres tables
+pnpm dev:all                       # Next.js on :3000 + the Hocuspocus collaboration server on :1414
+```
+
+Sign in, create a workspace, then open **Research papers** to search OpenAlex or upload PDFs. Every paper you add is indexed into the workspace graph in the background.
+
+### Demo data
+
+The seed scripts build the hackathon demo: three collaborators with overlapping RAG/GraphRAG libraries, and a draft that exercises every agent.
+
+```bash
+run() { node --env-file=.env.local ./node_modules/tsx/dist/cli.mjs "$@"; }
+run scripts/seed-graph.ts    <workspaceId>     # demo collaborators Bea and Chen + their papers
+run scripts/seed-fulltext.ts <workspaceId>     # full-text passages for the seeded papers (arXiv PDFs)
+run scripts/seed-draft.ts    <workspaceId>     # "GraphRAG literature review (draft)" in a Demo folder
+run scripts/graph-report.ts  <workspaceId>     # what is indexed in FalkorDB, cross-checked with Postgres
+run scripts/test-jev.ts [--fallback]           # sanity-check the relevance layer
+```
+
+### Using the MCP server
+
+Set `MCP_TOKEN` (16+ characters) in `.env.local`, then:
+
+```bash
+claude mcp add --transport http neura http://localhost:3000/api/mcp --header "Authorization: Bearer $MCP_TOKEN"
+```
+
+## Where things are
+
+| Path | What |
+|---|---|
+| `src/lib/graph/` | FalkorDB client, schema/indexes, all Cypher, the Librarian (`ingest.ts`, `document-index.ts`), document → claims sync, team search |
+| `src/lib/agents/` | One file per agent, plus `base.ts` (runs, traces, proposals) and `router.ts` |
+| `src/lib/jev.ts` | Typed JEV questions with fallbacks |
+| `src/app/api/agents/*`, `src/app/api/graph/*`, `src/app/api/mcp` | Agent, graph-view and MCP endpoints |
+| `src/components/novel/` | Editor integrations: Cite Scout panel, ghost text, citation check, notebook, draft review |
+| `src/components/graph/research-graph-view.tsx` | Research graph page: team map, paper focus and agent provenance on `@falkordb/canvas` |
+| `src/components/library/` | Research library: library, index health, OpenAlex search, new papers, upload/import |
+
+### Built during the hackathon vs. pre-existing
+
+**Pre-existing:** the neura-query app itself (auth, workspaces, folders and files, the TipTap/Yjs collaborative editor, Zotero OAuth, the original bubble-menu AI and Stripe) was imported in the first commit.
+
+**Built during the hackathon (Oct 15–18):**
+- Everything under `src/lib/graph`, `src/lib/agents`, `src/lib/jev.ts` and `src/lib/citations.ts`.
+- The agent, graph and MCP routes.
+- The research library rebuild: OpenAlex search and import, full-text indexing, and index health.
+- Every editor integration listed above.
+- The Research graph page and the seed and report scripts.
+- Upgrade to Next 16.
+- Fixes to the editor plumbing it depended on:
+  - slash commands and Tab indentation;
+  - collaborator presence;
+  - draft-wiping and cross-document autosave bugs.
+
+### FalkorDB notes from building this
+
+Engine quirks we hit and worked around (details in the plan doc):
+- **Null lists:** returning a `collect()` list containing nulls crashed the server, so lists are filtered before they're returned.
+- **Delete then merge:** `MATCH … DELETE … WITH count(*) … UNWIND … MERGE` silently created nothing, so it is split into two queries.
+- **NUL bytes:** a NUL byte inside a string parameter fails the query, so text is stripped of control characters on ingest.
+- **`shortestPath` placement:** `shortestPath` is accepted only in `WITH`/`RETURN`. `MATCH p = allShortestPaths(...)` after a `WITH` works for undirected citation paths.

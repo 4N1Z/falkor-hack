@@ -6,6 +6,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import ImportPaper from "@/components/zotero/components/dialog/ImportPaper";
+import { NewPapersPanel } from "./new-papers-panel";
 import type { FullTextState } from "@/lib/graph/document-index";
 import type { PaperSearchResult } from "@/lib/graph/openalex";
 import { refreshLibrary, reindexPapers, useGraphIndex, useLibrary } from "@/lib/hooks/use-library";
@@ -15,7 +16,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
 
 type SearchHit = PaperSearchResult & { inLibrary: boolean };
-type Tab = "library" | "graph" | "search" | "upload";
+type Tab = "library" | "graph" | "search" | "new" | "upload";
 
 const press = "transition-transform duration-150 ease-out active:scale-[0.97]";
 
@@ -57,12 +58,13 @@ export default function ResearchLibrary({ workspaceId }: { workspaceId: string }
 
   return (
     <Tabs value={tab} onValueChange={(v) => setTab(v as Tab)} className="flex flex-col gap-3 min-h-0 flex-1">
-      <TabsList className="w-full grid grid-cols-4">
+      <TabsList className="w-full grid grid-cols-5">
         <TabsTrigger value="library">
           Library{papers ? <span className="ml-1.5 text-muted-foreground tabular-nums">{papers.length}</span> : null}
         </TabsTrigger>
         <TabsTrigger value="graph">In the graph</TabsTrigger>
         <TabsTrigger value="search">Search papers</TabsTrigger>
+        <TabsTrigger value="new">New papers</TabsTrigger>
         <TabsTrigger value="upload">Upload &amp; import</TabsTrigger>
       </TabsList>
 
@@ -81,6 +83,10 @@ export default function ResearchLibrary({ workspaceId }: { workspaceId: string }
 
       <TabsContent value="search" className="mt-0 min-h-0 flex-1 flex flex-col">
         <SearchPanel workspaceId={workspaceId} onImported={loadLibrary} />
+      </TabsContent>
+
+      <TabsContent value="new" className="mt-0 min-h-0 flex-1 flex flex-col">
+        <NewPapersPanel workspaceId={workspaceId} onImported={loadLibrary} scrollArea={scrollArea} />
       </TabsContent>
 
       <TabsContent value="upload" className={cn("mt-0 min-h-0 flex-1 space-y-4", scrollArea)}>

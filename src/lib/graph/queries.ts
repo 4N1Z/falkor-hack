@@ -31,7 +31,8 @@ UNWIND $rows AS r
 MATCH (p:Paper {paperId: r.paperId})
 MERGE (a:Author {authorId: r.authorId})
 SET a.name = r.name
-MERGE (a)-[:WROTE]->(p)
+MERGE (a)-[w:WROTE]->(p)
+SET w.position = r.position
 RETURN count(*) AS n`;
 
 export const UPSERT_CONCEPTS = `
@@ -219,14 +220,14 @@ RETURN count(r) AS n`;
 
 export const RESOLVE_CITED_PAPERS = `
 MATCH (p:Paper)
-WHERE p.doi IN $dois OR p.arxivId IN $arxivIds OR p.s2Id IN $s2Ids
+WHERE p.doi IN $dois OR p.arxivId IN $arxivIds OR p.s2Id IN $s2Ids OR p.paperId IN $paperIds
 RETURN p.paperId AS paperId, p.doi AS doi, p.arxivId AS arxivId, p.s2Id AS s2Id`;
 
 // ---------------------------------------------------------------- Agents
 
 export const RECORD_AGENT_RUN = `
 CREATE (r:AgentRun {id: $id, agent: $agent, at: $at, ms: $ms, outcome: $outcome,
-                    userId: $userId, input: $input, trace: $trace, items: $items})
+                    userId: $userId, input: $input, trace: $trace, items: $items, highlight: $highlight})
 RETURN r.id AS id`;
 
 /**
@@ -250,6 +251,296 @@ RETURN count(r) AS n`;
 
 // ---------------------------------------------------------------- Reads
 
+// ---------------------------------------------------------------- Cite Scout
+
+/**
+ * Provenance: the shortest citation chain (≤2 hops, either direction) from each candidate to
+ * a paper the requesting user brought in. Explains *why* a collaborator's paper matters to you.
+ * Returns plain values per row (no collected lists) — see the FalkorDB null-list crash note.
+ */
+export const PATHS_TO_USER_LIBRARY = `
+UNWIND $ids AS id
+MATCH (p:Paper {paperId: id})
+MATCH (:User {id: $userId})-[:IMPORTED]->(mine:Paper)
+WHERE mine.paperId <> id
+MATCH path = (p)-[:CITES*1..2]-(mine)
+WHERE all(n IN nodes(path) WHERE coalesce(n.suspect, false) = false)
+WITH id, path, length(path) AS hops
+ORDER BY hops ASC
+WITH id, head(collect(path)) AS best
+RETURN id AS paperId,
+       [n IN nodes(best) | n.paperId] AS nodeIds,
+       [n IN nodes(best) | n.title] AS titles,
+       [r IN relationships(best) | startNode(r).paperId] AS from`;
+
+/** Papers already cited by the claim, and any the user dismissed for it (never re-suggest). */
+export const CLAIM_EXCLUSIONS = `
+MATCH (c:Claim {id: $claimId})-[r]->(p:Paper)
+WHERE type(r) = 'CITES' OR (type(r) = 'SUGGESTS_CITE' AND r.status = 'rejected')
+RETURN p.paperId AS paperId`;
+
+/** Record Cite Scout's suggestions as proposals on the claim (status: suggested). */
+export const UPSERT_CITE_PROPOSALS = `
+MATCH (c:Claim {id: $claimId})
+UNWIND $rows AS r
+MATCH (p:Paper {paperId: r.paperId})
+MERGE (c)-[s:SUGGESTS_CITE]->(p)
+ON CREATE SET s.status = 'suggested'
+SET s.by = 'agent:cite-scout', s.runId = $runId, s.at = $at, s.relevance = r.relevance, s.confidence = r.confidence
+RETURN count(s) AS n`;
+
+/** A person accepts or dismisses one Cite Scout suggestion (by claim + paper). */
+export const DECIDE_CITE_PROPOSAL = `
+MATCH (c:Claim {id: $claimId})
+MATCH (p:Paper {paperId: $paperId})
+MERGE (c)-[s:SUGGESTS_CITE]->(p)
+SET s.status = $decision, s.decidedBy = $userId, s.decidedAt = $at, s.by = coalesce(s.by, 'agent:cite-scout')
+RETURN count(s) AS n`;
+
+// ---------------------------------------------------------------- Citation Checker
+
+/** Every claim in a document with each paper it cites (one row per claim×paper; uncited → null paper). */
+export const DOCUMENT_CLAIMS = `
+MATCH (:Document {fileId: $fileId})-[:CONTAINS]->(c:Claim)
+OPTIONAL MATCH (c)-[:CITES]->(p:Paper)
+RETURN c.id AS claimId, c.text AS text, c.order AS ord, size(coalesce(c.citedUrls, [])) AS urlCount,
+       p.paperId AS paperId, p.title AS title, p.abstract AS abstract, p.year AS year,
+       [(u:User)-[:IMPORTED]->(p) | coalesce(u.name, 'Collaborator')] AS owners
+ORDER BY ord`;
+
+/** Best passage of each given paper for a claim vector (over-fetch, then keep the cited papers). */
+export const BEST_PASSAGES_IN_PAPERS = `
+CALL db.idx.vector.queryNodes('Chunk', 'embedding', $k, vecf32($v)) YIELD node, score
+WHERE node.paperId IN $paperIds
+RETURN node.paperId AS paperId, node.text AS text, score
+ORDER BY score ASC`;
+
+/** Record a verdict as a proposal edge (agents never assert; people decide). */
+export const UPSERT_SUPPORT_VERDICT = `
+MATCH (c:Claim {id: $claimId}), (p:Paper {paperId: $paperId})
+MERGE (c)-[s:SUPPORTED_BY]->(p)
+SET s.level = $level, s.score = $score, s.confidence = $confidence, s.runId = $runId,
+    s.by = 'agent:citation-checker', s.at = $at, s.status = coalesce(s.status, 'suggested')
+RETURN count(s) AS n`;
+
+// ---------------------------------------------------------------- Historian (research memory)
+
+/**
+ * A memory is a hypothesis, finding or question someone recorded. Time-aware: validFrom when
+ * recorded, validTo when a hypothesis is dropped (so agents can tell "what we believed when").
+ */
+export const CREATE_MEMORY = `
+MERGE (u:User {id: $userId})
+SET u.name = coalesce($userName, u.name)
+CREATE (m:Memory {id: $id, kind: $kind, text: $text, status: $status, validFrom: $at,
+                  fileId: $fileId, byName: $userName, classifiedBy: $classifiedBy, embedding: vecf32($v)})
+CREATE (u)-[:RECORDED]->(m)
+WITH m
+UNWIND $aboutIds AS pid
+MATCH (p:Paper {paperId: pid})
+MERGE (m)-[:ABOUT]->(p)
+RETURN count(*) AS n`;
+
+export const MEMORY_TIMELINE = `
+MATCH (m:Memory)
+RETURN m.id AS id, m.kind AS kind, m.text AS text, m.status AS status, m.validFrom AS validFrom,
+       m.validTo AS validTo, m.reason AS reason, coalesce(m.byName, 'Collaborator') AS byName,
+       [(m)-[:ABOUT]->(p:Paper) | p.title] AS about,
+       [(m)-[:DROPPED_BECAUSE]->(p:Paper) | p.title] AS droppedBecause
+ORDER BY m.validFrom DESC
+LIMIT $limit`;
+
+export const SET_MEMORY_STATUS = `
+MATCH (m:Memory {id: $id})
+SET m.status = $status, m.reason = $reason, m.decidedBy = $userName,
+    m.validTo = CASE WHEN $status = 'dropped' THEN $at ELSE null END
+WITH m
+OPTIONAL MATCH (m)-[old:DROPPED_BECAUSE]->()
+DELETE old
+RETURN m.id AS id`;
+
+export const LINK_DROPPED_BECAUSE = `
+MATCH (m:Memory {id: $id}), (p:Paper {paperId: $paperId})
+MERGE (m)-[:DROPPED_BECAUSE]->(p)
+RETURN m.id AS id`;
+
+/** Memories closest in meaning to a text (filter by kind/status in the caller's WHERE). */
+export const SIMILAR_MEMORIES = `
+CALL db.idx.vector.queryNodes('Memory', 'embedding', $k, vecf32($v)) YIELD node, score
+WHERE ($kind IS NULL OR node.kind = $kind) AND ($status IS NULL OR node.status = $status)
+RETURN node.id AS id, node.kind AS kind, node.text AS text, node.status AS status,
+       node.validFrom AS validFrom, node.validTo AS validTo, node.reason AS reason,
+       coalesce(node.byName, 'Collaborator') AS byName, score
+ORDER BY score ASC
+LIMIT $limit`;
+
+// ---------------------------------------------------------------- Next-Step (ideas)
+
+/** Topics the team's neighbourhood of papers is about, that no team paper covers yet. */
+export const LITERATURE_GAPS = `
+MATCH (lib:Paper {inLibrary: true})-[:CITES]-(f:Paper)-[:ABOUT]->(c:Concept)
+WHERE coalesce(f.inLibrary, false) = false AND coalesce(f.suspect, false) = false
+  AND NOT (c)<-[:ABOUT]-(:Paper {inLibrary: true})
+WITH c, count(DISTINCT f) AS papers, count(DISTINCT lib) AS near
+WHERE papers >= 2
+RETURN c.name AS concept, papers, near
+ORDER BY papers DESC, near DESC
+LIMIT 8`;
+
+/** Papers outside the library that connect two or more collaborators' libraries. */
+export const BRIDGE_PAPERS = `
+MATCH (u:User)-[:IMPORTED]->(lib:Paper)-[:CITES]-(f:Paper)
+WHERE coalesce(f.inLibrary, false) = false AND coalesce(f.suspect, false) = false
+WITH f, count(DISTINCT u) AS owners, count(DISTINCT lib) AS links,
+     collect(DISTINCT coalesce(u.name, 'Collaborator')) AS names
+WHERE owners >= 2
+RETURN f.paperId AS paperId, f.title AS title, f.year AS year, owners, links, names
+ORDER BY owners DESC, links DESC
+LIMIT 6`;
+
+/** Most central recent papers the team hasn't added yet (PageRank over CITES). */
+export const INFLUENTIAL_UNREAD = `
+CALL algo.pageRank('Paper', 'CITES') YIELD node, score
+WHERE coalesce(node.inLibrary, false) = false AND coalesce(node.suspect, false) = false
+  AND node.year IS NOT NULL AND node.year >= $sinceYear
+RETURN node.paperId AS paperId, node.title AS title, node.year AS year, score
+ORDER BY score DESC
+LIMIT 6`;
+
+export const CREATE_IDEA = `
+CREATE (i:Idea {id: $id, title: $title, text: $text, action: $action, kind: $kind, status: 'suggested',
+                by: 'agent:next-steps', runId: $runId, at: $at, novelty: $novelty, feasibility: $feasibility})
+WITH i
+UNWIND $paperIds AS pid
+MATCH (p:Paper {paperId: pid})
+MERGE (i)-[:GROUNDED_IN]->(p)
+RETURN count(*) AS n`;
+
+export const LINK_IDEA_CONCEPTS = `
+MATCH (i:Idea {id: $id})
+UNWIND $concepts AS name
+MATCH (c:Concept {name: name})
+MERGE (i)-[:GROUNDED_IN]->(c)
+RETURN count(*) AS n`;
+
+export const SET_IDEA_STATUS = `
+MATCH (i:Idea {id: $id})
+SET i.status = $status, i.decidedBy = $userName, i.decidedAt = $at
+RETURN i.id AS id`;
+
+export const RECENT_IDEAS = `
+MATCH (i:Idea) WHERE i.status IN $statuses
+RETURN i.id AS id, i.title AS title, i.text AS text, i.action AS action, i.kind AS kind, i.status AS status,
+       i.novelty AS novelty, i.feasibility AS feasibility, i.at AS at,
+       [(i)-[:GROUNDED_IN]->(p:Paper) | p.title] AS papers,
+       [(i)-[:GROUNDED_IN]->(c:Concept) | c.name] AS concepts
+ORDER BY i.at DESC
+LIMIT $limit`;
+
+// ---------------------------------------------------------------- Research Graph page (reads)
+
+export const VIEW_TEAM = `
+MATCH (u:User)-[:IMPORTED]->(p:Paper)
+RETURN u.id AS userId, coalesce(u.name, 'Collaborator') AS userName, p.paperId AS paperId, p.title AS title,
+       p.year AS year, coalesce(p.chunkCount, 0) AS chunks`;
+
+/** Papers outside the library that connect to several team papers (the useful neighbourhood). */
+export const VIEW_FRONTIER = `
+MATCH (t:Paper {inLibrary: true})-[:CITES]-(f:Paper)
+WHERE coalesce(f.inLibrary, false) = false AND coalesce(f.suspect, false) = false
+WITH f, count(DISTINCT t) AS deg
+WHERE deg >= $minDeg
+RETURN f.paperId AS paperId, f.title AS title, f.year AS year, deg
+ORDER BY deg DESC
+LIMIT $limit`;
+
+export const VIEW_CITES = `
+MATCH (a:Paper)-[:CITES]->(b:Paper)
+WHERE a.paperId IN $ids AND b.paperId IN $ids
+RETURN a.paperId AS source, b.paperId AS target`;
+
+export const VIEW_MEMORY = `
+MATCH (m:Memory)
+RETURN m.id AS id, m.kind AS kind, m.status AS status, m.text AS text,
+       [(m)-[:ABOUT]->(p:Paper) | p.paperId] AS about`;
+
+export const VIEW_IDEAS = `
+MATCH (i:Idea) WHERE i.status <> 'rejected'
+RETURN i.id AS id, i.title AS title, i.status AS status,
+       [(i)-[:GROUNDED_IN]->(p:Paper) | p.paperId] AS grounded`;
+
+/** Team map: papers outside the library that connect 2+ collaborators' libraries. */
+export const VIEW_BRIDGES = `
+MATCH (u:User)-[:IMPORTED]->(lib:Paper)-[:CITES]-(f:Paper)
+WHERE coalesce(f.inLibrary, false) = false AND coalesce(f.suspect, false) = false
+WITH f, count(DISTINCT u) AS owners, count(DISTINCT lib) AS links
+WHERE owners >= 2
+RETURN f.paperId AS paperId, f.title AS title, f.year AS year, owners, links
+ORDER BY owners DESC, links DESC
+LIMIT $limit`;
+
+/** Paper focus: one paper's citation neighbourhood, team papers first. */
+export const VIEW_FOCUS = `
+MATCH (p:Paper {paperId: $paperId})-[r:CITES]-(n:Paper)
+WHERE coalesce(n.suspect, false) = false
+RETURN DISTINCT n.paperId AS paperId, n.title AS title, n.year AS year, coalesce(n.inLibrary, false) AS inLibrary,
+       coalesce(n.citationCount, 0) AS citations, startNode(r).paperId = $paperId AS outgoing
+ORDER BY inLibrary DESC, citations DESC
+LIMIT $limit`;
+
+export const VIEW_PAPERS_BY_ID = `
+MATCH (p:Paper) WHERE p.paperId IN $ids
+RETURN p.paperId AS paperId, p.title AS title, p.year AS year, coalesce(p.inLibrary, false) AS inLibrary,
+       coalesce(p.chunkCount, 0) AS chunks`;
+
+export const VIEW_NOTES_BY_ID = `
+MATCH (n) WHERE (n:Idea OR n:Memory) AND n.id IN $ids
+RETURN n.id AS id, coalesce(n.title, n.text) AS label, CASE WHEN n:Idea THEN 'idea' ELSE 'memory' END AS kind,
+       n.status AS status, [(n)-[:GROUNDED_IN|ABOUT]->(p:Paper) | p.paperId] AS papers`;
+
+export const RECENT_RUNS = `
+MATCH (r:AgentRun) WHERE r.agent <> 'librarian'
+RETURN r.id AS id, r.agent AS agent, r.at AS at, r.ms AS ms, r.outcome AS outcome, r.items AS items,
+       r.input AS input, r.trace AS trace, coalesce(r.highlight, []) AS highlight
+ORDER BY r.at DESC
+LIMIT $limit`;
+
+// ---------------------------------------------------------------- Team library search
+
+/** Semantic candidates among papers collaborators brought in (k over-fetches, then filters). */
+export const TEAM_VECTOR_SEARCH = `
+CALL db.idx.vector.queryNodes('Paper', 'embedding', $k, vecf32($v)) YIELD node, score
+WHERE node.inLibrary = true
+RETURN node.paperId AS paperId, score
+ORDER BY score ASC
+LIMIT $limit`;
+
+/** Keyword candidates (RediSearch syntax: terms are OR'd by the caller). */
+export const TEAM_FULLTEXT_SEARCH = `
+CALL db.idx.fulltext.queryNodes('Paper', $q) YIELD node, score
+WHERE node.inLibrary = true
+RETURN node.paperId AS paperId, score
+ORDER BY score DESC
+LIMIT $limit`;
+
+/** Passage-level candidates: the best matching full-text chunk per team paper. */
+export const TEAM_CHUNK_SEARCH = `
+CALL db.idx.vector.queryNodes('Chunk', 'embedding', $k, vecf32($v)) YIELD node, score
+MATCH (node)-[:CHUNK_OF]->(p:Paper)
+WHERE p.inLibrary = true
+RETURN p.paperId AS paperId, score, node.id AS chunkId, node.text AS text
+ORDER BY score ASC
+LIMIT $limit`;
+
+/** Display fields for a set of team papers. Pattern comprehensions never yield nulls. */
+export const TEAM_PAPER_DETAILS = `
+MATCH (p:Paper) WHERE p.paperId IN $ids
+RETURN p.paperId AS paperId, p.title AS title, p.year AS year, p.doi AS doi, p.arxivId AS arxivId,
+       p.abstract AS abstract, coalesce(p.chunkCount, 0) AS chunks,
+       [(u:User)-[:IMPORTED]->(p) | coalesce(u.name, 'Collaborator')] AS owners,
+       [(u:User)-[:IMPORTED]->(p) | u.id] AS ownerIds,
+       [(a:Author)-[w:WROTE]->(p) WHERE a.name IS NOT NULL | {name: a.name, pos: coalesce(w.position, 99)}] AS authorRows`;
+
 export const GRAPH_STATS = `
 MATCH (p:Paper)
 WITH count(p) AS papers, sum(CASE WHEN p.inLibrary THEN 1 ELSE 0 END) AS library
@@ -264,3 +555,48 @@ export const IMPORTS_PER_USER = `
 MATCH (u:User)-[:IMPORTED]->(p:Paper)
 RETURN u.id AS userId, u.name AS name, count(p) AS papers
 ORDER BY papers DESC`;
+
+// ---------------------------------------------------------------- Synthesis (literature review)
+
+/** Team papers grouped by citation community (CDLP over the whole CITES graph). */
+export const TEAM_COMMUNITIES = `
+CALL algo.labelPropagation({nodeLabels: ['Paper'], relationshipTypes: ['CITES'], maxIterations: 20}) YIELD node, communityId
+WHERE node.inLibrary = true
+RETURN node.paperId AS paperId, communityId`;
+
+/** Centrality of the team's papers in the citation graph (PageRank). */
+export const TEAM_PAGERANK = `
+CALL algo.pageRank('Paper', 'CITES') YIELD node, score
+WHERE node.inLibrary = true
+RETURN node.paperId AS paperId, score`;
+
+/** Citations between the given papers (to tell the writer which papers build on which). */
+export const CITES_AMONG = `
+MATCH (a:Paper)-[:CITES]->(b:Paper)
+WHERE a.paperId IN $ids AND b.paperId IN $ids
+RETURN a.paperId AS source, b.paperId AS target`;
+
+// ---------------------------------------------------------------- Scout Watcher (new papers)
+
+/** Which of these OpenAlex works are already in the team library. */
+export const LIBRARY_STATUS = `
+MATCH (p:Paper) WHERE p.paperId IN $ids AND p.inLibrary = true
+RETURN p.paperId AS paperId`;
+
+// ---------------------------------------------------------------- MCP (read-only tools)
+
+/** Shortest citation chain between two papers, in either direction. */
+export const CITATION_PATH = `
+MATCH (a:Paper {paperId: $a}), (b:Paper {paperId: $b})
+WITH a, b
+MATCH p = allShortestPaths((a)-[:CITES*..5]-(b))
+RETURN [n IN nodes(p) | n.paperId] AS ids, [n IN nodes(p) | n.title] AS titles
+LIMIT 1`;
+
+/** Papers matching a title fragment (to resolve names to ids). */
+export const FIND_PAPERS_BY_TITLE = `
+MATCH (p:Paper)
+WHERE toLower(p.title) CONTAINS toLower($q)
+RETURN p.paperId AS paperId, p.title AS title, p.year AS year, coalesce(p.inLibrary, false) AS inLibrary
+ORDER BY inLibrary DESC, coalesce(p.citationCount, 0) DESC
+LIMIT 10`;

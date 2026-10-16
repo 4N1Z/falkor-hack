@@ -25,6 +25,7 @@ export const env = createEnv({
     FALKORDB_URL: z.string().url(),
     TYPESAFE_API_KEY: z.string().optional(),
     SEMANTIC_SCHOLAR_API_KEY: z.string().optional(),
+    MCP_TOKEN: z.string().min(16).optional(),
   },
   // Everything that goes in this should go in the experimental__runtimeEnv
   client: {
