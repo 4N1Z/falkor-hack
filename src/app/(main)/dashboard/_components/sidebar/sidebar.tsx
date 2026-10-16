@@ -134,7 +134,6 @@ export default async function Sidebar({ params, className }: SidebarProps) {
             />
           </ScrollArea>
         </div>
-        {/* <NeuraAIBlock/> */}
 
         {/* User Profile - Fixed at Bottom */}
         <div className="flex-shrink-0 mt-4">

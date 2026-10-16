@@ -8,7 +8,7 @@ import {
   TooltipTrigger,
 } from "@/components/ui/tooltip";
 
-interface ResearchPaper {
+export interface ResearchPaper {
   paperId: string;
   title: string;
   authors: Array<{ name: string }>;
@@ -28,8 +28,9 @@ interface ResearchToolResponse {
   message?: string;
 }
 
-const PaperCard = ({ paper }: { paper: ResearchPaper }) => {
+const PaperCard = ({ paper, onCite }: { paper: ResearchPaper; onCite?: (paper: ResearchPaper) => void }) => {
   return (
+    <div className="flex items-center gap-2">
     <TooltipProvider>
       <Tooltip>
         <TooltipTrigger asChild>
@@ -94,11 +95,22 @@ const PaperCard = ({ paper }: { paper: ResearchPaper }) => {
         </TooltipContent>
       </Tooltip>
     </TooltipProvider>
+    {onCite && (
+      <button
+        type="button"
+        onClick={() => onCite(paper)}
+        className="rounded-md bg-primary px-1.5 py-0.5 text-[11px] font-medium text-primary-foreground transition-transform duration-150 ease-out hover:bg-primary/90 active:scale-[0.97]"
+        title="Insert a citation at the cursor"
+      >
+        Cite
+      </button>
+    )}
+    </div>
   );
 };
 
-const ResearchMessage = ({ message }: { message: Message }) => {
-  const hasToolInvocation = message.toolInvocations?.length! > 0;
+const ResearchMessage = ({ message, onCite }: { message: Message; onCite?: (paper: ResearchPaper) => void }) => {
+  const hasToolInvocation = (message.toolInvocations?.length ?? 0) > 0;
 
   return (
     <div className="space-y-4">
@@ -123,7 +135,7 @@ const ResearchMessage = ({ message }: { message: Message }) => {
                     Research Papers (hover for details):
                   </div>
                   {result.papers.map((paper) => (
-                    <PaperCard key={paper.paperId} paper={paper} />
+                    <PaperCard key={paper.paperId} paper={paper} onCite={onCite} />
                   ))}
                 </div>
               );

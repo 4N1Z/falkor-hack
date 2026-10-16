@@ -235,7 +235,9 @@ function Canvas({
               ? FRONTIER
               : n.kind === "idea"
                 ? "#f59e0b"
-                : "#8b5cf6",
+                : n.kind === "question"
+                  ? "#305eff"
+                  : "#8b5cf6",
         size: n.center ? 16 : n.kind === "user" ? 14 : n.kind === "paper" ? 11 : n.kind === "frontier" ? 7 + (n.bridges ?? 0) : 9,
         shape: n.kind === "user" ? "square" : "circle",
       })),
@@ -295,6 +297,7 @@ function NodeCard({
     frontier: node.bridges ? `Connects ${node.bridges} collaborators' libraries` : "Outside the library",
     memory: "Note (Historian)",
     idea: "Idea (Next-Step)",
+    question: node.byName ? `Asked in the team chat by ${node.byName}` : "Asked in the team chat",
   }[node.kind];
   const isPaper = node.kind === "paper" || node.kind === "frontier";
   return (
@@ -318,6 +321,18 @@ function NodeCard({
           .filter(Boolean)
           .join(" · ")}
       </p>
+      {node.asked && node.asked.length > 0 && (
+        <div className="mt-2">
+          <p className="text-[11px] font-medium uppercase tracking-wide text-muted-foreground">Asked about in the team chat</p>
+          <ul className="mt-1 space-y-1">
+            {node.asked.slice(0, 3).map((a, i) => (
+              <li key={i} className="text-xs leading-snug">
+                <span className="text-muted-foreground">{a.byName}:</span> {a.text.length > 120 ? `${a.text.slice(0, 120)}…` : a.text}
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
       {isPaper && !node.center && (
         <button
           type="button"

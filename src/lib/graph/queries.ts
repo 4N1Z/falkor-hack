@@ -494,9 +494,18 @@ RETURN p.paperId AS paperId, p.title AS title, p.year AS year, coalesce(p.inLibr
        coalesce(p.chunkCount, 0) AS chunks`;
 
 export const VIEW_NOTES_BY_ID = `
-MATCH (n) WHERE (n:Idea OR n:Memory) AND n.id IN $ids
-RETURN n.id AS id, coalesce(n.title, n.text) AS label, CASE WHEN n:Idea THEN 'idea' ELSE 'memory' END AS kind,
-       n.status AS status, [(n)-[:GROUNDED_IN|ABOUT]->(p:Paper) | p.paperId] AS papers`;
+MATCH (n) WHERE (n:Idea OR n:Memory OR n:ChatMessage) AND n.id IN $ids
+RETURN n.id AS id, coalesce(n.title, n.text) AS label,
+       CASE WHEN n:Idea THEN 'idea' WHEN n:Memory THEN 'memory' ELSE 'question' END AS kind,
+       n.status AS status, [(n)-[:GROUNDED_IN|ABOUT|MENTIONS]->(p:Paper) | p.paperId] AS papers`;
+
+/** The chat question that triggered an agent run (provenance view), with the papers its answer named. */
+export const QUESTION_FOR_RUN = `
+MATCH (q:ChatMessage)-[:ANSWERED_BY_MSG]->(a:ChatMessage)-[:FROM_RUN]->(r:AgentRun {id: $runId})
+OPTIONAL MATCH (u:User)-[:ASKED]->(q)
+RETURN q.id AS id, q.text AS text, coalesce(u.name, 'Collaborator') AS byName,
+       [(a)-[:MENTIONS]->(p:Paper) | p.paperId] AS papers
+LIMIT 1`;
 
 export const RECENT_RUNS = `
 MATCH (r:AgentRun) WHERE r.agent <> 'librarian'
@@ -640,3 +649,72 @@ ORDER BY relevance DESC`;
 export const WORKSPACE_USERS = `
 MATCH (u:User)
 RETURN u.id AS id, coalesce(u.name, 'Collaborator') AS name`;
+
+// ---------------------------------------------------------------- Workspace chat mirror
+
+/**
+ * One question + its answer from the team chat, mirrored from Postgres so agents can recall what
+ * the team asked. Links to the run and the papers are separate statements: MERGE on a null
+ * endpoint fails, and FalkorDB mishandles mixed delete/merge statements (see notes above).
+ */
+export const UPSERT_CHAT_EXCHANGE = `
+MERGE (q:ChatMessage {id: $qId})
+SET q.threadId = $threadId, q.role = 'user', q.text = $qText, q.at = $at, q.fileId = $fileId, q.embedding = vecf32($v)
+MERGE (u:User {id: $userId})
+SET u.name = coalesce($userName, u.name)
+MERGE (u)-[:ASKED]->(q)
+MERGE (a:ChatMessage {id: $aId})
+SET a.threadId = $threadId, a.role = 'assistant', a.text = $aText, a.route = $route, a.at = $at
+MERGE (q)-[:ANSWERED_BY_MSG]->(a)
+RETURN q.id AS id`;
+
+export const LINK_CHAT_RUN = `
+MATCH (a:ChatMessage {id: $aId}), (r:AgentRun {id: $runId})
+MERGE (a)-[:FROM_RUN]->(r)
+RETURN count(*) AS n`;
+
+export const LINK_CHAT_PAPERS = `
+MATCH (a:ChatMessage {id: $aId})
+UNWIND $paperIds AS pid
+MATCH (p:Paper {paperId: pid})
+MERGE (a)-[:MENTIONS]->(p)
+RETURN count(*) AS n`;
+
+/** Past questions closest in meaning to a text (cosine distance; lower is closer). */
+export const SIMILAR_QUESTIONS = `
+CALL db.idx.vector.queryNodes('ChatMessage', 'embedding', $k, vecf32($v)) YIELD node, score
+WHERE node.role = 'user'
+OPTIONAL MATCH (u:User)-[:ASKED]->(node)
+OPTIONAL MATCH (node)-[:ANSWERED_BY_MSG]->(a:ChatMessage)
+RETURN node.id AS id, node.text AS text, node.at AS at, coalesce(u.name, 'Collaborator') AS byName,
+       a.route AS route, substring(coalesce(a.text, ''), 0, 300) AS answer, score
+ORDER BY score ASC
+LIMIT $limit`;
+
+/** The team's most recent questions (Next-Step evidence). */
+export const RECENT_QUESTIONS = `
+MATCH (q:ChatMessage {role: 'user'})
+OPTIONAL MATCH (u:User)-[:ASKED]->(q)
+RETURN q.id AS id, q.text AS text, q.at AS at, coalesce(u.name, 'Collaborator') AS byName
+ORDER BY q.at DESC
+LIMIT $limit`;
+
+/** Questions whose answer named this paper (paper focus card). */
+export const QUESTIONS_ABOUT_PAPER = `
+MATCH (p:Paper {paperId: $paperId})<-[:MENTIONS]-(a:ChatMessage)<-[:ANSWERED_BY_MSG]-(q:ChatMessage)
+OPTIONAL MATCH (u:User)-[:ASKED]->(q)
+RETURN q.id AS id, q.text AS text, q.at AS at, coalesce(u.name, 'Collaborator') AS byName
+ORDER BY q.at DESC
+LIMIT 5`;
+
+export const DELETE_THREAD_MESSAGES = `
+MATCH (m:ChatMessage {threadId: $threadId})
+DETACH DELETE m`;
+
+// ---------------------------------------------------------------- Export (LaTeX / BibTeX)
+
+/** Bibliographic fields for a set of papers, authors in byline order. */
+export const EXPORT_PAPERS_BY_ID = `
+MATCH (p:Paper) WHERE p.paperId IN $ids
+RETURN p.paperId AS paperId, p.title AS title, p.year AS year, p.doi AS doi, p.arxivId AS arxivId, p.venue AS venue,
+       [(a:Author)-[w:WROTE]->(p) WHERE a.name IS NOT NULL | {name: a.name, pos: coalesce(w.position, 99)}] AS authorRows`;

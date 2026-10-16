@@ -12,7 +12,6 @@ import React, {
 import { usePathname } from "next/navigation";
 import { File, Folder, workspace } from "@/db/database.types";
 import { getFiles } from "@/db/actions/get-files";
-import { Message } from "ai";
 import { LoadingKeys } from "../types";
 
 export type appFoldersType = Folder & { files: File[] | [] };
@@ -42,7 +41,7 @@ function isValidWorkspace(workspace: unknown): workspace is appWorkspacesType {
 
 interface AppState {
   workspaces: appWorkspacesType[] | [];
-  chatSessions: Record<string, { messages: Message[] }>;
+  // Chat history lives in Postgres (src/lib/chat/store.ts) and is read with SWR; nothing is kept here
   researchSummaries: Record<string, { summary: string; timestamp: number }>;
   errors: Record<LoadingKeys, string | null>; // Makes it clearer what can be in error state
   loading: Record<LoadingKeys, boolean>;
@@ -110,19 +109,6 @@ type Action =
       };
     }
   | {
-      type: "SET_CHAT_SESSION";
-      payload: {
-        chatId: string;
-        messages: Message[];
-      };
-    }
-  | {
-      type: "DELETE_CHAT_SESSION";
-      payload: {
-        chatId: string;
-      };
-    }
-  | {
       type: "SET_RESEARCH_SUMMARY";
       payload: {
         keywords: string;
@@ -146,7 +132,6 @@ type Action =
 
 const initialState: AppState = {
   workspaces: [],
-  chatSessions: {},
   researchSummaries: {},
   errors: {
     files: null,
@@ -374,24 +359,6 @@ const appReducer = (
           return workspace;
         }),
       };
-    case "SET_CHAT_SESSION":
-      return {
-        ...state,
-        chatSessions: {
-          ...state.chatSessions,
-          [action.payload.chatId]: {
-            messages: action.payload.messages,
-          },
-        },
-      };
-    case "DELETE_CHAT_SESSION": {
-      const { [action.payload.chatId]: _, ...remainingSessions } =
-        state.chatSessions;
-      return {
-        ...state,
-        chatSessions: remainingSessions, // Remove the session entirely
-      };
-    }
     case "SET_RESEARCH_SUMMARY":
       return {
         ...state,

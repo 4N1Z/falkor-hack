@@ -223,6 +223,60 @@ ul {
   --ease-drawer: cubic-bezier(0.32, 0.72, 0, 1);
 }
 
+/* ---------------------------------------------------------------- Neura AI panel glow
+   A brand-blue conic gradient behind the chat panel. On open it sweeps one full turn while
+   brightening, then settles to a soft static halo (no endless motion on a panel you work in).
+   Browsers without @property skip the sweep and just fade the glow in. */
+@property --neura-glow-angle {
+  syntax: "<angle>";
+  inherits: false;
+  initial-value: 0deg;
+}
+
+.neura-glow {
+  position: absolute;
+  pointer-events: none;
+  border-radius: 12px;
+  background: conic-gradient(
+    from var(--neura-glow-angle),
+    #305eff,
+    #84cdff,
+    #b4c6ff,
+    #93c7fb,
+    #5b7cff,
+    #305eff
+  );
+  animation: neura-glow-sweep 1.6s var(--ease-out) both;
+}
+
+/* Soft outer halo */
+.neura-glow--halo {
+  inset: -6px;
+  filter: blur(14px);
+  --neura-glow-rest: 0.4;
+}
+
+/* Crisp gradient edge hugging the panel */
+.neura-glow--edge {
+  inset: -1.5px;
+  border-radius: 9.5px;
+  --neura-glow-rest: 0.7;
+}
+
+@keyframes neura-glow-sweep {
+  0% {
+    opacity: 0;
+    --neura-glow-angle: 0deg;
+  }
+  30% {
+    opacity: 1;
+  }
+  100% {
+    opacity: var(--neura-glow-rest);
+    --neura-glow-angle: 360deg;
+  }
+}
+
 @media (prefers-reduced-motion: reduce) {
   *,
   *::before,

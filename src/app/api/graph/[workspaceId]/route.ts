@@ -1,4 +1,5 @@
 import { requireWorkspaceMember } from "@/app/api/papers/_access";
+import { questionForRun, questionsAboutPaper } from "@/lib/chat/mirror";
 import { getWorkspaceGraph } from "@/lib/graph/client";
 import {
   RECENT_RUNS,
@@ -13,7 +14,7 @@ import { NextResponse } from "next/server";
 
 export const runtime = "nodejs";
 
-export type GraphNodeKind = "user" | "paper" | "frontier" | "memory" | "idea";
+export type GraphNodeKind = "user" | "paper" | "frontier" | "memory" | "idea" | "question";
 export type GraphView = "team" | "focus" | "provenance";
 
 export interface GraphViewNode {
@@ -31,6 +32,10 @@ export interface GraphViewNode {
   citedByCenter?: boolean;
   /** Team view: number of collaborators' libraries a bridge paper connects */
   bridges?: number;
+  /** Focus view: questions from the team chat whose answer named this paper */
+  asked?: { text: string; byName: string; at: number }[];
+  /** Question nodes: who asked */
+  byName?: string;
 }
 
 export interface GraphViewLink {
@@ -131,7 +136,11 @@ export async function GET(req: Request, { params }: { params: Promise<{ workspac
     const [center] = await q<{ paperId: string; title: string; year: number | null }>(VIEW_PAPERS_BY_ID, { ids: [paperId] });
     if (!center) return NextResponse.json({ error: "Paper not found in the graph" }, { status: 404 });
     addPaper(center.paperId, center.title, center.year, { center: true });
-    const neighbours = await q<{ paperId: string; title: string; year: number | null; outgoing: boolean }>(VIEW_FOCUS, { paperId, limit: 40 });
+    const [neighbours, asked] = await Promise.all([
+      q<{ paperId: string; title: string; year: number | null; outgoing: boolean }>(VIEW_FOCUS, { paperId, limit: 40 }),
+      questionsAboutPaper(workspaceId, paperId),
+    ]);
+    if (asked.length) nodes.get(paperId)!.asked = asked.map((a) => ({ text: a.text, byName: a.byName, at: a.at }));
     for (const n of neighbours) {
       addPaper(n.paperId, n.title, n.year, { citedByCenter: n.outgoing });
       links.push(n.outgoing ? { source: paperId, target: n.paperId, kind: "cites" } : { source: n.paperId, target: paperId, kind: "cites" });
@@ -141,7 +150,7 @@ export async function GET(req: Request, { params }: { params: Promise<{ workspac
     const ids = run?.highlight ?? [];
     const [papers, notes] = await Promise.all([
       q<{ paperId: string; title: string; year: number | null }>(VIEW_PAPERS_BY_ID, { ids }),
-      q<{ id: string; label: string; kind: "idea" | "memory"; status: string; papers: string[] }>(VIEW_NOTES_BY_ID, { ids }),
+      q<{ id: string; label: string; kind: "idea" | "memory" | "question"; status: string; papers: string[] }>(VIEW_NOTES_BY_ID, { ids }),
     ]);
     papers.forEach((p) => addPaper(p.paperId, p.title, p.year));
     for (const n of notes) {
@@ -149,6 +158,12 @@ export async function GET(req: Request, { params }: { params: Promise<{ workspac
       n.papers
         .filter((p) => nodes.has(p))
         .forEach((p) => links.push({ source: n.id, target: p, kind: n.kind === "idea" ? "grounded" : "about", suggested: n.status === "suggested" }));
+    }
+    // When the run was triggered from the team chat, show the question that started it
+    const question = run ? await questionForRun(workspaceId, run.id) : null;
+    if (question && !nodes.has(question.id)) {
+      nodes.set(question.id, { id: question.id, kind: "question", label: question.text, byName: question.byName });
+      question.papers.filter((p) => nodes.has(p)).forEach((p) => links.push({ source: question.id, target: p, kind: "about" }));
     }
   } else {
     for (const [id, p] of teamPaper) addPaper(id, p.title, p.year);

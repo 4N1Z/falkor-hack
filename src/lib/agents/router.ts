@@ -13,7 +13,11 @@ import { runNextSteps } from "./next-steps";
 import { runScoutWatcher } from "./scout-watcher";
 import { runSynthesis } from "./synthesis";
 
-export type Route = "cite_scout" | "citation_checker" | "next_steps" | "historian" | "team_library" | "synthesis" | "scout_watcher" | "general";
+import { ROUTE_NAMES, type Route } from "../chat/route-names";
+import { similarQuestions } from "../chat/mirror";
+
+export { ROUTE_NAMES };
+export type { Route };
 
 const ROUTES: Record<Route, string> = {
   cite_scout: "Finding papers to cite for a specific sentence or claim the user wrote",
@@ -32,6 +36,10 @@ export interface RoutedBrief {
   confidence: number;
   /** Plain-text evidence for the chat model to answer from */
   brief: string;
+  /** AgentRun id when a specialist agent ran (provenance for the chat mirror) */
+  runId: string | null;
+  /** Team papers the evidence named, so the chat mirror can link the answer to them */
+  paperIds: string[];
 }
 
 export async function routeMessage(input: {
@@ -44,9 +52,13 @@ export async function routeMessage(input: {
   const route = picked.result.label;
   const confidence = picked.result.confidence;
   const lines: string[] = [];
+  let runId: string | null = null;
+  const paperIds = new Set<string>();
 
   if (route === "cite_scout") {
     const r = await runCiteScout({ workspaceId: input.workspaceId, userId: input.userId, paragraph: input.message, fileId: input.fileId });
+    runId = r.runId;
+    r.items.forEach((s) => paperIds.add(s.paperId));
     if (r.deadEnd) lines.push(`Warning: ${r.deadEnd.byName} dropped a similar hypothesis (${r.deadEnd.reason ?? "no reason recorded"}).`);
     if (r.outcome === "SKIPPED") lines.push("The text doesn't look like a claim that needs a citation.");
     for (const s of r.items) {
@@ -55,24 +67,36 @@ export async function routeMessage(input: {
     if (!r.items.length && r.outcome !== "SKIPPED") lines.push("Nothing in the team's library supports it yet.");
   } else if (route === "citation_checker" && input.fileId) {
     const r = await runCitationCheck({ workspaceId: input.workspaceId, fileId: input.fileId, userId: input.userId });
+    runId = r.runId;
+    r.items.forEach((c) => c.sources.forEach((s) => paperIds.add(s.paperId)));
     for (const c of r.items.filter((c) => c.verdict !== "ok")) {
       lines.push(`- [${c.verdict}] "${c.text.slice(0, 160)}" — ${c.why}${c.suggestion ? ` Suggest ${c.suggestion.label}.` : ""}`);
     }
     if (!lines.length) lines.push("Every claim in the draft is supported or needs no citation.");
   } else if (route === "next_steps") {
     const r = await runNextSteps({ workspaceId: input.workspaceId, userId: input.userId, fileId: input.fileId });
+    runId = r.runId;
     for (const i of r.items) {
       lines.push(`- ${i.title} (${i.kind}; novelty ${Math.round(i.novelty * 100)}%, feasibility ${Math.round(i.feasibility * 100)}%): ${i.text} First step: ${i.action}. Grounded in: ${i.evidence.map((e) => e.label).join("; ")}`);
     }
   } else if (route === "historian") {
-    const [similar, all] = await Promise.all([recall({ workspaceId: input.workspaceId, text: input.message, limit: 5, maxDistance: 0.55 }), timeline(input.workspaceId, 15)]);
+    const [similar, all, asked] = await Promise.all([
+      recall({ workspaceId: input.workspaceId, text: input.message, limit: 5, maxDistance: 0.55 }),
+      timeline(input.workspaceId, 15),
+      similarQuestions(input.workspaceId, { text: input.message, limit: 3, maxDistance: 0.5 }),
+    ]);
     const items = similar.length ? similar : all;
     for (const m of items) {
       lines.push(`- ${m.kind} (${m.status}) by ${m.byName}, ${new Date(m.validFrom).toDateString()}: "${m.text}"${m.reason ? ` — reason: ${m.reason}` : ""}`);
     }
     if (!lines.length) lines.push("The team hasn't recorded any hypotheses or findings yet (use /hypothesis in the editor).");
+    // What the team already asked in this chat about the same thing
+    for (const q of asked) {
+      lines.push(`- ${q.byName} asked on ${new Date(q.at).toDateString()}: "${q.text}"${q.answer ? ` — answered (${q.route ?? "chat"}): ${q.answer.replace(/\s+/g, " ").slice(0, 200)}` : ""}`);
+    }
   } else if (route === "scout_watcher") {
     const r = await runScoutWatcher({ workspaceId: input.workspaceId, userId: input.userId });
+    runId = r.runId;
     for (const p of r.items) {
       lines.push(
         `- “${p.title}” (${p.publicationDate ?? p.year}) cites ${p.cites.length} team papers (${p.owners.join(" & ")}'s)${p.challenge >= 0.7 ? `; may contradict “${p.closest?.title}”` : ""}`,
@@ -83,6 +107,8 @@ export async function routeMessage(input: {
   } else if (route === "synthesis") {
     const topic = input.message.replace(/^.*?\b(?:review|survey|related work)\b\s*(?:of|on|about|for)?\s*/i, "").replace(/[.?!]+$/, "");
     const r = await runSynthesis({ workspaceId: input.workspaceId, userId: input.userId, topic: topic.length > 3 ? topic : "", fileId: input.fileId });
+    runId = r.runId;
+    r.items.forEach((s) => s.papers.forEach((p) => paperIds.add(p.paperId)));
     if (r.fileId) {
       lines.push(`Drafted "${r.title}" as a new document in the workspace (tell the user to open it from the sidebar). Sections:`);
       for (const s of r.items) lines.push(`- ${s.heading}: ${s.papers.map((p) => p.label).join(", ")}`);
@@ -96,6 +122,7 @@ export async function routeMessage(input: {
       return first.length > 1 && new RegExp(`\\b${first}\\b`).test(msg);
     });
     const r = (named.length ? found.filter((p) => p.owners.some((o) => named.includes(o))) : found).slice(0, 6);
+    r.forEach((p) => paperIds.add(p.paperId));
     for (const p of r) lines.push(`- ${citationLabel(p)} “${p.title}” — in ${p.owners.join(" & ")}'s library${p.passage ? `. Passage: "${p.passage.text.replace(/\s+/g, " ").slice(0, 200)}"` : ""}`);
     if (!lines.length) {
       // Nothing in the graph: look at the wider literature so a search never comes back empty-handed
@@ -108,16 +135,5 @@ export async function routeMessage(input: {
     }
   }
 
-  return { route, confidence, brief: lines.join("\n") };
+  return { route, confidence, brief: lines.join("\n"), runId, paperIds: [...paperIds] };
 }
-
-export const ROUTE_NAMES: Record<Route, string> = {
-  cite_scout: "Cite Scout",
-  citation_checker: "Citation Checker",
-  next_steps: "Next-Step",
-  historian: "Historian",
-  team_library: "Team library",
-  synthesis: "Synthesis",
-  scout_watcher: "Scout Watcher",
-  general: "Neura AI",
-};

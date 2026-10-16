@@ -18,6 +18,7 @@ import {
   LITERATURE_GAPS,
 } from "../graph/queries";
 import { score } from "@typesafe-ai/sdk";
+import { recentQuestions } from "../chat/mirror";
 import { startRun, type AgentResult } from "./base";
 import { recall, SAME_IDEA_DISTANCE, timeline, type SimilarMemory } from "./historian";
 
@@ -31,7 +32,7 @@ export interface Idea {
   novelty: number;
   feasibility: number;
   /** Evidence the idea is grounded in (papers and topics from the graph) */
-  evidence: { id: string; kind: "paper" | "gap" | "memory"; label: string; detail: string }[];
+  evidence: { id: string; kind: "paper" | "gap" | "memory" | "question"; label: string; detail: string }[];
   /** A dropped hypothesis this idea resembles, if any */
   conflictsWith: SimilarMemory | null;
 }
@@ -75,7 +76,7 @@ export async function runNextSteps(input: { workspaceId: string; userId: string;
   const g = run.graph;
 
   // 1. Graph evidence
-  const [gaps, bridges, influential, claims, memory] = await Promise.all([
+  const [gaps, bridges, influential, claims, memory, questions] = await Promise.all([
     run.step("graph.literatureGaps", async () => (await g.roQuery<{ concept: string; papers: number; near: number }>(LITERATURE_GAPS)).data ?? [], {
       source: "graph",
       cypher: "LITERATURE_GAPS",
@@ -97,6 +98,8 @@ export async function runNextSteps(input: { workspaceId: string; userId: string;
         })
       : Promise.resolve([] as { text: string }[]),
     run.step("historian.timeline", () => timeline(input.workspaceId, 30), { source: "graph", cypher: "MEMORY_TIMELINE" }),
+    // What the team has been asking in the workspace chat (mirrored into the graph)
+    run.step("graph.recentQuestions", () => recentQuestions(input.workspaceId, 6), { source: "graph", cypher: "RECENT_QUESTIONS" }),
   ]);
 
   const evidence: Evidence[] = [
@@ -125,6 +128,10 @@ export async function runNextSteps(input: { workspaceId: string; userId: string;
       .filter((m) => m.status === "active" && m.kind !== "finding")
       .slice(0, 6)
       .map((m, i) => ({ id: `M${i + 1}`, kind: "memory" as const, label: m.text, detail: `open ${m.kind} recorded by ${m.byName}` })),
+    ...questions
+      .filter((q) => q.text.length >= 15)
+      .slice(0, 4)
+      .map((q, i) => ({ id: `Q${i + 1}`, kind: "question" as const, label: q.text.slice(0, 160), detail: `asked in the team chat by ${q.byName} on ${new Date(q.at).toDateString()}` })),
   ];
   if (!evidence.length) return run.finish("NOT_IN_GRAPH", [], input.userId);
 
@@ -167,7 +174,7 @@ export async function runNextSteps(input: { workspaceId: string; userId: string;
   // Grounding guard: keep only real evidence IDs; drop ideas left with none
   const byId = new Map(evidence.map((e) => [e.id, e]));
   const unId = (t: string) =>
-    t.replace(/\(?\b([BPGM]\d{1,2})\b\)?/g, (m: string, id: string) => (byId.has(id) ? "“" + byId.get(id)!.label.slice(0, 80) + "”" : m));
+    t.replace(/\(?\b([BPGMQ]\d{1,2})\b\)?/g, (m: string, id: string) => (byId.has(id) ? "“" + byId.get(id)!.label.slice(0, 80) + "”" : m));
   const drafted = object.ideas
     .map((i) => ({
       ...i,

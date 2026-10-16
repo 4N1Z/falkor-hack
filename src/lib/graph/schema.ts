@@ -3,7 +3,7 @@ import type { Graph } from "falkordb";
 export const EMBEDDING_DIM = 1024; // Cohere embed-english-v3.0 (see embeddings.ts)
 
 /** Bump when indexes change so running servers re-run ensureSchema (it caches per graph). */
-export const SCHEMA_VERSION = 6;
+export const SCHEMA_VERSION = 7; // 7: ChatMessage (workspace chat mirror)
 
 // Paper.paperId is the node key: an OpenAlex work id ("W123…"), or "local:<postgres id>"
 // when the paper couldn't be matched. doi / s2Id / arxivId are lookup keys so citations
@@ -29,6 +29,8 @@ const RANGE_INDEXES: Array<[label: string, prop: string]> = [
   ["IngestStatus", "pgPaperId"],
   ["Memory", "id"],
   ["Idea", "status"],
+  ["ChatMessage", "id"],
+  ["ChatMessage", "threadId"],
 ];
 
 const STATEMENTS: string[] = [
@@ -40,12 +42,14 @@ const STATEMENTS: string[] = [
   "CREATE FULLTEXT INDEX FOR (c:Chunk) ON (c.text)",
   // Research memory (Historian): recall similar hypotheses / findings
   `CREATE VECTOR INDEX FOR (m:Memory) ON (m.embedding) OPTIONS {dimension: ${EMBEDDING_DIM}, similarityFunction: 'cosine'}`,
+  // Workspace chat mirror: questions the team asked, so agents can recall them
+  `CREATE VECTOR INDEX FOR (c:ChatMessage) ON (c.embedding) OPTIONS {dimension: ${EMBEDDING_DIM}, similarityFunction: 'cosine'}`,
 ];
 
 const isAlreadyExists = (err: unknown) =>
   err instanceof Error && /already (exists|indexed)/i.test(err.message);
 
-const VECTOR_LABELS = ["Paper", "Chunk", "Memory"];
+const VECTOR_LABELS = ["Paper", "Chunk", "Memory", "ChatMessage"];
 
 /**
  * Vector indexes built for another embedding model (e.g. the old 1536-d OpenAI vectors) are
@@ -53,10 +57,18 @@ const VECTOR_LABELS = ["Paper", "Chunk", "Memory"];
  * scripts/reembed.ts then re-embeds from the stored text.
  */
 async function dropMismatchedVectorIndexes(graph: Graph) {
-  const rows =
-    (await graph.roQuery<{ label: string; options: Record<string, { dimension?: number }> }>(
-      "CALL db.indexes() YIELD label, options RETURN label, options",
-    )).data ?? [];
+  let rows: { label: string; options: Record<string, { dimension?: number }> }[] = [];
+  try {
+    rows =
+      (await graph.roQuery<{ label: string; options: Record<string, { dimension?: number }> }>(
+        "CALL db.indexes() YIELD label, options RETURN label, options",
+      )).data ?? [];
+  } catch (err) {
+    // A graph that doesn't exist yet rejects read-only queries ("Invalid graph operation on empty
+    // key"). Nothing to drop; the CREATE INDEX statements below bring the graph into being.
+    if (err instanceof Error && /empty key/i.test(err.message)) return;
+    throw err;
+  }
   for (const r of rows) {
     const dim = r.options?.embedding?.dimension;
     if (!VECTOR_LABELS.includes(r.label) || dim === undefined || dim === EMBEDDING_DIM) continue;
