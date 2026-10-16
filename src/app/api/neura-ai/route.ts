@@ -1,7 +1,7 @@
 import { auth } from "@/auth";
 import { checkWorkspaceAccess } from "@/db/actions/authorization-check";
 import { ROUTE_NAMES, routeMessage } from "@/lib/agents/router";
-import { myTools } from "@/utils/ai/tools";
+import { researchTools } from "@/utils/ai/tools";
 import { chatModel } from "@/lib/ai/models";
 import {
   NoSuchToolError,
@@ -14,14 +14,12 @@ import {
 export const runtime = "nodejs";
 export const maxDuration = 120;
 
-const GENERAL_SYSTEM = `You are Neura AI, a researcher assistant. ALWAYS follow this exact pattern:
+const GENERAL_SYSTEM = `You are Neura AI, a research assistant inside a team's writing workspace.
 
-    1. Provide a short explanation for the query if needed since you are a research assisstant
-    2. Start with: "I'll search for research papers about [topic]."
-    3. IMMEDIATELY make a tool call using getResearchPaper
-    4. Never provide explanations without searching for papers first
-    5. Always use the research tool for any academic or scientific topics
-    `;
+- For any academic or scientific topic, call getResearchPaper before answering. It searches the team's own library (FalkorDB) first, then OpenAlex.
+- Results with source "team" are papers a collaborator already has: name whose library they come from and quote the passage when it helps. Results with source "openalex" are not in the library yet; say so.
+- Keep explanations short and concrete. Never invent papers, authors or years; only cite what the tool returned.
+- For writing help with no research question, answer directly without searching.`;
 
 const errorMessage = (error: unknown) => {
   if (NoSuchToolError.isInstance(error)) return "The model tried to call an unknown tool.";
@@ -71,7 +69,8 @@ export async function POST(req: Request) {
     system: GENERAL_SYSTEM,
     messages,
     maxSteps: 5,
-    tools: myTools,
+    // Scoped per request so the search can read this workspace's graph
+    tools: researchTools(workspaceId),
     temperature: 0.4,
   });
   return result.toDataStreamResponse({ getErrorMessage: errorMessage });

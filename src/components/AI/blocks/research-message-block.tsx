@@ -12,10 +12,14 @@ interface ResearchPaper {
   paperId: string;
   title: string;
   authors: Array<{ name: string }>;
-  year: number;
+  year: number | null;
   externalIds?: {
     DOI?: string;
   };
+  /** "team" = a collaborator's library (FalkorDB), "openalex" = wider literature */
+  source?: "team" | "openalex";
+  owners?: string[];
+  passage?: string;
 }
 
 interface ResearchToolResponse {
@@ -37,11 +41,14 @@ const PaperCard = ({ paper }: { paper: ResearchPaper }) => {
                 rel="noopener noreferrer"
                 onClick={(e) => e.stopPropagation()}
               >
-                {paper.authors[0].name.split(" ").pop()}…, {paper.year}
+                {paper.authors[0]?.name.split(" ").pop() ?? paper.title.split(" ").slice(0, 3).join(" ")}…{paper.year ? `, ${paper.year}` : ""}
               </a>
             ) : (
               paper.title
             )}
+            {paper.source === "team" && paper.owners?.length ? (
+              <span className="ml-1.5 text-muted-foreground no-underline">· {paper.owners.join(" & ")}&apos;s library</span>
+            ) : null}
           </div>
         </TooltipTrigger>
         <TooltipContent
@@ -65,10 +72,11 @@ const PaperCard = ({ paper }: { paper: ResearchPaper }) => {
                   {paper.authors.map((a) => a.name).join(", ")}
                 </span>
               </div>
+              {paper.passage && <p className="text-xs italic text-muted-foreground line-clamp-3">“{paper.passage}”</p>}
               <div className="flex gap-2 ">
                 <span>
                   <span className="font-medium text-xs">Year:</span>{" "}
-                  {paper.year}
+                  {paper.year ?? "n.d."}
                 </span>
                 {paper.externalIds?.DOI && (
                   <a
@@ -139,7 +147,7 @@ const ResearchMessage = ({ message }: { message: Message }) => {
                       <line x1="12" y1="8" x2="12" y2="12" />
                       <line x1="12" y1="16" x2="12.01" y2="16" />
                     </svg>
-                    Sorry for the inconvenience 😭! Sometimes even I too fail to give responses. You can ask me again!.
+                    {result.message ?? "No papers found. Try a shorter phrase or a different term."}
                   </div>
                 );
               }

@@ -8,12 +8,21 @@ import { NextResponse } from "next/server";
 export const runtime = "nodejs";
 export const maxDuration = 120;
 
-/** GET /api/agents/next-steps?workspaceId= — ideas the team accepted (the research plan). */
+const IDEA_STATUSES = ["accepted", "suggested", "rejected"] as const;
+
+/**
+ * GET /api/agents/next-steps?workspaceId=&statuses=accepted,suggested
+ * Ideas by status: the research plan (accepted) by default; `suggested` adds earlier
+ * proposals nobody has decided on yet, so the Notebook opens with something to act on.
+ */
 export async function GET(req: Request) {
-  const access = await requireWorkspaceMember(new URL(req.url).searchParams.get("workspaceId"));
+  const sp = new URL(req.url).searchParams;
+  const access = await requireWorkspaceMember(sp.get("workspaceId"));
   if ("error" in access) return access.error;
+  const wanted = (sp.get("statuses") ?? "accepted").split(",").filter((s): s is (typeof IDEA_STATUSES)[number] => (IDEA_STATUSES as readonly string[]).includes(s));
+  const statuses = wanted.length ? wanted : ["accepted"];
   const graph = await getWorkspaceGraph(access.workspaceId);
-  const ideas = (await graph.roQuery(RECENT_IDEAS, { params: { statuses: ["accepted"], limit: 30 } as never })).data ?? [];
+  const ideas = (await graph.roQuery(RECENT_IDEAS, { params: { statuses, limit: 40 } as never })).data ?? [];
   return NextResponse.json({ ideas });
 }
 

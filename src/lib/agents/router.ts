@@ -3,6 +3,7 @@
 // job; the chat just becomes a front door to them.
 
 import { citationLabel } from "../citations";
+import { searchWorks } from "../graph/openalex";
 import { searchTeamLibrary } from "../graph/team-search";
 import { classify } from "../jev";
 import { runCitationCheck } from "./citation-checker";
@@ -21,8 +22,9 @@ const ROUTES: Record<Route, string> = {
   historian: "Recalling or recording the team's hypotheses, findings, past decisions or dead ends",
   synthesis: "Writing or drafting a literature review, survey or related-work section from the team's papers",
   scout_watcher: "Finding new or recent papers published since the team's library was built, or what new work cites the team's papers",
-  team_library: "Questions about which papers the team or a collaborator has, or what the team's papers say about a topic",
-  general: "Anything else: explanations, general questions, writing help, or searching papers outside the team's library",
+  // Paper searches land here (not in general): the team's graph is searched first, then OpenAlex.
+  team_library: "Searching or finding papers on a topic or by name, asking which papers the team or a collaborator has, or what the team's papers say about a topic",
+  general: "Anything else: explanations of concepts, general questions, or help with writing and wording",
 };
 
 export interface RoutedBrief {
@@ -95,7 +97,15 @@ export async function routeMessage(input: {
     });
     const r = (named.length ? found.filter((p) => p.owners.some((o) => named.includes(o))) : found).slice(0, 6);
     for (const p of r) lines.push(`- ${citationLabel(p)} “${p.title}” — in ${p.owners.join(" & ")}'s library${p.passage ? `. Passage: "${p.passage.text.replace(/\s+/g, " ").slice(0, 200)}"` : ""}`);
-    if (!lines.length) lines.push("No papers in the team's library match.");
+    if (!lines.length) {
+      // Nothing in the graph: look at the wider literature so a search never comes back empty-handed
+      const wider = await searchWorks(input.message.split(/\s+/).slice(0, 12).join(" "), 5).catch(() => []);
+      lines.push(named.length ? `${named.join(" & ")} has no papers on this in the team library.` : "Nothing in the team's library matches.");
+      if (wider.length) {
+        lines.push("From OpenAlex (not in the team library yet; the user can add any of them from Research papers → Search papers):");
+        for (const w of wider) lines.push(`- ${citationLabel(w)} “${w.title}”${w.venue ? `, ${w.venue}` : ""}, ${w.citationCount.toLocaleString()} citations`);
+      }
+    }
   }
 
   return { route, confidence, brief: lines.join("\n") };
