@@ -98,6 +98,10 @@ export interface SuggestionItem {
   description: string;
   icon: ReactNode;
   searchTerms?: string[];
+  /** "research" items are listed first in their own group */
+  group?: "research" | "basic";
+  /** Icon tile style, matching the landing page plugin tiles */
+  tone?: "normal" | "blue" | "yellow";
   command?: (props: { editor: Editor; range: Range }) => void;
 }
 

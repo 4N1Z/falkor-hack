@@ -42,7 +42,7 @@ const MAX_CANDIDATES = 12;
 /** Overlapping papers considered before the topical-fit check */
 const MAX_POOL = 40;
 /** Max cosine distance to the nearest team paper (vector index) to count as on-topic */
-const NEAR = 0.4;
+const NEAR = 0.45; // Cohere: on-topic citing papers measured 0.21–0.39, off-topic ≥ 0.55
 /** JEV probability above which a paper is flagged as challenging the team's work */
 const CHALLENGE = 0.7;
 
@@ -104,7 +104,7 @@ export async function runScoutWatcher(input: { workspaceId: string; userId: stri
 
   // 3. Topical fit from the graph's vector index: distance to the nearest team paper.
   //    Citing two team papers in passing (e.g. a chatbot-ethics essay citing RAG) isn't enough.
-  const vectors = await embedTexts(pool.map(({ w }) => `${w.title}\n${w.abstract ?? ""}`.slice(0, 2000)));
+  const vectors = await embedTexts(pool.map(({ w }) => `${w.title}\n${w.abstract ?? ""}`.slice(0, 2000)), "document");
   const nearest = await run.step(
     "graph.nearestTeamPaper",
     () =>

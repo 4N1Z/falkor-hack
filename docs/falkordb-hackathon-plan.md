@@ -15,7 +15,7 @@
 | 5. Depth agents (Historian, Next-Step, Ghost Writer, Router) | ✅ Done (Notebook, /hypothesis, ghost text with Tab, JEV router: 6/6 intents) |
 | 6. Research Graph page | ✅ Done (@falkordb/canvas: team map, paper focus, agent provenance tree + trace panel) |
 | 7. Stretch (Synthesis, Scout Watcher, MCP) | ✅ Done (CDLP-grouped review drafts, new-paper watcher with vector-fit + JEV contradiction flag, read-only MCP server) |
-| 8. Submission (README, video, blog) | ⬜ |
+| 8. Submission (README, video, blog) | 🟡 Docs done (README, demo script, blog draft); video, blog publish and submission pending |
 
 **Platform upgrade (branch `chore/next-16`):**
 - Next 14.2.15 → **16.4.1** (Turbopack) and React 18 → **19**. next-auth beta.25 → beta.32. ESLint 8 → 9 with flat config (`eslint.config.mjs`).
@@ -237,8 +237,8 @@ Phases 1–4 are the **MVP**. Phases 5–7 add depth and can be cut. Always leav
 - ✅ JEV and the fallback both score sensibly.
 - ✅ The draft creates `Claim` nodes with resolved citations.
 - ⬜ Two browser sessions show both user IDs.
-- ⬜ The slash menu works in the browser.
-- The last two need someone signed in to the app.
+- ✅ The slash menu works in the browser (verified in Phase 2.5).
+- The two-session check needs two signed-in browser profiles.
 
 > ⚠️ **Second FalkorDB engine quirk (Oct 15):** `MATCH … DELETE r WITH count(*) AS x UNWIND $rows … MERGE …` creates **nothing**, even though each half works on its own and `count(*)` returns a row. Keep deletes and inserts in separate statements (`DELETE_CLAIM_CITES` and then `INSERT_CLAIM_CITES`).
 
@@ -455,6 +455,28 @@ Added on Oct 15 at the user's request. The sidebar "Research papers" dialog was 
    - **Tools (read-only, parameterised Cypher):** `list_workspaces`, `search_team_library`, `find_papers`, `paper_neighbourhood`, `citation_path` (`allShortestPaths` over CITES), `research_frontier` (gaps, bridges, PageRank) and `team_memory`.
    - **Verified with curl:** 401 without a token, all tools return data, and a bad `workspaceId` is rejected.
    - **Use it with:** `claude mcp add --transport http neura http://localhost:3000/api/mcp --header "Authorization: Bearer $MCP_TOKEN"`
+
+4. **Evidence map** (`evidence-map-sheet.tsx`, "Evidence map" in the editor header, `GET /api/graph/[workspaceId]/evidence?fileId=`), drawn on the shared `FalkorCanvas` (`src/components/graph/falkor-canvas.tsx`):
+   - **What it draws:** the draft's argument as a graph. Claims (squares, coloured by Checker verdict) link to the papers they cite (circles, coloured by owner). Link colour is the stored `SUPPORTED_BY` level, and dashed links are `SUGGESTS_CITE` proposals. A tree layout is the default; "show citations between the papers" switches to force.
+   - **The side panel lists:**
+     - the problems (contradicted or unsupported claims, and needs-citation claims with the best suggestion and whose library it's from);
+     - load-bearing papers that back several claims;
+     - claims backed by a single paper;
+     - whose reading the draft actually uses.
+
+     Clicking a claim jumps to the sentence.
+   - **Checker changes:** it now stores its verdict on each `Claim` (`SET_CLAIM_VERDICT`), and stores its fix for an uncited claim as a `SUGGESTS_CITE` proposal (`UPSERT_CHECKER_SUGGESTION`, which never overrides a person's decision). For claims checked earlier, the route derives the verdict from the stored support edges.
+   - **Verified:** the queries return the demo draft's 6 claims, 3 citations with support levels and 5 suggestions across 3 owners. ⬜ Not yet viewed in the browser.
+
+**Model providers switched (Oct 16).** OpenAI ran out of credits, and the user chose no OpenAI and no Gemini.
+- **Text generation:** **DeepSeek V4** through `@ai-sdk/deepseek@0.2.16`, the line that works with AI SDK v4. Every call goes through `chatModel()` in `src/lib/ai/models.ts`. `DEEPSEEK_MODEL` defaults to `deepseek-v4-flash`; `deepseek-v4-pro` also works.
+- **Embeddings:** **Cohere `embed-english-v3.0`** (1024-d) through `@ai-sdk/cohere@1.2.10`. Text stored in the graph uses the `search_document` input type and searches use `search_query`.
+- **Why not `embed-v4.0`:** this provider version can't set its output dimension.
+- **Migration:** `ensureSchema` (SCHEMA_VERSION 6) detects vector indexes of the wrong dimension, drops them along with their stale vectors, and recreates them. `scripts/reembed.ts <ws|--all>` re-embeds every Paper, Chunk and Memory from the stored text. It was tested end-to-end on a local model first: 911 papers and 1,397 passages in about 4 minutes.
+- ✅ **Keys added and the demo graph re-embedded** with Cohere: 911 papers in 15 s, 1,397 passages in 22 s.
+- **DeepSeek V4 thinks by default**, and the reasoning tokens count against `max_tokens`. The 40-token Ghost Writer budget came back empty, and a two-field object spent 345 tokens thinking. `src/lib/ai/models.ts` injects `thinking: {type: "disabled"}` into every request (the v4 AI SDK provider has no option for it). `DEEPSEEK_THINKING=1` turns it back on. Effect: Next-Step 20 s → 5 s, Synthesis 74 s → 11.5 s, Ghost Writer now returns text.
+- **Thresholds re-measured on Cohere vectors.** Memory paraphrases sit at 0.16–0.27 distance and unrelated text at 0.48+, so `SAME_IDEA_DISTANCE` 0.32 and the router recall at 0.55 stay. On-topic citing papers sit at 0.21–0.39 from the nearest team paper and off-topic ones at 0.55+, so Scout Watcher `NEAR` went 0.4 → 0.45.
+- **Verified on the new stack:** Cite Scout (HippoRAG from Bea's library at 100%, 1.4 s), Citation Checker (same 6 verdicts, 1.2 s), Next-Step, Scout Watcher (same top result), Synthesis (prose grounded, citations attached), Ghost Writer.
 
 **Also fixed in Phase 7:**
 - **Cross-document autosave:** with client-side navigation, the previous editor's debounced update was saved into the newly opened file. `headless/Editore.tsx` now tags each editor instance with its `fileId` and drops updates from a mismatched instance.

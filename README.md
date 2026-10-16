@@ -43,9 +43,9 @@ Most "chat with your papers" tools use vector search over chunks. That answers *
  │ each agent: one job, fixed parameterised Cypher templates, AgentRun trace        │
  └───────┬────────────────────────────┬────────────────────────────┬────────────────┘
          ▼                            ▼                            ▼
-   FalkorDB  ws:{workspaceId}     JEV (TypeSafe System One)    OpenAI
-   one graph per workspace,       typed relevance / support /  embeddings (1536-d),
-   shared by every agent          routing judgements, ~100ms   prose where text is needed
+   FalkorDB  ws:{workspaceId}     JEV (TypeSafe System One)    DeepSeek V4 (prose) +
+   one graph per workspace,       typed relevance / support /  Cohere embeddings (1024-d,
+   shared by every agent          routing judgements, ~100ms   query vs document types)
          ▲
    Librarian pipeline: OpenAlex metadata + references + authors + concepts,
    PDF/DOCX full text → passages → embeddings (runs in `after()` on import)
@@ -73,7 +73,7 @@ The exact Cypher is in [`src/lib/graph/queries.ts`](src/lib/graph/queries.ts) an
 
 **FalkorDB features used:**
 - **Multi-graph tenancy:** one graph per workspace.
-- **Vector indexes:** `Paper`, `Chunk` and `Memory`, each 1536-d with cosine similarity.
+- **Vector indexes:** `Paper`, `Chunk` and `Memory`, each 1024-d (Cohere `embed-english-v3.0`) with cosine similarity.
 - **Full-text indexes:** `Paper` title and abstract, and `Chunk` text.
 - **Range indexes.**
 - **Graph algorithms:** `algo.pageRank`, `algo.labelPropagation` (CDLP) and `allShortestPaths`.
@@ -117,7 +117,7 @@ The exact Cypher is in [`src/lib/graph/queries.ts`](src/lib/graph/queries.ts) an
 
 It returns many named questions in one ~100–500 ms request, which suits the per-keystroke decisions an editor needs. Scoring 8 citation candidates is one call, not 8 LLM calls. The agents use it for every *judgement*, and use an LLM only where prose is needed.
 
-Every helper in [`src/lib/jev.ts`](src/lib/jev.ts) has a fallback (embeddings, or a small structured `gpt-4o-mini` call), so the product never depends on one vendor.
+Every helper in [`src/lib/jev.ts`](src/lib/jev.ts) has a fallback (embeddings, or a small structured DeepSeek call), so the product never depends on one vendor.
 
 ## Running it locally
 
@@ -125,12 +125,12 @@ Every helper in [`src/lib/jev.ts`](src/lib/jev.ts) has a fallback (embeddings, o
 - Node 20+ and pnpm.
 - Docker (for FalkorDB).
 - A Postgres database (Supabase works).
-- An OpenAI API key.
+- A DeepSeek API key (text generation, `deepseek-v4-flash`) and a Cohere API key (embeddings).
 - Optional: a TypeSafe (JEV) key.
 
 ```bash
 pnpm install
-cp .env.example .env.local        # fill in DATABASE_URL, AUTH_*, OPENAI_API_KEY, FALKORDB_URL, …
+cp .env.example .env.local        # fill in DATABASE_URL, AUTH_*, DEEPSEEK_API_KEY, COHERE_API_KEY, FALKORDB_URL, …
 docker compose up -d falkordb      # FalkorDB on :6379, FalkorDB Browser on http://localhost:3001
 pnpm push                          # create the Postgres tables
 pnpm dev:all                       # Next.js on :3000 + the Hocuspocus collaboration server on :1414
@@ -148,6 +148,7 @@ run scripts/seed-graph.ts    <workspaceId>     # demo collaborators Bea and Chen
 run scripts/seed-fulltext.ts <workspaceId>     # full-text passages for the seeded papers (arXiv PDFs)
 run scripts/seed-draft.ts    <workspaceId>     # "GraphRAG literature review (draft)" in a Demo folder
 run scripts/graph-report.ts  <workspaceId>     # what is indexed in FalkorDB, cross-checked with Postgres
+run scripts/reembed.ts       <workspaceId|--all> # re-embed papers, passages and notes after changing the embedding model
 run scripts/test-jev.ts [--fallback]           # sanity-check the relevance layer
 ```
 

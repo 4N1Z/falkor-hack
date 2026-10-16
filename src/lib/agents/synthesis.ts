@@ -5,7 +5,7 @@
 // full-text passages. The output is a separate draft file the team edits — never their own text.
 
 import { randomUUID } from "crypto";
-import { openai } from "@ai-sdk/openai";
+import { chatModel } from "@/lib/ai/models";
 import { generateObject } from "ai";
 import { eq } from "drizzle-orm";
 import { z } from "zod";
@@ -160,7 +160,7 @@ export async function runSynthesis(input: {
     "llm.outline",
     () =>
       generateObject({
-        model: openai("gpt-4o-mini"),
+        model: chatModel(),
         temperature: 0.2,
         schema: z.object({
           title: z.string().describe("Title of the review, max 10 words"),
@@ -219,7 +219,7 @@ export async function runSynthesis(input: {
             )
             .join("\n\n");
           const { object } = await generateObject({
-            model: openai("gpt-4o-mini"),
+            model: chatModel(),
             temperature: 0.3,
             schema: z.object({
               paragraphs: z

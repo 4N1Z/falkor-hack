@@ -317,7 +317,7 @@ export async function ingestLibrary(
     })
   ).data ?? [];
   if (missing.length) {
-    const vectors = await embedTexts(missing.map((p) => paperEmbeddingText(p.title, p.abstract)));
+    const vectors = await embedTexts(missing.map((p) => paperEmbeddingText(p.title, p.abstract)), "document");
     await writeRows(
       graph,
       SET_EMBEDDINGS,

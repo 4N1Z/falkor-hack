@@ -8,6 +8,7 @@ import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle, SheetTr
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useAppState } from "@/lib/providers/state-providers";
 import { cn } from "@/lib/utils";
+import { toolbarButton } from "./toolbar-button";
 import { BookOpen, Check, Lightbulb, Loader2, X } from "lucide-react";
 import { useCallback, useEffect, useState } from "react";
 import { toast } from "sonner";
@@ -95,8 +96,8 @@ export function NotebookSheet({ fileId }: { fileId: string }) {
       }}
     >
       <SheetTrigger asChild>
-        <Button size={null} className={cn("text-violet-800 text-sm bg-violet-100 rounded-lg px-2 p-1 hover:bg-violet-200 transition-colors", press)}>
-          <BookOpen className="mr-1 size-3.5" /> Notebook
+        <Button size={null} variant="none" className={toolbarButton}>
+          <BookOpen /> Notebook
         </Button>
       </SheetTrigger>
       <SheetContent side="right" className="w-full sm:max-w-md flex flex-col gap-3 font-sans">

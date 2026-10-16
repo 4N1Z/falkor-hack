@@ -1,7 +1,7 @@
 'use server';
 
 import { auth } from "@/auth";
-import { openai } from "@ai-sdk/openai";
+import { chatModel } from "@/lib/ai/models";
 import { generateObject, generateText } from "ai";
 import { NextResponse } from "next/server";
 import { z } from "zod";
@@ -29,7 +29,7 @@ export async function getSearchQuery(text: string) {
     Return only the search query, no explanations.`;
 
   const { object : searchQuery } = await generateObject({
-    model: openai("gpt-4o-mini"),
+    model: chatModel(),
     temperature: 0.3,
     schema: z.object({
       searchQuery:z.string().describe("3 or 4 Words to search in semantic scholar")

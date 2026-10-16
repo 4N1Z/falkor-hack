@@ -9,6 +9,7 @@ import {
 } from "@/components/ui/dialog";
 import { researchPaperLogo } from "@/lib/dashboard-logos";
 import { cn } from "@/lib/utils";
+import { sidebarCardIconStyle, sidebarCardStyle } from "@/lib/styles";
 
 interface ResearchPaperProps {
   myWorkspaceId: string;
@@ -18,13 +19,8 @@ export default function ResearchPaperMain({ myWorkspaceId }: ResearchPaperProps)
   return (
     <Dialog>
       <DialogTrigger className="w-full">
-        <div
-          className={cn(
-            "flex gap-2 justify-start items-center p-1.5 border border-accent bg-white",
-            "transition-[background-color,transform] duration-150 ease-out hover:bg-accent active:scale-[0.98] rounded-md"
-          )}
-        >
-          <div className="bg-black p-2 text-amber-500 rounded-sm">{researchPaperLogo}</div>
+        <div className={sidebarCardStyle}>
+          <div className={cn(sidebarCardIconStyle, "text-amber-500")}>{researchPaperLogo}</div>
           <p className="text-md font-medium">Research papers</p>
         </div>
       </DialogTrigger>

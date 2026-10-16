@@ -4,7 +4,7 @@
 // When JEV is unavailable (no key / error), each helper falls back to embeddings or a
 // small structured LLM call so the product never depends on one vendor.
 
-import { openai } from "@ai-sdk/openai";
+import { chatModel } from "@/lib/ai/models";
 import { TypeSafeClient, choice, noul, score } from "@typesafe-ai/sdk";
 import { generateObject } from "ai";
 import { z } from "zod";
@@ -79,7 +79,7 @@ async function withFallback<T>(
   return { result: await viaFallback(), source: "fallback", ms: Date.now() - started };
 }
 
-const fallbackModel = () => openai("gpt-4o-mini");
+const fallbackModel = () => chatModel();
 
 /** Does this sentence make a claim that should carry a citation? (gate before searching) */
 export function needsCitation(sentence: string, context?: string) {

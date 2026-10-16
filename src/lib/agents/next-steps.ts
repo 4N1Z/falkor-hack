@@ -5,7 +5,7 @@
 // novelty and feasibility in one call, and ideas resembling a dropped hypothesis are flagged.
 
 import { randomUUID } from "crypto";
-import { openai } from "@ai-sdk/openai";
+import { chatModel } from "@/lib/ai/models";
 import { generateObject } from "ai";
 import { z } from "zod";
 import { embedTexts } from "../graph/embeddings";
@@ -142,7 +142,7 @@ export async function runNextSteps(input: { workspaceId: string; userId: string;
     "llm.draftIdeas",
     () =>
       generateObject({
-        model: openai("gpt-4o-mini"),
+        model: chatModel(),
         temperature: 0.4,
         schema: z.object({
           ideas: z

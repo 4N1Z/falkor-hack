@@ -7,6 +7,7 @@ import { Input } from "@/components/ui/input";
 import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle, SheetTrigger } from "@/components/ui/sheet";
 import { useAppState } from "@/lib/providers/state-providers";
 import { cn } from "@/lib/utils";
+import { toolbarButton } from "./toolbar-button";
 import { ArrowRight, Layers, Loader2 } from "lucide-react";
 import Link from "next/link";
 import { useState } from "react";
@@ -54,8 +55,8 @@ export function SynthesisSheet({ fileId }: { fileId: string }) {
   return (
     <Sheet open={open} onOpenChange={setOpen}>
       <SheetTrigger asChild>
-        <Button size={null} className={cn("text-emerald-800 text-sm bg-emerald-100 rounded-lg px-2 p-1 hover:bg-emerald-200 transition-colors", press)}>
-          <Layers className="mr-1 size-3.5" /> Draft review
+        <Button size={null} variant="none" className={toolbarButton}>
+          <Layers /> Draft review
         </Button>
       </SheetTrigger>
       <SheetContent side="right" className="w-full sm:max-w-md flex flex-col gap-3 font-sans">

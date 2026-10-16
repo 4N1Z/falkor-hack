@@ -5,7 +5,13 @@
 
 import { citationLabel } from "../citations";
 import { embedText, embedTexts } from "../graph/embeddings";
-import { BEST_PASSAGES_IN_PAPERS, DOCUMENT_CLAIMS, UPSERT_SUPPORT_VERDICT } from "../graph/queries";
+import {
+  BEST_PASSAGES_IN_PAPERS,
+  DOCUMENT_CLAIMS,
+  SET_CLAIM_VERDICT,
+  UPSERT_CHECKER_SUGGESTION,
+  UPSERT_SUPPORT_VERDICT,
+} from "../graph/queries";
 import { searchTeamLibrary } from "../graph/team-search";
 import { needsCitation, scoreSupport, type SupportLevel } from "../jev";
 import { startRun, type AgentResult } from "./base";
@@ -186,6 +192,15 @@ export async function runCitationCheck(input: { workspaceId: string; fileId: str
         for (const s of c.sources) {
           await run.graph.query(UPSERT_SUPPORT_VERDICT, {
             params: { claimId: c.claimId, paperId: s.paperId, level: s.level, score: s.score, confidence: s.confidence, runId: run.runId, at } as never,
+          });
+        }
+        // The verdict lives on the claim too, so the evidence map can draw it without re-checking
+        await run.graph.query(SET_CLAIM_VERDICT, {
+          params: { claimId: c.claimId, verdict: c.verdict, why: c.why, at, runId: run.runId } as never,
+        });
+        if (c.suggestion) {
+          await run.graph.query(UPSERT_CHECKER_SUGGESTION, {
+            params: { claimId: c.claimId, paperId: c.suggestion.paperId, runId: run.runId, at } as never,
           });
         }
       }

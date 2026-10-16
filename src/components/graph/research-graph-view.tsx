@@ -1,7 +1,8 @@
 "use client";
 
 import type { AgentRunView, GraphView, GraphViewNode, GraphViewResponse } from "@/app/api/graph/[workspaceId]/route";
-import type { FalkorDBCanvas, Data, GraphNode, LayoutMode } from "@falkordb/canvas";
+import type { LayoutMode } from "@falkordb/canvas";
+import { FalkorCanvas, type CanvasLink, type CanvasNode } from "./falkor-canvas";
 import { cn } from "@/lib/utils";
 import { ArrowLeft, Loader2 } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
@@ -203,7 +204,7 @@ export default function ResearchGraphView({ workspaceId }: { workspaceId: string
   );
 }
 
-/** Imperative wrapper around the <falkordb-canvas> web component (browser-only). */
+/** Map the research-graph view model onto the shared FalkorDB canvas. */
 function Canvas({
   nodes,
   links,
@@ -219,115 +220,45 @@ function Canvas({
   selectedId: string | null;
   onSelect: (n: GraphViewNode | null) => void;
 }) {
-  const host = useRef<HTMLDivElement>(null);
-  const canvas = useRef<FalkorDBCanvas | null>(null);
-  const byNum = useRef(new Map<number, GraphViewNode>());
-  const selectedRef = useRef<string | null>(null);
-  selectedRef.current = selectedId;
-
-  // Mount the custom element once
-  useEffect(() => {
-    let cancelled = false;
-    (async () => {
-      await import("@falkordb/canvas");
-      if (cancelled || !host.current) return;
-      const el = document.createElement("falkordb-canvas") as FalkorDBCanvas;
-      el.style.width = "100%";
-      el.style.height = "100%";
-      host.current.appendChild(el);
-      canvas.current = el;
-      const { width, height } = host.current.getBoundingClientRect();
-      el.setConfig({
-        width,
-        height,
-        backgroundColor: "#FFFFFF",
-        foregroundColor: "#0F172A",
-        captionsKeys: ["caption"],
-        nodeStyle: { fontFamily: "Inter, system-ui, sans-serif" },
-        interaction: { zoomToFitPadding: 0.15 },
-        isNodeSelected: (n: GraphNode) => byNum.current.get(n.id)?.id === selectedRef.current,
-        eventHandlers: {
-          onNodeClick: (n: GraphNode) => onSelect(byNum.current.get(n.id) ?? null),
-          onBackgroundClick: () => onSelect(null),
-        },
-      });
-    })();
-    const ro = new ResizeObserver(([e]) => {
-      canvas.current?.setWidth(e.contentRect.width);
-      canvas.current?.setHeight(e.contentRect.height);
-    });
-    if (host.current) ro.observe(host.current);
-    return () => {
-      cancelled = true;
-      ro.disconnect();
-      canvas.current?.remove();
-      canvas.current = null;
-    };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
-
-  // Push data whenever the view changes (wait for the element to mount)
-  useEffect(() => {
-    let tries = 0;
-    const push = () => {
-      const el = canvas.current;
-      if (!el) {
-        if (tries++ < 40) setTimeout(push, 50);
-        return;
-      }
-      const num = new Map(nodes.map((n, i) => [n.id, i + 1]));
-      byNum.current = new Map(nodes.map((n, i) => [i + 1, n]));
-      const data: Data = {
-        nodes: nodes.map((n, i) => ({
-          id: i + 1,
-          labels: [n.kind],
-          visible: true,
-          color:
-            n.kind === "user" || n.kind === "paper"
-              ? ownerColor.get(n.kind === "user" ? n.id : n.owners![0]) ?? "#334155"
-              : n.kind === "frontier"
-                ? FRONTIER
-                : n.kind === "idea"
-                  ? "#f59e0b"
-                  : "#8b5cf6",
-          size: n.center ? 16 : n.kind === "user" ? 14 : n.kind === "paper" ? 11 : n.kind === "frontier" ? 7 + (n.bridges ?? 0) : 9,
-          shape: n.kind === "user" ? "square" : "circle",
-          data: { caption: shortCaption(n), key: n.id },
-        })),
-        links: links
-          .filter((l) => num.has(l.source) && num.has(l.target))
-          .map((l, i) => ({
-            id: i + 1,
-            relationship: "",
-            source: num.get(l.source)!,
-            target: num.get(l.target)!,
-            visible: true,
-            width: l.kind === "cites" ? 1.2 : 0.8,
-            color: l.kind === "cites" ? "#64748b" : l.kind === "imported" ? "#cbd5e1" : l.kind === "grounded" ? "#f59e0b" : "#a78bfa",
-            data: { kind: l.kind, suggested: !!l.suggested },
-          })),
-      };
-      el.setConfig({
-        layoutMode: layout,
-        layoutOptions:
-          layout === "tree"
-            ? { tree: { direction: "lr", levelDistance: 170, nodeSpacing: 70 } }
-            : layout === "radial"
-              ? { radial: { direction: "out", levelDistance: 150 } }
-              : {},
-        linkLineDash: (l) => ((l.data as { suggested?: boolean })?.suggested ? [4, 3] : []),
-      });
-      el.setData(data);
-    };
-    push();
-  }, [nodes, links, layout, ownerColor]);
-
-  // Re-render selection outline
-  useEffect(() => {
-    canvas.current?.refresh();
-  }, [selectedId]);
-
-  return <div ref={host} className="absolute inset-0" />;
+  const byId = useMemo(() => new Map(nodes.map((n) => [n.id, n])), [nodes]);
+  const canvasNodes = useMemo<CanvasNode[]>(
+    () =>
+      nodes.map((n) => ({
+        id: n.id,
+        caption: shortCaption(n),
+        color:
+          n.kind === "user" || n.kind === "paper"
+            ? ownerColor.get(n.kind === "user" ? n.id : n.owners![0]) ?? "#334155"
+            : n.kind === "frontier"
+              ? FRONTIER
+              : n.kind === "idea"
+                ? "#f59e0b"
+                : "#8b5cf6",
+        size: n.center ? 16 : n.kind === "user" ? 14 : n.kind === "paper" ? 11 : n.kind === "frontier" ? 7 + (n.bridges ?? 0) : 9,
+        shape: n.kind === "user" ? "square" : "circle",
+      })),
+    [nodes, ownerColor],
+  );
+  const canvasLinks = useMemo<CanvasLink[]>(
+    () =>
+      links.map((l) => ({
+        source: l.source,
+        target: l.target,
+        width: l.kind === "cites" ? 1.2 : 0.8,
+        color: l.kind === "cites" ? "#64748b" : l.kind === "imported" ? "#cbd5e1" : l.kind === "grounded" ? "#f59e0b" : "#a78bfa",
+        dashed: !!l.suggested,
+      })),
+    [links],
+  );
+  return (
+    <FalkorCanvas
+      nodes={canvasNodes}
+      links={canvasLinks}
+      layout={layout}
+      selectedId={selectedId}
+      onSelect={(id) => onSelect(id ? byId.get(id) ?? null : null)}
+    />
+  );
 }
 
 function Legend({ ownerColor, userName }: { ownerColor: Map<string, string>; userName: (id: string) => string }) {

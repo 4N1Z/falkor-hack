@@ -12,6 +12,7 @@ import { ScrollArea } from "@/components/ui/scroll-area";
 import FoldersDropdownList from "./folders-list";
 import EnableAIWorkspace from "./enable-ai-workspace";
 import ResearchPaperMain from "./researchpaper/researchPaper-main";
+import ResearchGraphCard from "./research-graph-card";
 import UserProfile from "./user-profile";
 import { redirect } from "next/navigation";
 import { auth } from "@/auth";
@@ -105,6 +106,12 @@ export default async function Sidebar({ params, className }: SidebarProps) {
           />
           <NativeNavigation myWorkspaceId={params.workspaceId} userId={userData.id!} />
           <EnableAIWorkspace myWorkspaceId={params.workspaceId} />
+
+          {/* Research: library dialog + graph page, same card design */}
+          <div className="space-y-2">
+            <ResearchPaperMain myWorkspaceId={params.workspaceId} />
+            <ResearchGraphCard myWorkspaceId={params.workspaceId} />
+          </div>
         </div>
 
         {/* <TestBtn/> */}
@@ -118,11 +125,6 @@ export default async function Sidebar({ params, className }: SidebarProps) {
                 workspaceFolders={folderData || []}
                 workspaceId={params.workspaceId}
               />
-
-              {/* Research Papers Section */}
-              <div className="pt-4 border-t">
-                <ResearchPaperMain myWorkspaceId={params.workspaceId} />
-              </div>
             </div>
 
             <div

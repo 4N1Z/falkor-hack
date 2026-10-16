@@ -75,7 +75,8 @@ export async function remember(input: {
     classifiedBy = c.source;
   }
 
-  const v = await embedText(text);
+  // Stored on the note, so it's embedded as a document (recall embeds the query side)
+  const v = await embedText(text, "document");
   // Link to the team papers it's most about (top 3 by meaning)
   const about = await run.step("graph.searchTeamLibrary", () =>
     searchTeamLibrary(input.workspaceId, text, { limit: 3, vector: v }),

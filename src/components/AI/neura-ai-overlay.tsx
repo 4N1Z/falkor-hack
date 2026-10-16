@@ -55,7 +55,7 @@ export default function NeuraAIOverlay({
       >
         <NeuraAIChat
           id="floating-chat"
-          modelId="gpt-4o-mini"
+          modelId="deepseek-v4-flash"
           onClose={onClose}
         />
       </motion.div>

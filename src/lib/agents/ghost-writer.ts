@@ -3,7 +3,7 @@
 // Runs often, so it records no AgentRun (that would flood the graph); it's gated by JEV so it
 // only speaks when the author is mid-thought.
 
-import { openai } from "@ai-sdk/openai";
+import { chatModel } from "@/lib/ai/models";
 import { generateText } from "ai";
 import { searchTeamLibrary } from "../graph/team-search";
 import { worthContinuing } from "../jev";
@@ -33,7 +33,7 @@ export async function runGhostWriter(input: { workspaceId: string; textBeforeCur
     .map((s, i) => `[${i + 1}] ${s.title}: ${(s.passage?.text ?? s.abstract ?? "").replace(/\s+/g, " ").slice(0, 500)}`)
     .join("\n");
   const { text } = await generateText({
-    model: openai("gpt-4o-mini"),
+    model: chatModel(),
     temperature: 0.3,
     maxTokens: 40,
     system:

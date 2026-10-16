@@ -2,7 +2,7 @@ import { auth } from "@/auth";
 import { checkWorkspaceAccess } from "@/db/actions/authorization-check";
 import { ROUTE_NAMES, routeMessage } from "@/lib/agents/router";
 import { myTools } from "@/utils/ai/tools";
-import { openai } from "@ai-sdk/openai";
+import { chatModel } from "@/lib/ai/models";
 import {
   NoSuchToolError,
   InvalidToolArgumentsError,
@@ -50,7 +50,7 @@ export async function POST(req: Request) {
       if (routed.route !== "general") {
         const name = ROUTE_NAMES[routed.route];
         const result = streamText({
-          model: openai("gpt-4o-mini"),
+          model: chatModel(),
           temperature: 0.2,
           system:
             `You are Neura AI. The ${name} agent just ran over the team's research graph (FalkorDB) and returned the evidence below. ` +
@@ -67,7 +67,7 @@ export async function POST(req: Request) {
   }
 
   const result = streamText({
-    model: openai("gpt-4o-mini"),
+    model: chatModel(),
     system: GENERAL_SYSTEM,
     messages,
     maxSteps: 5,

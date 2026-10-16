@@ -3,7 +3,7 @@
 import { auth } from "@/auth";
 import db from "@/db";
 import { users } from "@/db/schema";
-import { openai } from "@ai-sdk/openai";
+import { chatModel } from "@/lib/ai/models";
 import { generateText } from "ai";
 import { eq } from "drizzle-orm";
 import { extractUserContext } from "../utils";
@@ -104,7 +104,7 @@ export async function getResearchPaperSummary() {
   let summary;
   try {
     summary = await generateText({
-      model: openai("gpt-4o-mini"),
+      model: chatModel(),
       system: `You are an AI specialized in analyzing research papers and providing personalized summaries based on the user's academic background and research interests.`,
       prompt,
       temperature: 0.3,

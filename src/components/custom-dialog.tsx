@@ -7,7 +7,7 @@ import {
   DialogTitle,
   DialogTrigger,
 } from '@/components/ui/dialog';
-import clsx from 'clsx';
+import { cn } from '@/lib/utils';
 
 interface CustomDialogTriggerProps {
   header?: string;
@@ -32,7 +32,7 @@ const CustomDialogTrigger: React.FC<CustomDialogTriggerProps> = ({
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       {children && (
-        <DialogTrigger className={clsx('w-full', className)}>{children}</DialogTrigger>
+        <DialogTrigger className={cn('w-full', className)}>{children}</DialogTrigger>
       )}
       <DialogContent
         className="h-[90dvh]

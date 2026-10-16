@@ -14,6 +14,7 @@ import { defaultEditorContent } from "./content";
 import { CitationCheckSheet } from "./citation-check-sheet";
 import { NotebookSheet } from "./notebook-sheet";
 import { SynthesisSheet } from "./synthesis-sheet";
+import { EvidenceMapSheet } from "./evidence-map-sheet";
 import { defaultExtensions } from "./extensions";
 import { slashCommand, suggestionItems } from "./slash-command";
 import {
@@ -52,7 +53,8 @@ import { Badge } from "../ui/badge";
 import EmojiPicker from "../emoji-picker";
 import BannerUpload from "./banner-upload/banner-upload-main";
 import { Button } from "../ui/button";
-import { FileDown, XCircleIcon, FileText, FunctionSquare } from "lucide-react";
+import { ChevronDown, Download, FileDown, FileText, FunctionSquare, ImageIcon, XIcon } from "lucide-react";
+import { toolbarButton } from "./toolbar-button";
 import Collaboration from "@tiptap/extension-collaboration";
 import CollaborationCursor from "@tiptap/extension-collaboration-cursor";
 import { useSelectedFile } from "@/lib/hooks/state-management-hooks";
@@ -534,114 +536,76 @@ const NovelTailwindEditore = ({
       <div className="flex justify-center items-center flex-col mt-2 relative xl:pr-[324px]">
         {" "}
         {/* Need to chnage it to a different component */}
-        <div className="w-full  items-start max-w-[800px] flex flex-col md:flex-row gap-3 px-7  lg:my-8">
-          <div className="text-[80px]">
+        <div className="w-full max-w-[800px] flex flex-col gap-3 px-7 lg:my-8">
+          <div className="flex items-center gap-3">
             <EmojiPicker getValue={iconOnChange}>
               <div
-                className="w-[100px]
-                cursor-pointer
-                transition-colors
-                h-[100px]
-                flex
-                border
-                items-center
-                justify-center
-                hover:bg-muted
-                rounded-xl"
+                aria-label="Change icon"
+                className="flex size-14 shrink-0 cursor-pointer items-center justify-center rounded-lg text-[40px] leading-none transition-colors duration-150 hover:bg-muted"
               >
                 {details.iconId}
               </div>
             </EmojiPicker>
-          </div>
-          <div className="flex flex-col w-full">
-            <div className="flex items-center gap-2">
-              <BannerUpload
-                id={fileId}
-                dirType={dirType}
-                className="text-sm text-muted-foreground hover:text-card-foreground transition-colors duration-150 rounded-md"
-              >
-                {details.bannerUrl ? (
-                  <span className="font-semibold text-blue-600 bg-blue-100 py-1  px-2 rounded-lg hover:bg-blue-200">
-                    Update Banner
-                  </span>
-                ) : (
-                  <span className="font-semibold text-green-600 bg-green-100 p-1  px-2 rounded-lg hover:bg-green-200">
-                    Add Banner
-                  </span>
-                )}
-              </BannerUpload>
-              {details.bannerUrl && (
-                <Button
-                  disabled={deletingBanner}
-                  onClick={deleteBanner}
-                  size={null}
-                  variant={"destructive"}
-                  className="
-                text-red-600 text-sm bg-red-100 rounded-lg px-2 p-1 border-destructive"
-                >
-                  <XCircleIcon size={12} />
-                  Remove Banner
-                </Button>
-              )}
-              <NotebookSheet fileId={fileId} />
-              <SynthesisSheet fileId={fileId} />
-              <CitationCheckSheet fileId={fileId} />
-              <DropdownMenu>
-                <DropdownMenuTrigger asChild>
-                  <Button
-                    size={null}
-                    className="text-blue-600 text-sm bg-blue-100 rounded-lg px-2 p-1 hover:bg-blue-200 transition-colors"
-                  >
-                    Export
-                  </Button>
-                </DropdownMenuTrigger>
-                <DropdownMenuContent align="end" className="w-[150px]">
-                  <DropdownMenuItem onClick={() => handleExportAsPDF(initialContent as JSONContent)}>
-                    <FileDown className="mr-2 h-4 w-4" />
-                    <span>PDF</span>
-                  </DropdownMenuItem>
-                  <TooltipProvider>
-                    <Tooltip>
-                      <TooltipTrigger asChild>
-                        <DropdownMenuItem className="text-muted-foreground" disabled>
-                          <FunctionSquare className="mr-2 h-4 w-4" />
-                          <span>LaTeX</span>
-                        </DropdownMenuItem>
-                      </TooltipTrigger>
-                      <TooltipContent>
-                        <p>Coming soon</p>
-                      </TooltipContent>
-                    </Tooltip>
-                  </TooltipProvider>
-                  <TooltipProvider>
-                    <Tooltip>
-                      <TooltipTrigger asChild>
-                        <DropdownMenuItem className="text-muted-foreground" disabled>
-                          <FileText className="mr-2 h-4 w-4" />
-                          <span>Word (DOCX)</span>
-                        </DropdownMenuItem>
-                      </TooltipTrigger>
-                      <TooltipContent>
-                        <p>Coming soon</p>
-                      </TooltipContent>
-                    </Tooltip>
-                  </TooltipProvider>
-                </DropdownMenuContent>
-              </DropdownMenu>
-            </div>
-            <span
-              className="
-            text-muted-foreground
-            text-3xl
-            font-bold
-            h-9
-          "
-            >
+            <h1 className="min-w-0 flex-1 text-2xl font-semibold leading-tight tracking-[-0.02em] text-foreground line-clamp-2">
               {details.title}
-            </span>
-            <span className="text-muted-foreground text-sm">
-              {dirType.toUpperCase()}
-            </span>
+            </h1>
+          </div>
+
+          <div
+            role="toolbar"
+            aria-label="Document tools"
+            className="-ml-2.5 flex flex-wrap items-center gap-0.5 border-b border-border/70 pb-3"
+          >
+            <NotebookSheet fileId={fileId} />
+            <SynthesisSheet fileId={fileId} />
+            <EvidenceMapSheet fileId={fileId} />
+            <CitationCheckSheet fileId={fileId} />
+
+            <span aria-hidden className="mx-1.5 h-4 w-px bg-border" />
+
+            <BannerUpload id={fileId} dirType={dirType} className="w-auto">
+              <span className={toolbarButton}>
+                <ImageIcon />
+                {details.bannerUrl ? "Change banner" : "Add banner"}
+              </span>
+            </BannerUpload>
+            {details.bannerUrl && (
+              <Button
+                disabled={deletingBanner}
+                onClick={deleteBanner}
+                size={null}
+                variant="none"
+                className={toolbarButton}
+              >
+                <XIcon />
+                Remove banner
+              </Button>
+            )}
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button size={null} variant="none" className={toolbarButton}>
+                  <Download />
+                  Export
+                  <ChevronDown className="opacity-60" />
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="start" className="w-[160px]">
+                <DropdownMenuItem onClick={() => handleExportAsPDF(initialContent as JSONContent)}>
+                  <FileDown className="mr-2 h-4 w-4" />
+                  <span>PDF</span>
+                </DropdownMenuItem>
+                <DropdownMenuItem className="text-muted-foreground" disabled>
+                  <FunctionSquare className="mr-2 h-4 w-4" />
+                  <span>LaTeX</span>
+                  <span className="ml-auto text-[10px] uppercase tracking-wide">Soon</span>
+                </DropdownMenuItem>
+                <DropdownMenuItem className="text-muted-foreground" disabled>
+                  <FileText className="mr-2 h-4 w-4" />
+                  <span>Word</span>
+                  <span className="ml-auto text-[10px] uppercase tracking-wide">Soon</span>
+                </DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
           </div>
         </div>
         <Editore ydoc={doc}  provider={providerA} fileId={fileId} data={initialContent as JSONContent || defaultEditorContent} session={session} 

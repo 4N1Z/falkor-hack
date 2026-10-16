@@ -113,7 +113,7 @@ export function chunkText(text: string): string[] {
 export async function indexPaperText(workspaceId: string, paperId: string, text: string): Promise<number> {
   const chunks = chunkText(text);
   if (!chunks.length) return 0;
-  const vectors = await embedTexts(chunks);
+  const vectors = await embedTexts(chunks, "document");
   const graph = await getWorkspaceGraph(workspaceId);
   const params = <T>(p: T) => ({ params: p as never });
 

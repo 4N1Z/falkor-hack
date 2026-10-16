@@ -600,3 +600,43 @@ WHERE toLower(p.title) CONTAINS toLower($q)
 RETURN p.paperId AS paperId, p.title AS title, p.year AS year, coalesce(p.inLibrary, false) AS inLibrary
 ORDER BY inLibrary DESC, coalesce(p.citationCount, 0) DESC
 LIMIT 10`;
+
+// ---------------------------------------------------------------- Evidence map (one document)
+
+/** The Citation Checker's latest verdict, stored on the claim itself. */
+export const SET_CLAIM_VERDICT = `
+MATCH (c:Claim {id: $claimId})
+SET c.verdict = $verdict, c.why = $why, c.checkedAt = $at, c.checkRun = $runId
+RETURN c.id AS id`;
+
+/** Checker fix for an uncited claim, as a proposal (never overrides a person's decision). */
+export const UPSERT_CHECKER_SUGGESTION = `
+MATCH (c:Claim {id: $claimId}), (p:Paper {paperId: $paperId})
+MERGE (c)-[s:SUGGESTS_CITE]->(p)
+ON CREATE SET s.status = 'suggested', s.by = 'agent:citation-checker', s.runId = $runId, s.at = $at
+RETURN count(s) AS n`;
+
+export const EVIDENCE_CLAIMS = `
+MATCH (:Document {fileId: $fileId})-[:CONTAINS]->(c:Claim)
+RETURN c.id AS id, c.text AS text, c.order AS ord, c.verdict AS verdict, c.why AS why, c.checkedAt AS checkedAt,
+       size(coalesce(c.citedUrls, [])) AS urlCount
+ORDER BY ord`;
+
+export const EVIDENCE_CITES = `
+MATCH (:Document {fileId: $fileId})-[:CONTAINS]->(c:Claim)-[:CITES]->(p:Paper)
+OPTIONAL MATCH (c)-[s:SUPPORTED_BY]->(p)
+RETURN c.id AS claimId, p.paperId AS paperId, p.title AS title, p.year AS year,
+       coalesce(p.inLibrary, false) AS inLibrary, [(u:User)-[:IMPORTED]->(p) | u.id] AS ownerIds,
+       s.level AS level, s.score AS score`;
+
+export const EVIDENCE_SUGGESTIONS = `
+MATCH (:Document {fileId: $fileId})-[:CONTAINS]->(c:Claim)-[s:SUGGESTS_CITE]->(p:Paper)
+WHERE s.status = 'suggested'
+RETURN c.id AS claimId, p.paperId AS paperId, p.title AS title, p.year AS year,
+       coalesce(p.inLibrary, false) AS inLibrary, [(u:User)-[:IMPORTED]->(p) | u.id] AS ownerIds,
+       s.by AS by, coalesce(s.relevance, 0) AS relevance
+ORDER BY relevance DESC`;
+
+export const WORKSPACE_USERS = `
+MATCH (u:User)
+RETURN u.id AS id, coalesce(u.name, 'Collaborator') AS name`;

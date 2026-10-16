@@ -6,6 +6,7 @@ import { Button } from "@/components/ui/button";
 import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle, SheetTrigger } from "@/components/ui/sheet";
 import { useAppState } from "@/lib/providers/state-providers";
 import { cn } from "@/lib/utils";
+import { toolbarButton } from "./toolbar-button";
 import { CheckCircle2, CircleAlert, CircleHelp, Loader2, ShieldCheck, XCircle } from "lucide-react";
 import { useState } from "react";
 
@@ -22,7 +23,7 @@ const META: Record<Verdict, { label: string; tone: string; icon: React.Component
 };
 
 /** Scroll the editor to the paragraph containing `text` and briefly highlight it. */
-function revealClaim(text: string) {
+export function revealClaim(text: string) {
   const root = document.querySelector(".ProseMirror");
   if (!root) return;
   const needle = text.slice(0, 50);
@@ -83,9 +84,10 @@ export function CitationCheckSheet({ fileId }: { fileId: string }) {
       <SheetTrigger asChild>
         <Button
           size={null}
-          className={cn("text-amber-800 text-sm bg-amber-100 rounded-lg px-2 p-1 hover:bg-amber-200 transition-colors", press)}
+          variant="none"
+          className={toolbarButton}
         >
-          <ShieldCheck className="mr-1 size-3.5" /> Check citations
+          <ShieldCheck /> Check citations
         </Button>
       </SheetTrigger>
       <SheetContent side="right" className="w-full sm:max-w-md flex flex-col gap-3 font-sans">

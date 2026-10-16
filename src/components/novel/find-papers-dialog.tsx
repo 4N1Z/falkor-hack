@@ -8,6 +8,7 @@ import { useAppState } from "@/lib/providers/state-providers";
 import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog";
 import { Command as CommandPrimitive } from "cmdk";
 import { useCurrentEditor } from "@tiptap/react";
+import { cn } from "@/lib/utils";
 import { Loader2, Search } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
@@ -15,6 +16,8 @@ import { toast } from "sonner";
 /** Opened by the "/Search Papers" slash command. */
 export const FIND_PAPERS_EVENT = "neura:find-papers";
 export type FindPapersDetail = { query: string; pos: number };
+
+type Source = "all" | "team" | "openalex";
 
 type Hit =
   | { kind: "team"; key: string; label: string; href: string; paper: TeamPaper }
@@ -42,6 +45,7 @@ export function FindPapersDialog() {
   const [team, setTeam] = useState<TeamPaper[]>([]);
   const [world, setWorld] = useState<PaperSearchResult[]>([]);
   const [loading, setLoading] = useState({ team: false, world: false });
+  const [source, setSource] = useState<Source>("all");
   const pos = useRef(0);
   const debounced = useDebounced(query, 300);
 
@@ -52,6 +56,7 @@ export function FindPapersDialog() {
       setQuery(d.query);
       setTeam([]);
       setWorld([]);
+      setSource("all");
       setOpen(true);
     };
     window.addEventListener(FIND_PAPERS_EVENT, onOpen);
@@ -72,7 +77,7 @@ export function FindPapersDialog() {
     const worldQ = encodeURIComponent(debounced.trim().split(/\s+/).slice(0, 12).join(" "));
     fetch(`/api/papers/search?workspaceId=${workspaceId}&q=${worldQ}`)
       .then((r) => r.json())
-      .then((b) => !cancelled && setWorld((b.results ?? []).filter((r: { inLibrary: boolean }) => !r.inLibrary).slice(0, 6)))
+      .then((b) => !cancelled && setWorld((b.results ?? []).filter((r: { inLibrary: boolean }) => !r.inLibrary).slice(0, 10)))
       .catch(() => !cancelled && setWorld([]))
       .finally(() => !cancelled && setLoading((l) => ({ ...l, world: false })));
     return () => {
@@ -115,6 +120,14 @@ export function FindPapersDialog() {
   };
 
   const busy = loading.team || loading.world;
+  const showTeam = source !== "openalex" && team.length > 0;
+  const showWorld = source !== "team" && world.length > 0;
+  const searched = debounced.trim().length >= 3;
+  const SOURCES: { id: Source; label: string; count: number; loading: boolean }[] = [
+    { id: "all", label: "All", count: team.length + world.length, loading: busy },
+    { id: "team", label: "Team library", count: team.length, loading: loading.team },
+    { id: "openalex", label: "OpenAlex", count: world.length, loading: loading.world },
+  ];
   return (
     <Dialog open={open} onOpenChange={setOpen}>
       <DialogContent className="overflow-hidden p-0 sm:max-w-xl font-sans">
@@ -130,13 +143,34 @@ export function FindPapersDialog() {
             />
             {busy && <Loader2 className="size-4 animate-spin text-muted-foreground" />}
           </div>
+          <div className="flex items-center gap-1 border-b px-2 py-1.5 text-xs">
+            {SOURCES.map((s) => (
+              <button
+                key={s.id}
+                type="button"
+                onClick={() => setSource(s.id)}
+                className={cn(
+                  "inline-flex items-center gap-1 rounded-md px-2 py-1 transition-colors duration-150",
+                  source === s.id ? "bg-foreground text-background" : "text-muted-foreground hover:bg-muted",
+                )}
+              >
+                {s.label}
+                {searched && (s.loading ? <Loader2 className="size-3 animate-spin" /> : <span className="tabular-nums opacity-70">{s.count}</span>)}
+              </button>
+            ))}
+          </div>
           <CommandPrimitive.List className="max-h-[420px] overflow-y-auto p-2">
-            {!busy && debounced.trim().length >= 3 && hits.length === 0 && (
+            {!searched && (
+              <p className="py-8 text-center text-sm text-muted-foreground">
+                Searches your team&apos;s library and OpenAlex&apos;s 250M+ works. Type at least 3 characters.
+              </p>
+            )}
+            {searched && !SOURCES.find((s) => s.id === source)!.loading && (source === "team" ? !showTeam : source === "openalex" ? !showWorld : hits.length === 0) && (
               <CommandPrimitive.Empty className="py-8 text-center text-sm text-muted-foreground">
                 No papers found. Try a shorter phrase.
               </CommandPrimitive.Empty>
             )}
-            {team.length > 0 && (
+            {showTeam && (
               <CommandPrimitive.Group
                 heading="Your team's library"
                 className="[&_[cmdk-group-heading]]:px-2 [&_[cmdk-group-heading]]:py-1.5 [&_[cmdk-group-heading]]:text-xs [&_[cmdk-group-heading]]:text-muted-foreground"
@@ -163,9 +197,9 @@ export function FindPapersDialog() {
                   ))}
               </CommandPrimitive.Group>
             )}
-            {world.length > 0 && (
+            {showWorld && (
               <CommandPrimitive.Group
-                heading="More from OpenAlex (adds to your team library)"
+                heading="OpenAlex (citing one adds it to your team library)"
                 className="[&_[cmdk-group-heading]]:px-2 [&_[cmdk-group-heading]]:py-1.5 [&_[cmdk-group-heading]]:text-xs [&_[cmdk-group-heading]]:text-muted-foreground"
               >
                 {hits

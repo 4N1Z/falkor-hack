@@ -1,4 +1,5 @@
 "use client";
+import { SlashMenuItems } from "./slash-menu-items";
 import Image from "next/image";
 import React, { useState, useEffect, useRef, useMemo } from "react";
 import {
@@ -903,29 +904,12 @@ const NovelTailwindEditor = ({
               },
             }}
             slotAfter={<ImageResizer />}>
-            <EditorCommand className="z-50 h-auto max-h-[330px] overflow-y-auto  rounded-md border border-muted bg-background px-1 py-2 shadow-md">
+            <EditorCommand className="z-50 h-auto max-h-[360px] w-80 overflow-y-auto rounded-lg border border-muted bg-background px-1 pb-1 shadow-[0_8px_24px_rgba(0,30,51,0.08)]">
               <EditorCommandEmpty className="px-2 text-muted-foreground">
                 No results
               </EditorCommandEmpty>
-              <EditorCommandList className="gap-2">
-                {suggestionItems.map((item: SuggestionItem) => (
-                  <EditorCommandItem
-                    value={item.title}
-                    onCommand={(val) => item.command && item.command(val)} // check if command exists first
-                    className={`flex  w-full font-sans items-center space-x-2 rounded-md px-2 py-1 text-left text-sm hover:bg-card aria-selected:bg-card border-transparent hover:border-sky-100 hover:border`}
-                    key={item.title}
-                  >
-                    <div className="flex h-10 w-10 items-center justify-center rounded-md border border-muted bg-background">
-                      {item.icon}
-                    </div>
-                    <div>
-                      <p className="font-medium">{item.title}</p>
-                      <p className="text-sm text-muted-foreground">
-                        {item.description}
-                      </p>
-                    </div>
-                  </EditorCommandItem>
-                ))}
+              <EditorCommandList>
+                <SlashMenuItems />
               </EditorCommandList>
             </EditorCommand>
 
