@@ -220,6 +220,88 @@ export function classify<const L extends string>(text: string, instructions: str
 }
 
 /**
+ * One rubric score per item, many items per request (adam Verifier: "does the passage state
+ * this?"). Returns the rubric index (0..n-1) and a confidence per item.
+ */
+export function scoreMany(state: string, items: { id: string; text: string }[], question: string, rubric: readonly string[]) {
+  return withFallback<Map<string, { level: number; confidence: number }>>(
+    "scoreMany",
+    async (c) => {
+      if (!items.length) return new Map();
+      const questions = Object.fromEntries(items.map((it, i) => [`s${i}`, score(`${question}\n\n${it.text.slice(0, 2500)}`, rubric as [string, ...string[]])]));
+      const { answers } = await c.systemOne({ state, questions });
+      return new Map(
+        items.map((it, i) => {
+          const a = answers[`s${i}`] as { score: number; confidence: number };
+          return [it.id, { level: Math.max(0, Math.min(rubric.length - 1, Math.round(a.score))), confidence: a.confidence }];
+        }),
+      );
+    },
+    async () => {
+      if (!items.length) return new Map();
+      const { object } = await generateObject({
+        model: fallbackModel(),
+        schema: z.object({ scores: z.array(z.object({ index: z.number(), level: z.number().min(0).max(rubric.length - 1) })) }),
+        system: `Context:\n${state.slice(0, 6000)}`,
+        prompt: `${question}\nLevels:\n${rubric.map((r, i) => `${i}: ${r}`).join("\n")}\n\nGive a level for every item by index.\n\n${items
+          .map((it, i) => `[${i}] ${it.text.slice(0, 2000)}`)
+          .join("\n\n")}`,
+      });
+      return new Map(
+        items.map((it, i) => {
+          const level = object.scores.find((s) => s.index === i)?.level ?? 0;
+          return [it.id, { level: Math.round(level), confidence: 0.5 }];
+        }),
+      );
+    },
+  );
+}
+
+/**
+ * One label per item, many items per request (adam Searcher triage: 20 papers per call).
+ * `state` is the shared context (the question page); each item's text is judged against it.
+ */
+export function classifyMany<const L extends string>(
+  state: string,
+  items: { id: string; text: string }[],
+  instructions: string,
+  labels: Record<L, string>,
+) {
+  return withFallback<Map<string, { label: L; confidence: number }>>(
+    "classifyMany",
+    async (c) => {
+      if (!items.length) return new Map();
+      const questions = Object.fromEntries(items.map((it, i) => [`i${i}`, choice(`${instructions}\n\nItem: ${it.text.slice(0, 1800)}`, labels)]));
+      const { answers } = await c.systemOne({ state, questions });
+      return new Map(
+        items.map((it, i) => {
+          const a = answers[`i${i}`] as { choice: string; confidence: number };
+          return [it.id, { label: a.choice as L, confidence: a.confidence }];
+        }),
+      );
+    },
+    async () => {
+      if (!items.length) return new Map();
+      const keys = Object.keys(labels) as [L, ...L[]];
+      const { object } = await generateObject({
+        model: fallbackModel(),
+        schema: z.object({ labels: z.array(z.object({ index: z.number(), label: z.enum(keys) })) }),
+        system: `Context:\n${state.slice(0, 6000)}`,
+        prompt: `${instructions}\nOptions:\n${keys.map((k) => `- ${k}: ${labels[k]}`).join("\n")}\n\nLabel every item by index.\n\n${items
+          .map((it, i) => `[${i}] ${it.text.slice(0, 1500)}`)
+          .join("\n\n")}`,
+      });
+      return new Map(
+        items.map((it, i) => {
+          const label = (object.labels.find((v) => v.index === i)?.label ?? keys[keys.length - 1]) as L;
+          return [it.id, { label, confidence: 0.5 }];
+        }),
+      );
+    },
+  );
+}
+
+/**
  * Does each new paper contradict or question the team paper it is closest to? (Scout Watcher)
  * One request; candidates carry the closest team paper in their text.
  */
