@@ -94,6 +94,13 @@ interface NovelEditorProps {
   dirType: "file";
   folderId: string;
 }
+// Resolved once at module load. NEXT_PUBLIC_* is inlined at build time, so this
+// is baked into the bundle - changing it requires rebuilding the image.
+const COLLAB_WS_URL =
+  process.env.NODE_ENV === "production"
+    ? process.env.NEXT_PUBLIC_WS_URL || "wss://neuraquery.com/ws"
+    : "ws://localhost:1414";
+
 const NovelTailwindEditore = ({
   dirDetails,
   fileId,
@@ -103,15 +110,13 @@ const NovelTailwindEditore = ({
   const [initialContent, setInitialContent] = useState<JSONContent | null>(
     null
   );
-  let doc: Y.Doc = new Y.Doc();
-  let providerA: HocuspocusProvider = new HocuspocusProvider({
-    url: process.env.NODE_ENV === 'production'
-    ? `${process.env.NEXT_PUBLIC_WS_URL || 'wss://neuraquery.com/ws'}`
-    : 'ws://localhost:1414',
-    name: fileId || 'default',
-    document: doc,
-    quiet: true,
-  });
+  // The Y.Doc and provider are created once per file, in the effect below.
+  // They must never be constructed in the component body: that runs on every
+  // render, so each state update would build a new doc and open another socket.
+  const [collab, setCollab] = useState<{
+    doc: Y.Doc;
+    provider: HocuspocusProvider;
+  } | null>(null);
   const [saving, setSaving] = useState<boolean>(false);
   const [isCheckingShared, setIsCheckingShared] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
@@ -131,6 +136,90 @@ const NovelTailwindEditore = ({
   // Initialize Y.doc and provider only on client-side
   const [isCollaborationEnabled, setIsCollaborationEnabled] = useState(false);
   const saveTimerRef = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
+
+  // One Y.Doc + HocuspocusProvider per file, torn down when the file changes or
+  // the editor unmounts. The socket carries a short-lived token from
+  // /api/collab-token; the server rejects documents the user cannot access, so
+  // a failure here degrades to solo editing rather than exposing the document.
+  useEffect(() => {
+    if (!fileId) return;
+
+    let cancelled = false;
+    let doc: Y.Doc | undefined;
+    let provider: HocuspocusProvider | undefined;
+
+    const connect = async () => {
+      let token: string | undefined;
+      try {
+        const res = await fetch("/api/collab-token");
+        if (res.ok) token = (await res.json())?.token;
+      } catch {
+        // offline or endpoint unavailable - fall through to solo editing
+      }
+
+      if (cancelled) return;
+      if (!token) {
+        setIsCollaborationEnabled(false);
+        return;
+      }
+
+      doc = new Y.Doc();
+      provider = new HocuspocusProvider({
+        url: COLLAB_WS_URL,
+        name: fileId,
+        document: doc,
+        token,
+        quiet: true,
+        onConnect: () => {
+          setIsCollaborationEnabled(true);
+          dispatch({
+            type: "SET_COLLABORATION_STATUS",
+            payload: { fileId, status: true },
+          });
+        },
+        onDisconnect: () => {
+          setIsCollaborationEnabled(false);
+          dispatch({
+            type: "SET_COLLABORATION_STATUS",
+            payload: { fileId, status: false },
+          });
+        },
+        onAuthenticationFailed: ({ reason }) => {
+          console.error("[collab] authentication failed:", reason);
+          setIsCollaborationEnabled(false);
+        },
+        onAwarenessUpdate: ({ states }) => {
+          // Dedupe by user id: one person can have several tabs open
+          const byId = new Map<string, { id: string; name: string }>();
+          for (const state of states) {
+            const u = state.user as { id?: string; name?: string } | undefined;
+            if (u?.id) byId.set(u.id, { id: u.id, name: u.name || "Collaborator" });
+          }
+          dispatch({
+            type: "UPDATE_COLLABORATION_USERS",
+            payload: { fileId, users: [...byId.values()] },
+          });
+        },
+      });
+
+      if (cancelled) {
+        provider.destroy();
+        doc.destroy();
+        return;
+      }
+      setCollab({ doc, provider });
+    };
+
+    connect();
+
+    return () => {
+      cancelled = true;
+      provider?.destroy();
+      doc?.destroy();
+      setCollab(null);
+      setIsCollaborationEnabled(false);
+    };
+  }, [fileId, dispatch]);
 
   // Query functions
   const details = useMemo(() => {
@@ -284,83 +373,10 @@ const NovelTailwindEditore = ({
 
       setIsLoading(false);
 
-      // After fetching information, initialize WebSocket
-      if (typeof window !== "undefined") {
-        try {
-          const wsUrl = process.env.NODE_ENV === 'production'
-            ? `${process.env.NEXT_PUBLIC_WS_URL || 'wss://neuraquery.com/ws'}`
-            : 'ws://localhost:1414';
-          
-          console.log('Connecting to WebSocket at:', wsUrl);
-
-          // Initialize Y.doc first
-           doc = new Y.Doc();
-          if (fileData) {
-            const ymap = doc.getMap("content");
-            if (!ymap.get("data")) {
-              ymap.set("data", fileData);
-            }
-          }
-
-          // Initialize provider directly without WebSocket check
-          providerA = new HocuspocusProvider({
-            url: wsUrl,
-            name: fileId || 'default',
-            document: doc,
-            quiet: true,
-            onConnect: () => {
-              console.log('HocuspocusProvider connected successfully');
-              setIsCollaborationEnabled(true);
-              dispatch({
-                type: "SET_COLLABORATION_STATUS",
-                payload: { fileId, status: true },
-              });
-              const content = doc.getMap("content").get("data");
-              if (content) {
-                setInitialContent(content as JSONContent);
-              }
-            },
-            onDisconnect: () => {
-              console.log('HocuspocusProvider disconnected');
-              setIsCollaborationEnabled(false);
-              dispatch({
-                type: "SET_COLLABORATION_STATUS",
-                payload: { fileId, status: false },
-              });
-            },
-            onAwarenessUpdate: ({ states }) => {
-              // Dedupe by user id: one person can have several tabs open
-              const byId = new Map<string, { id: string; name: string }>();
-              for (const state of states) {
-                const u = state.user as { id?: string; name?: string } | undefined;
-                if (u?.id) byId.set(u.id, { id: u.id, name: u.name || "Collaborator" });
-              }
-              const connectedUsers = [...byId.values()];
-
-              dispatch({
-                type: "UPDATE_COLLABORATION_USERS",
-                payload: {
-                  fileId,
-                  users: connectedUsers,
-                },
-              });
-            },
-          });
-
-        } catch (error) {
-          console.error("Failed to initialize collaboration:", error);
-          setIsCollaborationEnabled(false);
-        }
-      }
     };
 
     initializeEditor();
 
-    // Cleanup function
-    return () => {
-      providerA.destroy();
-      doc.destroy();
-    };
   }, []);
 
   useEffect(() => {
@@ -596,7 +612,7 @@ const NovelTailwindEditore = ({
             </DropdownMenu>
           </div>
         </div>
-        <Editore ydoc={doc}  provider={providerA} fileId={fileId} data={initialContent as JSONContent || defaultEditorContent} session={session} 
+        {collab && <Editore key={fileId} ydoc={collab.doc} provider={collab.provider} fileId={fileId} data={initialContent as JSONContent || defaultEditorContent} session={session} 
         collabEnabled={isCollaborationEnabled}
           onUpdate={({ editor }: any) => {
             if (
@@ -635,7 +651,7 @@ const NovelTailwindEditore = ({
             }, 850);
           }}
           
-        />
+        />}
       </div>
     </>
   );

@@ -33,6 +33,21 @@ RUN pnpm build && \
     rm -rf .next/cache && \
     find . -name "*.map" -delete
 
+# WebSocket (Hocuspocus) stage — collaboration server for the Tiptap/Yjs editor.
+# Needs node_modules and tsx, which the Next standalone runner does not ship,
+# so it keeps the deps layer instead of the build output.
+FROM base AS ws
+WORKDIR /app
+ENV NODE_ENV=production
+COPY --from=deps /app/node_modules ./node_modules
+COPY package.json tsconfig.json ./
+COPY scripts ./scripts
+# serve.mts imports the token helper directly; copy just that file rather than all of src
+COPY src/lib/collab-token.ts ./src/lib/collab-token.ts
+USER node
+EXPOSE 1414
+CMD ["./node_modules/.bin/tsx", "scripts/serve.mts"]
+
 # Runner stage
 FROM base AS runner
 WORKDIR /app
