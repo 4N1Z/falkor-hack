@@ -31,7 +31,7 @@ export function StepName({
           className="w-full py-2 text-4xl font-semibold rounded-md
           bg-white/5 backdrop-blur-sm text-primary placeholder:text-secondary-foreground
           focus:outline-none outline-none
-          transition-all duration-200"
+          transition-colors duration-150"
         />
         {(clientError || error) && (
           <p className="text-red-500 mt-2">{clientError || error}</p>

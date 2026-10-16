@@ -3,7 +3,8 @@
 import { auth } from "@/auth";
 import db from "@/db";
 import { users } from "@/db/schema";
-import { openai } from "@ai-sdk/openai";
+import { chatModel } from "@/lib/ai/models";
+import { searchWorks } from "@/lib/graph/openalex";
 import { generateText } from "ai";
 import { eq } from "drizzle-orm";
 import { extractUserContext } from "../utils";
@@ -55,24 +56,31 @@ export async function getResearchPaperSummary() {
     console.error("Error fetching onboarding details:", error);
   }
 
-  const semanticScholarResponse = await fetch(
-    // `${process.env.SEMANTIC_SCHOLAR_URL!}/paper/search?query=${encodeURIComponent(field)}i&limit=5&year=2005-2024&fields=title,abstract,authors,year,externalIds&sort=relevance`,
-    `https://api.semanticscholar.org/graph/v1/paper/search?query=${encodeURIComponent(
-      userContext.researchAreas
-    )}i&limit=5&year=2005-2024&fields=title,abstract,authors,year,externalIds&sort=relevance`,
-    {
-      headers: {
-        "Content-Type": "application/json",
-      },
-      next: { revalidate: 3600 },
-    }
-  );
-
-  if (!semanticScholarResponse.ok) {
-    throw new Error(`Failed to fetch papers for ${userContext.researchAreas}`);
+  if (!userContext.researchAreas.trim()) {
+    return { data: "Add your research areas in onboarding to get personalised paper suggestions.", error: "no-areas" };
   }
 
-  const { data: papersData } = await semanticScholarResponse.json();
+  // OpenAlex (keyless, same source the Librarian uses). Don't throw: a failed suggestion
+  // widget shouldn't 500 the whole dashboard.
+  const works = await searchWorks(userContext.researchAreas, 5).catch((err) => {
+    console.error(`OpenAlex search failed for ${userContext.researchAreas}:`, err);
+    return null;
+  });
+  if (!works) {
+    return { data: "Couldn't load paper suggestions right now. Please try again later.", error: "network" };
+  }
+  if (!works.length) {
+    return { data: `No recent papers found for “${userContext.researchAreas}”.`, error: "no-results" };
+  }
+  const papersData = works.map((w) => ({
+    title: w.title,
+    authors: w.authors.slice(0, 4),
+    year: w.year,
+    venue: w.venue,
+    doi: w.doi,
+    citations: w.citationCount,
+    abstract: w.abstract?.slice(0, 600) ?? null,
+  }));
 
   console.log("Generating SUmmary :: ")
 
@@ -83,7 +91,7 @@ export async function getResearchPaperSummary() {
       userContext.researchAreas
     }.
     Papers: ${JSON.stringify(papersData)}
-    Also do provide hyperlinks for the DOI data as : 'https://doi.org/[DOI]'
+    Link each paper by its doi as 'https://doi.org/[doi]' when a doi is present.
       Synthesize the information into a short and very concise overview that:
        - Focuses on the research paper, links and provide the hyperlinks.
        - Format the entire data to give clear cut 2 or 3 points only.
@@ -91,12 +99,21 @@ export async function getResearchPaperSummary() {
          userContext.name
        }'s research areas.`;
 
-  const summary = await generateText({
-    model: openai("gpt-4o-mini"),
-    system: `You are an AI specialized in analyzing research papers and providing personalized summaries based on the user's academic background and research interests.`,
-    prompt,
-    temperature: 0.3,
-  });
+  let summary;
+  try {
+    summary = await generateText({
+      model: chatModel(),
+      system: `You are an AI specialized in analyzing research papers and providing personalized summaries based on the user's academic background and research interests.`,
+      prompt,
+      temperature: 0.3,
+    });
+  } catch (error) {
+    console.error("Summary generation failed:", error);
+    return {
+      data: "Couldn't generate a summary right now. Please try again later.",
+      error: "generation",
+    };
+  }
 
   // console.log("Summary :: ,", summary.text);
   return { data: summary.text, error: null };

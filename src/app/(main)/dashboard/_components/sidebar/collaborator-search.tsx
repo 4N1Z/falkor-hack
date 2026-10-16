@@ -38,7 +38,7 @@ export default function CollaboratorSearch({
     //     email:"aniz@gmal.com"
     // }
   ]);
-  const timerRef = useRef<ReturnType<typeof setTimeout>>();
+  const timerRef = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
   console.log("session in collab creation:", session?.user)
 
   useEffect(() => {

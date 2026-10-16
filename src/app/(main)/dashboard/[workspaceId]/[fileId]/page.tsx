@@ -4,17 +4,19 @@ import NovelTailwindEditore from "@/components/novel/Editore";
 import NeuraAIBlock from "@/components/AI/neura-ai-block";
 import { auth } from "@/auth";
 
-export default async function FilePage({
-  params,
-}: {
-  params: { fileId: string };
-}) {
+export default async function FilePage(
+  props: {
+    params: Promise<{ workspaceId: string; fileId: string }>;
+  }
+) {
+  const params = await props.params;
 
   // const session = await auth();
   // if (!session?.user || session === null) redirect("/login");
-  
-  const { data, error } = await getFileDetails(params.fileId);  
-  // if (error || !data.length) redirect("/dashboard");
+
+  const { data, error } = await getFileDetails(params.fileId);
+  // Stale link or deleted file: fall back to the workspace instead of crashing
+  if (error || !data.length) redirect(`/dashboard/${params.workspaceId}`);
 
   // console.log("IN file ID :: ,", data);
   return (

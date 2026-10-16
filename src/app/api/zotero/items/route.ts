@@ -7,7 +7,7 @@ export async function GET(req: NextRequest) {
   // check if user is logged in
   // if not redirect to login page
   // Get both cookie stores for comparison
-  const cookieStore = cookies();
+  const cookieStore = await cookies();
   const requestCookies = req.cookies;
 
   // Check authentication using both methods
@@ -41,9 +41,9 @@ export async function GET(req: NextRequest) {
     !zoteroUserId?.value
   ) {
     console.error("Zotero tokens missing", {
-      hasAccessToken: !!zoteroAccessToken,
-      hasSecret: !!zoteroAccessTokenSecret,
-      hasUserId: !!zoteroUserId,
+      hasAccessToken: !!zoteroAccessToken?.value,
+      hasSecret: !!zoteroAccessTokenSecret?.value,
+      hasUserId: !!zoteroUserId?.value,
     });
     return Response.json(
       {

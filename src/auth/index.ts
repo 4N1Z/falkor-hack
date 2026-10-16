@@ -97,7 +97,7 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
           session.user.zoteroUserId = dbuser[0].zoteroUserId;
         }
         try {
-          const cookieStore = cookies();
+          const cookieStore = await cookies();
           // check if the cookies are set
           if (
             cookieStore.get("zoteroAccessToken") &&

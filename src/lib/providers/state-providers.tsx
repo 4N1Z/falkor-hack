@@ -51,7 +51,8 @@ interface AppState {
     string,
     {
       isEnabled: boolean;
-      connectedUsers?: string[];
+      /** Live presence from Hocuspocus awareness */
+      connectedUsers?: { id: string; name: string }[];
     }
   >;
 }
@@ -139,7 +140,7 @@ type Action =
       type: "UPDATE_COLLABORATION_USERS";
       payload: {
         fileId: string;
-        users: string[];
+        users: { id: string; name: string }[];
       };
     };
 
@@ -419,6 +420,18 @@ const appReducer = (
           [action.payload.fileId]: {
             ...state.collaborationStatus[action.payload.fileId],
             isEnabled: action.payload.status,
+          },
+        },
+      };
+
+    case "UPDATE_COLLABORATION_USERS":
+      return {
+        ...state,
+        collaborationStatus: {
+          ...state.collaborationStatus,
+          [action.payload.fileId]: {
+            isEnabled: state.collaborationStatus[action.payload.fileId]?.isEnabled ?? false,
+            connectedUsers: action.payload.users,
           },
         },
       };

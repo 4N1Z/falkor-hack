@@ -68,7 +68,7 @@ const ResearchToolsMenu: React.FC<ResearchToolsMenuProps> = ({
         shadow-[inset_5.471px_5.471px_10.941px_rgba(238,244,251,0.50),0px_8.206px_13.677px_rgba(109,205,247,0.52)]
         text-foreground
         ring-4 ring-white/40
-        duration-500 hover:duration-500
+        duration-150
         border-2 border-sky-100`
       )}
     >

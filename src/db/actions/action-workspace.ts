@@ -12,6 +12,8 @@ import { validate } from "uuid";
 import { collaborators } from "../schema";
 import { and, eq, notExists } from "drizzle-orm";
 import { title } from "process";
+import { auth } from "@/auth";
+import { scheduleDocumentSync } from "@/lib/graph/hooks";
 
 export const createWorkspace = async (workspace: workspace) => {
   try {
@@ -300,12 +302,55 @@ export async function createFile(file: File) {
   }
 }
 
+/** Visible text in a saved TipTap JSON document (whitespace-trimmed). */
+function docText(data: string | null | undefined): string {
+  if (!data) return "";
+  try {
+    const parts: string[] = [];
+    const walk = (n: { text?: string; content?: unknown[] }) => {
+      if (n.text) parts.push(n.text);
+      (n.content as typeof n[] | undefined)?.forEach(walk);
+    };
+    walk(JSON.parse(data));
+    return parts.join(" ").trim();
+  } catch {
+    return "";
+  }
+}
+
 export const updateFile = async (file: Partial<File>, fileId: string) => {
   try {
+    // Guard against an empty editor state overwriting a real document. The collaborative
+    // editor can briefly show an empty doc while Yjs syncs; an autosave in that window used
+    // to wipe the saved content (it happened to the demo draft). Clearing a long document to
+    // nothing in a single save is never what a person did on purpose.
+    if (file.data !== undefined && docText(file.data).length < 3) {
+      const [current] = await db.select({ data: files.data }).from(files).where(eq(files.id, fileId));
+      if (docText(current?.data).length > 200) {
+        console.warn(`[files] refused to overwrite ${fileId} with an empty document`);
+        const { data: _skipped, ...rest } = file;
+        if (Object.keys(rest).length) await db.update(files).set(rest).where(eq(files.id, fileId));
+        return { data: null, error: "Refused to replace the document with an empty one" };
+      }
+    }
+
     const response = await db
       .update(files)
       .set(file)
       .where(eq(files.id, fileId));
+
+    // Content saves also refresh the document's claims/citations in the research graph
+    if (file.data) {
+      const session = await auth();
+      if (session?.user?.id) {
+        scheduleDocumentSync({
+          fileId,
+          data: file.data,
+          userId: session.user.id,
+          userName: session.user.name ?? session.user.email ?? null,
+        });
+      }
+    }
     return { data: null, error: null };
   } catch (error) {
     console.log(error);

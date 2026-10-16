@@ -98,13 +98,18 @@ export interface SuggestionItem {
   description: string;
   icon: ReactNode;
   searchTerms?: string[];
+  /** "research" items are listed first in their own group */
+  group?: "research" | "basic";
+  /** Icon tile style, matching the landing page plugin tiles */
+  tone?: "normal" | "blue" | "yellow";
   command?: (props: { editor: Editor; range: Range }) => void;
 }
 
 export const createSuggestionItems = (items: SuggestionItem[]) => items;
 
 export const handleCommandNavigation = (event: KeyboardEvent) => {
-  if (["ArrowUp", "ArrowDown", "Enter"].includes(event.key)) {
+  // While the slash menu is open these keys belong to the menu, not the editor
+  if (["ArrowUp", "ArrowDown", "Enter", "Tab"].includes(event.key)) {
     const slashCommand = document.querySelector("#slash-command");
     if (slashCommand) {
       return true;

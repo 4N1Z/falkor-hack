@@ -68,6 +68,26 @@ export default function WorkspaceDropdown({
   }, [privateWorkspaces, collaborativeWorkspaces, sharedWorkspaces]);
   // console.count("BUG#7 :  Workspace Drop-Down :: ")
 
+  // Close on outside click or Escape. Ignore while a dialog (e.g. "New workspace") is open,
+  // since it is portaled outside this element.
+  useEffect(() => {
+    if (!isOpen) return;
+    const dialogOpen = () => !!document.querySelector('[role="dialog"]');
+    const onPointerDown = (e: PointerEvent) => {
+      if (dialogOpen()) return;
+      if (!dropdownRef.current?.contains(e.target as Node)) setIsOpen(false);
+    };
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (e.key === "Escape" && !dialogOpen()) setIsOpen(false);
+    };
+    document.addEventListener("pointerdown", onPointerDown);
+    document.addEventListener("keydown", onKeyDown);
+    return () => {
+      document.removeEventListener("pointerdown", onPointerDown);
+      document.removeEventListener("keydown", onKeyDown);
+    };
+  }, [isOpen]);
+
   const handleSelect = (option: workspace) => {
     setSelectedState(option);
     setIsOpen(false);
@@ -104,8 +124,22 @@ export default function WorkspaceDropdown({
   return (
     <div className="relative inline-block text-left w-full" ref={dropdownRef}>
       <span
-        onClick={() => {
+        role="button"
+        tabIndex={0}
+        aria-haspopup="listbox"
+        aria-expanded={isOpen}
+        aria-label="Switch workspace"
+        className="block rounded-lg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sky-200"
+        onClick={(e) => {
+          // The selected workspace renders as a link; it should only open the menu here
+          e.preventDefault();
           setIsOpen(!isOpen);
+        }}
+        onKeyDown={(e) => {
+          if (e.key === "Enter" || e.key === " ") {
+            e.preventDefault();
+            setIsOpen(!isOpen);
+          }
         }}
       >
         {selectedState ? (
@@ -120,7 +154,7 @@ export default function WorkspaceDropdown({
       </span>
       <div className="relative">
         {isOpen && (
-          <div className="origin-top-right absolute min-w-[100%] rounded-md shadow-lg z-50 bg-white group border-2 border-muted flex flex-col">
+          <div className="origin-top absolute mt-1 min-w-[100%] rounded-md shadow-lg z-50 bg-white group border-2 border-muted flex flex-col animate-in fade-in-0 zoom-in-95 slide-in-from-top-1 duration-150">
             <div className="p-2 overflow-y-auto max-h-[300px]">
               <div className="rounded-md flex flex-col">
                 <div className="space-y-4">
@@ -212,7 +246,7 @@ export default function WorkspaceDropdown({
             />}
             description="Workspaces give you the power to collaborate with others."
           >
-            <div className="flex transition-all hover:bg-muted justify-center items-center gap-2 text-primary p-2 w-full rounded-md">
+            <div className="flex transition-colors duration-150 hover:bg-muted justify-center items-center gap-2 text-primary p-2 w-full rounded-md">
               New workspace <span className="font-bold">+</span>
             </div>
           </CustomDialogTrigger>

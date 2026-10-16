@@ -23,21 +23,21 @@ export default function Navbar() {
       <div className="hidden md:flex gap-2 text-foreground text-26">
         <Link
           href={"#home"}
-          className="hover:font-medium hover:text-primary transition-all"
+          className="hover:text-primary transition-colors duration-150"
         >
           home
         </Link>
         <span className="text-primary font-bold">/</span>
         <Link
           href={"#features"}
-          className="hover:font-medium hover:text-primary transition-all"
+          className="hover:text-primary transition-colors duration-150"
         >
           features
         </Link>
         <span className="text-primary font-bold">/</span>
         <Link
           href={"#footer"}
-          className="hover:font-medium hover:text-primary transition-all"
+          className="hover:text-primary transition-colors duration-150"
         >
           demo
         </Link>
@@ -54,19 +54,19 @@ export default function Navbar() {
           <div className="flex flex-col gap-4 mt-8">
             <Link
               href={"#home"}
-              className="text-xl hover:text-primary transition-all"
+              className="text-xl hover:text-primary transition-colors duration-150"
             >
               home
             </Link>
             <Link
               href={"#features"}
-              className="text-xl hover:text-primary transition-all"
+              className="text-xl hover:text-primary transition-colors duration-150"
             >
               features
             </Link>
             <Link
               href={"#footer"}
-              className="text-xl hover:text-primary transition-all"
+              className="text-xl hover:text-primary transition-colors duration-150"
             >
               demo
             </Link>

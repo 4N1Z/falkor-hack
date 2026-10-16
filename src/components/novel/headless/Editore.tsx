@@ -1,3 +1,4 @@
+import { SlashMenuItems } from '../slash-menu-items'
 import Collaboration from '@tiptap/extension-collaboration'
 import CollaborationCursor from '@tiptap/extension-collaboration-cursor'
 import Highlight from '@tiptap/extension-highlight'
@@ -12,9 +13,9 @@ import GenerativeMenuSwitch from '../generative/generative-menu-switch'
 import { ColorSelector } from '../selectors/color-selector'
 import { LinkSelector } from '../selectors/link-selector'
 import { NodeSelector } from '../selectors/node-selector'
-import { SemanticScholarSelector } from '../selectors/reseach-paper'
+import { FindPapersButton } from '../selectors/find-papers-button'
 import { TextButtons } from '../selectors/text-buttons'
-import { suggestionItems } from '../slash-command'
+import { suggestionItems, slashCommand } from '../slash-command'
 import {
   EditorRoot,
   EditorContent,
@@ -30,6 +31,16 @@ import { useAppState } from '@/lib/providers/state-providers'
 import { defaultExtensions } from '../extensions'
 import { ImageResizer } from '../extensions/index'
 import Link from '@tiptap/extension-link'
+import { TabIndent } from '../extensions/tab-indent'
+import { FindPapersDialog } from '../find-papers-dialog'
+import { ResearchRail } from '../research-rail'
+import { GhostText } from '../extensions/ghost-text'
+import { GhostWriter } from '../ghost-writer'
+
+// Stable, readable cursor colour per collaborator (was hard-coded red for everyone)
+const CURSOR_COLORS = ['#2563eb', '#db2777', '#059669', '#d97706', '#7c3aed', '#0891b2', '#dc2626', '#4d7c0f']
+const colorForUser = (key: string) =>
+  CURSOR_COLORS[[...key].reduce((h, ch) => (h * 31 + ch.charCodeAt(0)) >>> 0, 7) % CURSOR_COLORS.length]
 
 
 
@@ -44,13 +55,16 @@ const Editore = ({
   onUpdate: any;
   collabEnabled: boolean;
 }) => {
+  // Which file each editor instance was created for. When navigating between documents the
+  // old instance can still emit an update after `fileId` has changed; without this check its
+  // content was autosaved into the NEW file (seen when opening a draft from a link).
+  const editorFile = useRef(new WeakMap<object, string>())
   const [status, setStatus] = useState('connecting')
   const [saving, setSaving] = useState<boolean>(false);
   const [openNode, setOpenNode] = useState(false);
   const [openLink, setOpenLink] = useState(false);
   const [openColor, setOpenColor] = useState(false);
   const [openAI, setOpenAI] = useState(false);
-  const [openScholar, setOpenScholar] = useState(false)
 
   const baseExtensions = [...defaultExtensions];
   let totalExtensions: any[] = baseExtensions;
@@ -205,15 +219,32 @@ const Editore = ({
         immediatelyRender= {false}
         className="relative min-h-[500px] w-full max-w-screen-md sm:mb-[calc(20vh)]"
         onCreate={({ editor }) => {
-          provider.on('synced', () => {
-            if (editor.isEmpty) {
-              editor.commands.setContent(data)
-            }
-          })
+          editorFile.current.set(editor, fileId)
+          // With Collaboration, content comes from the Yjs doc, not `data`, so the saved
+          // document must be seeded in once the collaboration server has synced. The provider
+          // starts connecting before this editor exists, so 'synced' may already have fired
+          // (seed now), or never fire if the server is down (seed after a grace period).
+          // Missing both left the editor empty, and the next autosave wiped the saved doc.
+          let seeded = false
+          const seed = () => {
+            if (seeded || editor.isDestroyed) return
+            seeded = true
+            // addToHistory:false — loading the saved doc must not be undoable, or Ctrl+Z
+            // past the user's own edits strips it (it removed citation links in testing)
+            if (editor.isEmpty && data) editor.chain().setMeta('addToHistory', false).setContent(data).run()
+          }
+          if (provider?.synced) seed()
+          else provider?.on('synced', seed)
+          setTimeout(() => {
+            if (!provider?.synced) seed()
+          }, 2500)
         }}
         initialContent={data}
         enableContentCheck={true}
-        onUpdate={onUpdate}
+        onUpdate={(props: { editor: object }) => {
+          if (editorFile.current.get(props.editor) !== fileId) return
+          onUpdate(props)
+        }}
         editorProps={{
           handleDOMEvents: {
             keydown: (_view: any, event: KeyboardEvent) =>
@@ -239,14 +270,19 @@ const Editore = ({
           Highlight,
           TaskList,
           TaskItem,
+          TabIndent,
+          GhostText,
+          slashCommand,
           Collaboration.extend().configure({
             document: ydoc ,
           }),
           CollaborationCursor.extend().configure({
             provider,
+            // id lets agents know exactly which collaborators are on this file
             user: {
-              name: session?.user?.email,
-              color: "#FF0000",
+              id: session?.user?.id,
+              name: session?.user?.name || session?.user?.email,
+              color: colorForUser(session?.user?.id ?? session?.user?.email ?? ""),
             },
             render: (user: any) => {
               const cursor = document.createElement("span");
@@ -296,34 +332,21 @@ const Editore = ({
         slotAfter={<ImageResizer />}>
       
 
-            <EditorCommand className="z-50 h-auto max-h-[330px] overflow-y-auto  rounded-md border border-muted bg-background px-1 py-2 shadow-md transition-all">
+            <EditorCommand className="z-50 h-auto max-h-[360px] w-80 overflow-y-auto rounded-lg border border-muted bg-background px-1 pb-1 shadow-[0_8px_24px_rgba(0,30,51,0.08)]">
               <EditorCommandEmpty className="px-2 text-muted-foreground">
                 No results
               </EditorCommandEmpty>
-              <EditorCommandList className="gap-2">
-                {suggestionItems.map((item: SuggestionItem) => (
-                  <EditorCommandItem
-                    value={item.title}
-                    onCommand={(val) => item.command && item.command(val)} // check if command exists first
-                    className={`flex  w-full font-sans items-center space-x-2 rounded-md px-2 py-1 text-left text-sm hover:bg-card aria-selected:bg-card border-transparent hover:border-sky-100 hover:border`}
-                    key={item.title}
-                  >
-                    <div className="flex h-10 w-10 items-center justify-center rounded-md border border-muted bg-background">
-                      {item.icon}
-                    </div>
-                    <div>
-                      <p className="font-medium">{item.title}</p>
-                      <p className="text-sm text-muted-foreground">
-                        {item.description}
-                      </p>
-                    </div>
-                  </EditorCommandItem>
-                ))}
+              <EditorCommandList>
+                <SlashMenuItems />
               </EditorCommandList>
             </EditorCommand>
 
+            <FindPapersDialog />
+            <ResearchRail fileId={fileId} />
+            <GhostWriter />
+
             <GenerativeMenuSwitch open={openAI} onOpenChange={setOpenAI}>
-              <SemanticScholarSelector open={openScholar} onOpenChange={setOpenScholar}/>
+              <FindPapersButton />
               <NodeSelector open={openNode} onOpenChange={setOpenNode} />
               <LinkSelector open={openLink} onOpenChange={setOpenLink} />
               <ColorSelector open={openColor} onOpenChange={setOpenColor} />

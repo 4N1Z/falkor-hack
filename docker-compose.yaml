@@ -14,7 +14,9 @@ services:
       - DB_NAME=${DB_NAME}
       - REACT_EDITOR=${REACT_EDITOR}
       - STRAPI_API_KEY=${STRAPI_API_KEY}
-      - OPENAI_API_KEY=${OPENAI_API_KEY}
+      - DEEPSEEK_API_KEY=${DEEPSEEK_API_KEY}
+      - DEEPSEEK_MODEL=${DEEPSEEK_MODEL}
+      - COHERE_API_KEY=${COHERE_API_KEY}
       - ANTROPIC_API_KEY=${ANTROPIC_API_KEY}
       - NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY=${NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY}
       - STRIPE_SECRET_KEY=${STRIPE_SECRET_KEY}
@@ -25,7 +27,6 @@ services:
       - AUTH_DRIZZLE_URL=${AUTH_DRIZZLE_URL}
       - UPSTASH_REDIS_REST_URL=${UPSTASH_REDIS_REST_URL}
       - UPSTASH_REDIS_REST_TOKEN=${UPSTASH_REDIS_REST_TOKEN}
-      - SEMANTIC_SCHOLAR_URL=${SEMANTIC_SCHOLAR_URL}
       - ZOTERO_API_ENDPOINT=${ZOTERO_API_ENDPOINT}
       - ZOTERO_CLIENT_KEY=${ZOTERO_CLIENT_KEY}
       - ZOTERO_CLIENT_SECRET=${ZOTERO_CLIENT_SECRET}
@@ -37,8 +38,15 @@ services:
       - AUTH_TRUST_HOST=${AUTH_TRUST_HOST}
       - AUTH_URL=${AUTH_URL}
       - NEXT_PUBLIC_WS_URL=${NEXT_PUBLIC_WS_URL}
+      - FALKORDB_URL=falkor://falkordb:6379
+      - TYPESAFE_API_KEY=${TYPESAFE_API_KEY}
+    depends_on:
+      - falkordb
     env_file:
-      - .env
+      - path: .env
+        required: false
+      - path: .env.local
+        required: false
     networks:
       - app-network
       - proxy
@@ -57,9 +65,22 @@ services:
       - "traefik.http.routers.neuraquery-ws.tls.certresolver=letsencrypt"
       - "traefik.http.routers.neuraquery-ws.service=neuraquery"
 
+  # Research graph store. Run alone for local dev: `docker compose up falkordb`
+  falkordb:
+    image: falkordb/falkordb:latest
+    ports:
+      - "6379:6379"
+      # FalkorDB Browser UI (host 3001 so it doesn't clash with Next on 3000)
+      - "3001:3000"
+    volumes:
+      - falkordb_data:/var/lib/falkordb/data
+    networks:
+      - app-network
+
 
 volumes:
   node_modules:
+  falkordb_data:
 
 networks:
   app-network:

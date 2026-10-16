@@ -140,7 +140,7 @@ const DashboardSetup: React.FC<DashboardSetupProps> = ({
     bg-[linear-gradient(0deg,rgba(255,255,255,0.70)_0%,rgba(255,255,255,0.70)_100%),linear-gradient(140deg,#FFF_24.44%,#93C7FB_92.29%)]
     backdrop-blur-sm
     shadow-[inset_0px_0px_10.941px_rgba(238,244,251,0.50),0px_0px_13.677px_rgba(109,205,247,0.52)]
-    ring-4 ring-white/40 duration-500 hover:duration-500
+    ring-4 ring-white/40
     border-2 border-sky-100
     relative overflow-hidden
 
@@ -181,7 +181,7 @@ const DashboardSetup: React.FC<DashboardSetupProps> = ({
                   className="w-full p-2 text-lg font-medium  rounded-md
                   bg-white/5 backdrop-blur-sm text-primary placeholder:text-secondary-foreground
                   focus:outline-none outline-none
-                  transition-all duration-200"  
+                  transition-colors duration-150"  
                   placeholder="Workspace Name"
                   disabled={isLoading}
                   {...register("workspaceName", {

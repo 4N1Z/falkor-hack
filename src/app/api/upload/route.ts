@@ -3,6 +3,7 @@ import { NextResponse } from "next/server";
 import { auth } from "@/auth";
 import { uploadPapersToStorage } from "@/lib/storage";
 import { addPaper } from "@/db/actions/paper-actions";
+import { checkWorkspaceAccess } from "@/db/actions/authorization-check";
 
 import { V6Options } from "uuid";
 

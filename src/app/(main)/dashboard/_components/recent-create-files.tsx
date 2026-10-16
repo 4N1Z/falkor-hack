@@ -1,103 +1,59 @@
 "use client";
-import { File } from "@/db/database.types";
-import { Button } from "@/components/ui/button";
-import {
-  Card,
-  CardContent,
-  CardFooter,
-  CardHeader,
-} from "@/components/ui/card";
-import {
-  Carousel,
-  CarouselContent,
-  CarouselItem,
-  CarouselNext,
-  CarouselPrevious,
-} from "@/components/ui/carousel";
-import { Clock } from "lucide-react";
-import Link from "next/link";
-import { formatDate, getLastUpdatedTime } from "@/lib/utils";
-import React from "react";
-import Autoplay from "embla-carousel-autoplay";
-import { useWorkspaceFiles } from "@/lib/hooks/state-management-hooks";
 
-// Define proper types for the props
+import { Card } from "@/components/ui/card";
+import { useWorkspaceFiles } from "@/lib/hooks/state-management-hooks";
+import { getLastUpdatedTime } from "@/lib/utils";
+import { ArrowUpRight, Clock, FileText } from "lucide-react";
+import Link from "next/link";
+
 interface RecentCreateFilesProps {
   workspaceId: string;
 }
-// const plugin = React.useRef(
-//   Autoplay({ delay: 2000, stopOnInteraction: true })
-// )
 
-export default function RecentCreateFiles({
-  workspaceId,
-}: RecentCreateFilesProps) {
-  // TODO : Recent File check
-  // const allFiles = useWorkspaceFiles(workspaceId);
-  // const recentFiles = allFiles
-  //   .sort(
-  //     (a, b) =>
-  //       new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime()
-  //   )
-  //   .slice(0, 5);
-
+/** The four most recently edited files, so you can jump straight back in. */
+export default function RecentCreateFiles({ workspaceId }: RecentCreateFilesProps) {
   const recentFiles = useWorkspaceFiles(workspaceId);
-    // console.log("From session ::", recentFiles)
-
-
 
   return (
-    <div className={`flex w-full flex-col gap-2`}>
-      <h1 className={`text-muted-foreground text-sm flex items-center gap-1`}>
-        <Clock size={13} />
-        Recent Created Files
-      </h1>
+    <div className="flex w-full flex-col gap-3">
+      <h2 id="recent-heading" className="flex items-center gap-1.5 text-sm text-muted-foreground">
+        <Clock size={14} />
+        Recently edited
+      </h2>
 
-      {recentFiles && recentFiles.length > 0 ? (
-        <Carousel
-          className="w-full"
-          // plugins={[plugin.current]}
-        >
-          <CarouselContent className="-ml-1 justify-start p-1">
-            {recentFiles.map((file) => (
-              <CarouselItem key={file.id} className="pl-1 basis-auto ">
-                <Link
-                  href={`/dashboard/${workspaceId}/${file.id}`}
-                  className="text-lg font-semibold"
-                  title={file.title}
+      {recentFiles.length > 0 ? (
+        <ul className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
+          {recentFiles.map((file, i) => (
+            <li key={file.id} className="animate-fadeIn opacity-0" style={{ animationDelay: `${i * 40}ms` }}>
+              <Link
+                href={`/dashboard/${workspaceId}/${file.id}`}
+                title={file.title}
+                className="group block h-full rounded-xl focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sky-300"
+              >
+                <Card
+                  className="flex h-full flex-col gap-3 rounded-xl border border-sky-100 p-4
+                    transition-[border-color,box-shadow,transform] duration-200 ease-out
+                    group-hover:border-sky-200 group-hover:shadow-[0_4px_14px_rgba(109,205,247,0.18)]
+                    group-active:scale-[0.98]"
                 >
-                  <Card
-                    className={`aspect-square w-full flex justify-between text-foreground flex-col hover:bg-border 
-                      hover-subtle-shadow-blue hover:shadow-md hover:shadow-sky-100
-                    `}>
-                    <CardHeader
-                      className={`px-2 pb-0 pt-2 flex flex-row w-full justify-between`}
-                    >
-                      <div>{file.iconId}</div>
-                      <div className="text-xs font-normal text-muted-foreground ">
-                        {getLastUpdatedTime(file.updatedAt)}
-                      </div>
-                    </CardHeader>
-                    <CardContent className={`px-2 py-0 text-sm`}>
-                      {file.title.length > 10
-                        ? `${file.title.slice(0, 10)}...`
-                        : file.title}{" "}
-                    </CardContent>
-                    <CardFooter className={`px-2 pb-2 pt-0 text-right`}>
-                      <p className="text-xs font-thin text-muted-foreground  text-right">
-                        {formatDate(file.createdAt)}
-                      </p>
-                    </CardFooter>
-                  </Card>
-                </Link>
-              </CarouselItem>
-            ))}
-          </CarouselContent>
-        </Carousel>
+                  <div className="flex items-start justify-between">
+                    <span className="text-xl leading-none">{file.iconId}</span>
+                    <ArrowUpRight
+                      size={14}
+                      className="text-muted-foreground opacity-0 transition-opacity duration-150 group-hover:opacity-100"
+                    />
+                  </div>
+                  <p className="line-clamp-2 text-sm font-medium leading-snug text-foreground">{file.title}</p>
+                  <p className="mt-auto text-xs text-muted-foreground">Edited {getLastUpdatedTime(file.updatedAt)}</p>
+                </Card>
+              </Link>
+            </li>
+          ))}
+        </ul>
       ) : (
-        // If there are no files
-        <div className="text-muted-foreground text-sm h-[105px] flex w-full items-center justify-center">
-          No recent files
+        <div className="flex items-center gap-3 rounded-xl border border-dashed border-sky-100 px-5 py-6 text-sm text-muted-foreground">
+          <FileText size={18} strokeWidth={1.5} className="shrink-0" />
+          No files yet. Create one from a folder in the sidebar and it will show up here.
         </div>
       )}
     </div>

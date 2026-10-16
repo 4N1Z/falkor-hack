@@ -2,6 +2,7 @@
 import { validate } from "uuid";
 import { papers} from "@/db/schema";
 import db from "@/db/index";
+import { scheduleLibraryIngest } from "@/lib/graph/hooks";
 
 
 interface AddPaperParams {
@@ -55,6 +56,8 @@ export const addPaper = async ({
       .returning();
 
       console.log("Returning after upload :", newPaper)
+
+    scheduleLibraryIngest([newPaper]);
 
     return {
       data: newPaper,

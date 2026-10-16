@@ -1,5 +1,5 @@
 import { streamText } from 'ai';
-import { openai } from '@ai-sdk/openai';
+import { chatModel } from "@/lib/ai/models";
 import { match } from "ts-pattern";
 import { CoreMessage } from 'ai';
 
@@ -9,9 +9,9 @@ export const runtime = "edge";
 export const maxDuration = 30;
 
 export async function POST(req: Request) {
-  // Check if the OPENAI_API_KEY is set, if not return 400
-  if (!process.env.OPENAI_API_KEY || process.env.OPENAI_API_KEY === "") {
-    return new Response("Missing OPENAI_API_KEY - make sure to add it to your .env file.", {
+  // Check if the DEEPSEEK_API_KEY is set, if not return 400
+  if (!process.env.DEEPSEEK_API_KEY || process.env.DEEPSEEK_API_KEY === "") {
+    return new Response("Missing DEEPSEEK_API_KEY - make sure to add it to your .env file.", {
       status: 400,
     });
   }
@@ -99,7 +99,7 @@ export async function POST(req: Request) {
     .run() as CoreMessage[];
 
   const result = await streamText({
-    model: openai('gpt-4o-mini'),
+    model: chatModel(),
     messages,
     temperature: 0.7,
     topP: 1,

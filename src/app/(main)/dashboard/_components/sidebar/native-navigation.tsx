@@ -1,4 +1,5 @@
 import { ArchiveIcon, Diamond, HomeIcon, Settings, Trash2 } from "lucide-react";
+import NavLink from "./nav-link";
 import Link from "next/link";
 import React from "react";
 import Trash from "./trash/trash-main";
@@ -28,7 +29,7 @@ const NavItem = ({
   return (
     <Link
       className={cn(
-        `group/native flex items-start justify-start w-full text-neura-dashboardGray  transition-all gap-2`,
+        `group/native flex items-start justify-start w-full text-neura-dashboardGray gap-2`,
         buttonVariants({ variant: "ghost" })
       )}
       href={link}
@@ -44,30 +45,31 @@ export default function NativeNavigation({myWorkspaceId,userId,className}:Native
     <nav className={cn("my-1", className)}>
       <ul className="flex flex-col w-[100%]  justify-start">
         <li>
-          <Link
-            className={cn(navBtnstyle)}
-            href={`/dashboard/${myWorkspaceId}`}
-          >
+          <NavLink href={`/dashboard/${myWorkspaceId}`} exact>
             <HomeIcon size={18} className="text-neura-dashboardGray" />
             <p className="text-neura-dashboardGray">Dashboard</p>
-          </Link>
+          </NavLink>
 
           {/* <NavItem link={`/dashboard/${myWorkspaceId}`} title="Dashboard" logo={<HomeIcon size={18} className="text-neura-dashboardGray" />} /> */}
         </li>
 
-        <SettingsMenu>
-          <li className={navBtnstyle}>
-            <Settings size={18} />
-            <span>Settings</span>
-          </li>
-        </SettingsMenu>
+        <li>
+          <SettingsMenu>
+            <div className={navBtnstyle}>
+              <Settings size={18} />
+              <span>Settings</span>
+            </div>
+          </SettingsMenu>
+        </li>
 
-        <Trash>
-          <li className={navBtnstyle}>
-            <ArchiveIcon size={18} />
-            <span>Archive</span>
-          </li>
-        </Trash>
+        <li>
+          <Trash>
+            <div className={navBtnstyle}>
+              <ArchiveIcon size={18} />
+              <span>Archive</span>
+            </div>
+          </Trash>
+        </li>
 
         {/* <div className="sticky bottom-0 w-full border-t z-50 p-2">
           <CustomDialogTrigger
@@ -76,7 +78,7 @@ export default function NativeNavigation({myWorkspaceId,userId,className}:Native
             description="Workspaces give you the power to collaborate with others. You can change your workspace privacy settings after creating the workspace too.">
             <div
               className="flex 
-                  transition-all 
+                  transition-colors duration-150 
                   hover:bg-muted 
                   justify-center 
                   items-center 

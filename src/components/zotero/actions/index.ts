@@ -5,6 +5,8 @@ import { uploadPapersToStorage } from "@/lib/storage";
 import db from "@/db";
 import { papers } from "@/db/schema";
 import { auth } from "@/auth";
+import { and, eq, inArray } from "drizzle-orm";
+import { scheduleLibraryIngest } from "@/lib/graph/hooks";
 
 interface UploadProgress {
   total: number;
@@ -75,6 +77,22 @@ export async function importPapers(
     console.log("❌ Failed items:", progress.failed);
   }
 
+  // Hand the newly imported papers to the Librarian (runs after the response)
+  const importedKeys = itemKeys.map((item) => item.key);
+  if (importedKeys.length) {
+    const imported = await db
+      .select()
+      .from(papers)
+      .where(
+        and(
+          eq(papers.workspaceId, workspaceId),
+          eq(papers.externalSource, "zotero"),
+          inArray(papers.externalId, importedKeys)
+        )
+      );
+    scheduleLibraryIngest(imported);
+  }
+
   return {
     status: true,
     message: "Import complete",
@@ -119,7 +137,7 @@ async function processParentItems(
   progress: UploadProgress
 ): Promise<ProcessResult[]> {
   console.log(`🔄 Processing ${parentKeys.length} parent items`);
-  const cookieStore = cookies();
+  const cookieStore = await cookies();
 
   try {
     const results = await Promise.all(
@@ -260,7 +278,7 @@ async function processAttachments(
   progress: UploadProgress
 ) {
   console.log(`🔄 Processing ${attachmentKeys.length} direct attachments`);
-  const cookieStore = cookies();
+  const cookieStore = await cookies();
 
   try {
     const attachmentResults = await Promise.all(

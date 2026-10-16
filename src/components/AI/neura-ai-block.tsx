@@ -10,19 +10,23 @@ export default function NeuraAIBlock() {
 
   return (
     <div className="fixed bottom-6 right-6 z-40">
-      <AnimatePresence mode="wait">
+      <AnimatePresence>
         {!open ? (
           <motion.div
             key="button"
-            initial={{ opacity: 0, y: 10 }}
-            animate={{ opacity: 1, y: 0 }}
-            exit={{ opacity: 0, y: 4 }}
-            transition={{ duration: 0.3 }}
+            initial={{ opacity: 0, transform: "translateY(6px)" }}
+            animate={{ opacity: 1, transform: "translateY(0px)" }}
+            exit={{ opacity: 0 }}
+            transition={{ duration: 0.12, ease: [0.23, 1, 0.32, 1] }}
           >
             <NeuraAIBtn onClick={() => setOpen(!open)} open={open} />
           </motion.div>
         ) : (
-          <NeuraAIOverlay isOpen={open} onClose={() => setOpen(false)} />
+          <NeuraAIOverlay
+            key="overlay"
+            isOpen={open}
+            onClose={() => setOpen(false)}
+          />
         )}
       </AnimatePresence>
     </div>

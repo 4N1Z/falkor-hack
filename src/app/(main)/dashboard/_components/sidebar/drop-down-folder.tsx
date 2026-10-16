@@ -3,7 +3,7 @@
 import { AccordionItem, AccordionTrigger } from "@/components/ui/accordion";
 import { AccordionContent } from "@/components/ui/accordion";
 import { useAppState } from "@/lib/providers/state-providers";
-import { useRouter } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
 import { useMemo, useState, useEffect, useRef } from "react";
 import EmojiPicker from "@/components/emoji-picker";
 import TooltipComponent from "@/components/tooltip-component";
@@ -14,7 +14,7 @@ import {
   updateFolder,
 } from "@/db/actions/action-workspace";
 import { toast } from "sonner";
-import { PlusIcon, Trash } from "lucide-react";
+import { Archive, ChevronRight, FilePlus, Pencil } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { v4 } from "uuid";
 import { File } from "@/db/database.types";
@@ -30,6 +30,50 @@ interface DropdownProps {
   children?: React.ReactNode;
   disabled?: boolean;
   customIcon?: React.ReactNode;
+  autoEdit?: boolean;
+  onToggle?: (folderId: string) => void;
+  onExpand?: (folderId: string) => void;
+}
+
+// Hover action on a row. Stops the click from toggling or opening the row itself.
+function RowAction({
+  label,
+  onAction,
+  className,
+  children,
+}: {
+  label: string;
+  onAction: () => void;
+  className?: string;
+  children: React.ReactNode;
+}) {
+  return (
+    <TooltipComponent message={label}>
+      <span
+        role="button"
+        tabIndex={0}
+        aria-label={label}
+        onClick={(e) => {
+          e.stopPropagation();
+          onAction();
+        }}
+        onKeyDown={(e) => {
+          if (e.key === "Enter" || e.key === " ") {
+            e.preventDefault();
+            e.stopPropagation();
+            onAction();
+          }
+        }}
+        className={cn(
+          "flex size-6 items-center justify-center rounded text-slate-400",
+          "transition-[color,background-color,transform] duration-150 ease-out hover:bg-black/[0.06] active:scale-90",
+          className
+        )}
+      >
+        {children}
+      </span>
+    </TooltipComponent>
+  );
 }
 
 export default function DropDown({
@@ -40,14 +84,23 @@ export default function DropDown({
   children,
   disabled,
   customIcon,
+  autoEdit,
+  onToggle,
+  onExpand,
   ...props
 }: DropdownProps) {
   const { state, dispatch, workspaceId, folderId } = useAppState();
-  const [isEditing, setIsEditing] = useState<boolean>(false);
+  // Freshly created items mount straight into rename mode
+  const [isEditing, setIsEditing] = useState<boolean>(!!autoEdit);
   const router = useRouter();
   const { session } = useUser();
   const inputRef = useRef<HTMLInputElement>(null);
   const [originalTitle, setOriginalTitle] = useState<string>(title);
+  const [newFileId, setNewFileId] = useState<string | null>(null);
+  const pathname = usePathname();
+  const isFolder = listType === "folder";
+  const isActive =
+    !isFolder && pathname?.split("/").filter(Boolean)[2] === id.split("folder")[1];
 
   // Fetch files from the database on initial load
   useEffect(() => {
@@ -122,10 +175,38 @@ export default function DropDown({
   //Add a file
 
   //DpubleCLick to edit
-  const handleDoubleClick = (e: React.MouseEvent) => {
-    e.stopPropagation();
+  const startEditing = () => {
     setOriginalTitle(listType === "folder" ? folderTitle! : fileTitle!);
     setIsEditing(true);
+  };
+
+  const handleDoubleClick = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    startEditing();
+  };
+
+  // Focus and select the name as soon as editing starts
+  useEffect(() => {
+    if (isEditing) {
+      inputRef.current?.focus();
+      inputRef.current?.select();
+    }
+  }, [isEditing]);
+
+  const setLocalTitle = (value: string) => {
+    if (!workspaceId) return;
+    const FID = id.split("folder");
+    if (listType === "folder") {
+      dispatch({
+        type: "UPDATE_FOLDER",
+        payload: { folder: { title: value }, folderId: FID[0], workspaceId },
+      });
+    } else {
+      dispatch({
+        type: "UPDATE_FILE",
+        payload: { file: { title: value }, folderId: FID[0], workspaceId, fileId: FID[1] },
+      });
+    }
   };
 
   // Blur
@@ -138,7 +219,10 @@ export default function DropDown({
     
     try {
       if (FID.length === 1) {
-        if (!folderTitle?.trim()) return;
+        if (!folderTitle?.trim()) {
+          setLocalTitle(originalTitle);
+          return;
+        }
         
         if (originalTitle.trim() === folderTitle.trim()) {
           // console.log("Skipping folder update - no changes");
@@ -147,11 +231,11 @@ export default function DropDown({
 
         // console.log("Proceeding with folder update");
         await updateFolder({ title: folderTitle }, FID[0]);
-        toast.success("Success", {
-          description: "Folder name updated",
-        });
       } else if (FID.length === 2 && FID[1]) {
-        if (!fileTitle?.trim()) return;
+        if (!fileTitle?.trim()) {
+          setLocalTitle(originalTitle);
+          return;
+        }
         
         if (originalTitle.trim() === fileTitle.trim()) {
           // console.log("Skipping file update - no changes");
@@ -162,15 +246,10 @@ export default function DropDown({
         const { error } = await updateFile({ title: fileTitle }, FID[1]);
         
         if (error) throw error;
-        toast.success("Success", {
-          description: "File name updated",
-        });
       }
     } catch (error) {
       console.error("Update error:", error);
-      toast.error("Error", {
-        description: "Could not update the name",
-      });
+      toast.error("Could not rename. Please try again.");
     }
   };
 
@@ -193,11 +272,7 @@ export default function DropDown({
         id
       );
 
-      if (updateEmojiError) {
-        toast.error("Error while updating Emoji");
-      } else {
-        toast.success("Successfully updated !");
-      }
+      if (updateEmojiError) toast.error("Could not update the icon");
     }
   };
 
@@ -234,6 +309,28 @@ export default function DropDown({
     }
   };
 
+  // Undo for archive
+  const restoreFromArchive = async () => {
+    if (!workspaceId) return;
+    const pathId = id.split("folder");
+
+    if (listType === "folder") {
+      dispatch({
+        type: "UPDATE_FOLDER",
+        payload: { folder: { inTrash: null }, folderId: pathId[0], workspaceId },
+      });
+      const { error } = await updateFolder({ inTrash: null }, pathId[0]);
+      if (error) toast.error("Could not restore the folder");
+    } else {
+      dispatch({
+        type: "UPDATE_FILE",
+        payload: { file: { inTrash: null }, folderId: pathId[0], workspaceId, fileId: pathId[1] },
+      });
+      const { error } = await updateFile({ inTrash: null }, pathId[1]);
+      if (error) toast.error("Could not restore the file");
+    }
+  };
+
   // move-to-trash
 
   const moveToTrash = async () => {
@@ -256,12 +353,11 @@ export default function DropDown({
         pathId[0]
       );
       if (error) {
-        toast.error("Error", {
-          description: "Could not move the folder to archive",
-        });
+        toast.error("Could not archive the folder");
       } else {
-        toast.warning("Success", {
-          description: "Moved folder to archive",
+        toast("Folder archived", {
+          description: "Find it under Archive in the sidebar.",
+          action: { label: "Undo", onClick: restoreFromArchive },
         });
       }
     }
@@ -281,11 +377,12 @@ export default function DropDown({
         pathId[1]
       );
       if (error) {
-        toast.error("Error", {
-            description: "Could not move the file to archive",
-        });
+        toast.error("Could not archive the file");
       } else {
-        toast.warning("Success", { description: "Moved file to archive" });
+        toast("File archived", {
+          description: "Find it under Archive in the sidebar.",
+          action: { label: "Undo", onClick: restoreFromArchive },
+        });
       }
     }
   };
@@ -297,8 +394,8 @@ export default function DropDown({
       data: null,
       createdAt: new Date().toISOString(),
       inTrash: null,
-      title: "double click to rename!",
-      iconId: "🎀",
+      title: "Untitled",
+      iconId: "📄",
       id: v4(),
       workspaceId,
       bannerUrl: "",
@@ -310,6 +407,8 @@ export default function DropDown({
       type: "ADD_FILE",
       payload: { file: newFile, folderId: id, workspaceId },
     });
+    setNewFileId(newFile.id);
+    onExpand?.(id);
 
     const { error } = await createFile(newFile);
 
@@ -319,19 +418,14 @@ export default function DropDown({
         type: "DELETE_FILE",
         payload: { workspaceId, folderId: id, fileId: newFile.id },
       });
-      toast.error("Error", { description: "Could not create a file" });
-    } else {
-      toast.success("Success", { description: "File created." });
+      toast.error("Could not create the file");
     }
   };
-
-  const isFolder = listType === "folder";
 
   const listStyles = useMemo(
     () =>
       clsx("relative", {
-        "border-none text-md": isFolder,
-        "border-none ml-6 text-[16px] py-1": !isFolder,
+        "text-sm": true,
       }),
     [isFolder]
   );
@@ -351,127 +445,157 @@ export default function DropDown({
   const hoverStyles = useMemo(
     () =>
       clsx(
-        "h-full hidden rounded-sm absolute right-0 space-x-2 flex items-center justify-center",
+        "shrink-0 flex items-center gap-0.5 opacity-0 pointer-events-none transition-opacity duration-150 ease-out focus-within:opacity-100 focus-within:pointer-events-auto",
         {
-          "group-hover/file:inline-flex group-hover/file:justify-center  ": listType === "file",
-          "group-hover/folder:inline-flex group-hover/folder:justify-center ": listType === "folder",
+          "group-hover/file:opacity-100 group-hover/file:pointer-events-auto": listType === "file",
+          "group-hover/folder:opacity-100 group-hover/folder:pointer-events-auto": listType === "folder",
         }
       ),
     [isFolder]
   );
 
-  // console.log("FILES GIONT TO BE PRINTED :: g",  state.workspaces[0].foldersfiles)
-
-  useEffect(() => {
-    if (isEditing) {
-      inputRef.current?.focus();
-    }
-  }, [isEditing]);
+  const folderFiles = isFolder
+    ? state.workspaces
+        .find((workspace) => workspace.id === workspaceId)
+        ?.folders.find((folder) => folder.id === id)
+        ?.files.filter((file) => !file.inTrash) ?? []
+    : [];
 
   return (
-    <>
-      <AccordionItem
-        value={id}
-        className={cn(
-          `p-1`,
-         "font-medium transition-all duration-500 hover:duration-500 gap-2  rounded-md",
-          listStyles,
-          'bg-white data-[state=open]:bg-white hover:border-primary hover:border',
-          listType === 'file' && 'hover:bg-neura-dashboardBG transition-colors duration-200'
-        )}
-        onDoubleClick={handleDoubleClick}
-        onBlur={handleBlur}
-        onClick={(e) => {
-          e.stopPropagation();
-          // Only navigate if we're not in editing mode and it's a file
-          if (listType === "file" && !isEditing) {
-            navigatePage(id, listType);
-          }
-        }}
+    <AccordionItem
+      value={id}
+      className={cn(
+        "group/item rounded-md border-0 animate-fadeIn",
+        listStyles
+      )}
+      onDoubleClick={handleDoubleClick}
+      onBlur={handleBlur}
+      onClick={(e) => {
+        e.stopPropagation();
+        if (isEditing) return;
+        // The (visually hidden) accordion trigger is a real button and toggles itself
+        if ((e.target as HTMLElement).closest("button")) return;
+        if (isFolder) onToggle?.(id);
+        else navigatePage(id, listType);
+      }}
+    >
+      <AccordionTrigger
+        id={listType}
+        // Kept for keyboard and screen readers; the row itself is the visual control
+        className="sr-only"
+        disabled={!isFolder}
       >
-        <AccordionTrigger
-          id={listType}
+        <div
           className={cn(
-            "hover:no-underline p-2 text-md font-regular",
-            'data-[state=open]:opacity-85',
-            listType === 'folder' ? 'text-muted-foreground/90' : 'text-muted-foreground'
+            groupIdentifies,
+            "h-8 cursor-pointer rounded-md px-1.5 transition-colors duration-150",
+            isActive
+              ? "bg-white text-foreground shadow-[0_1px_2px_rgba(0,0,0,0.05)] ring-1 ring-black/[0.06]"
+              : "hover:bg-black/[0.035]"
           )}
-          disabled={listType === "file"}
         >
-          <div className={groupIdentifies}>
-            <div className="flex gap-4 items-center justify-center overflow-hidden">
-              <div className="relative bg-slate-200 rounded-sm p-0.5">
-                <EmojiPicker getValue={onChangeEmoji}>{iconId}</EmojiPicker>
-              </div>
-
-              <input
-                ref={inputRef}
-                type="text"
-                value={listType === "folder" ? folderTitle : fileTitle}
-                className={clsx(
-                  "outline-none overflow-hidden w-[140px]",
-                  {
-                    "bg-muted cursor-text": isEditing,
-                    "bg-transparent cursor-pointer": !isEditing,
-                  },
-                  listType === 'folder' 
-                    ? 'text-neura-dashboardGray group-hover/folder:text-foreground data-[state=open]:opacity-60' 
-                    : 'text-neura-dashboardGray group-hover/file:text-foreground'
-                )}
-                readOnly={!isEditing}
-                onChange={listType === "folder" ? folderTitleChange : fileTitleChange}
-                onKeyDown={(e) => {
-                  if (e.key === 'Enter') {
-                    e.preventDefault();
-                    e.currentTarget.blur();
-                  }
-                  if (e.key === 'Escape') {
-                    setIsEditing(false);
-                  }
-                }}
+          <div className="flex min-w-0 flex-1 items-center gap-1.5">
+            {isFolder ? (
+              <ChevronRight
+                size={14}
+                aria-hidden
+                className="shrink-0 text-muted-foreground/70 transition-transform duration-150 ease-out group-data-[state=open]/item:rotate-90"
               />
+            ) : (
+              <span aria-hidden className="w-3.5 shrink-0" />
+            )}
+            <div
+              className="flex size-5 shrink-0 items-center justify-center rounded text-sm leading-none transition-colors duration-150 hover:bg-black/[0.06]"
+              onClick={(e) => e.stopPropagation()}
+            >
+              <EmojiPicker getValue={onChangeEmoji}>{iconId}</EmojiPicker>
             </div>
-            <div className={hoverStyles}>
-              <TooltipComponent message={listType === "file" ? "Delete File" : "Delete Folder"}>
-                <Trash
-                  onClick={moveToTrash}
-                  size={16}
-                  className="hover:text-red-600  rounded-sm  text-slate-400 transition-colors"
-                />
-              </TooltipComponent>
 
-              {listType === "folder" && !isEditing && (
-                <TooltipComponent message="Add File">
-                  <PlusIcon
-                    onClick={addNewFile}
-                    size={15}
-                    className="hover:text-primary text-slate-400  transition-colors"
-                  />
-                </TooltipComponent>
+            <input
+              ref={inputRef}
+              type="text"
+              size={1}
+              aria-label={isFolder ? "Folder name" : "File name"}
+              title={isEditing ? undefined : "Double-click to rename"}
+              value={isFolder ? folderTitle : fileTitle}
+              className={clsx(
+                "min-w-0 flex-1 truncate rounded-sm px-1 text-sm outline-none transition-[background-color,box-shadow] duration-150",
+                isEditing ? "bg-white cursor-text ring-1 ring-sky-300" : "bg-transparent cursor-pointer",
+                isActive
+                  ? "font-medium text-foreground"
+                  : isFolder
+                  ? "font-medium text-[#37352F]/80 group-hover/folder:text-foreground"
+                  : "text-[#37352F]/70 group-hover/file:text-foreground"
               )}
-            </div>
+              readOnly={!isEditing}
+              onClick={(e) => {
+                if (isEditing) e.stopPropagation();
+              }}
+              onChange={isFolder ? folderTitleChange : fileTitleChange}
+              onKeyDown={(e) => {
+                if (!isEditing) return;
+                if (e.key === "Enter") {
+                  e.preventDefault();
+                  e.currentTarget.blur();
+                }
+                if (e.key === "Escape") {
+                  setLocalTitle(originalTitle);
+                  setIsEditing(false);
+                }
+              }}
+            />
           </div>
-        </AccordionTrigger>
-        <AccordionContent>
-          {state.workspaces
-            .find((workspace) => workspace.id === workspaceId)
-            ?.folders.find((folder) => folder.id === id)
-            ?.files.filter((file) => !file.inTrash)
-            .map((file) => {
-              const customFileId = `${id}folder${file.id}`;
-              // console.log("In the accordian content :: ,", file.title);
-              return (
-                <DropDown
-                  key={file.id}
-                  title={file.title}
-                  listType="file"
-                  id={customFileId}
-                  iconId={file.iconId}
-                />
-              );
-            })}
+
+          {!isEditing && (
+            <div className={hoverStyles}>
+              <RowAction label="Rename" onAction={startEditing} className="hover:text-foreground">
+                <Pencil size={13} />
+              </RowAction>
+              {isFolder && (
+                <RowAction label="New file" onAction={addNewFile} className="hover:text-foreground">
+                  <FilePlus size={13} />
+                </RowAction>
+              )}
+              <RowAction
+                label={isFolder ? "Archive folder" : "Archive file"}
+                onAction={moveToTrash}
+                className="hover:text-red-600"
+              >
+                <Archive size={13} />
+              </RowAction>
+            </div>
+          )}
+        </div>
+      </AccordionTrigger>
+
+      {isFolder && (
+        <AccordionContent className="ml-[13px] mt-0.5 space-y-0.5 border-l border-black/[0.07] pb-1 pl-1.5">
+          {folderFiles.length ? (
+            folderFiles.map((file) => (
+              <DropDown
+                key={file.id}
+                title={file.title}
+                listType="file"
+                id={`${id}folder${file.id}`}
+                iconId={file.iconId}
+                autoEdit={file.id === newFileId}
+              />
+            ))
+          ) : (
+            <button
+              type="button"
+              onClick={(e) => {
+                e.stopPropagation();
+                addNewFile();
+              }}
+              className="flex h-7 w-full items-center gap-1.5 rounded-md px-2 text-xs text-muted-foreground transition-[background-color,color] duration-150 hover:bg-black/[0.035] hover:text-foreground"
+            >
+              <FilePlus size={12} />
+              Add a file
+            </button>
+          )}
         </AccordionContent>
-      </AccordionItem>
-    </>
+      )}
+    </AccordionItem>
   );
 }

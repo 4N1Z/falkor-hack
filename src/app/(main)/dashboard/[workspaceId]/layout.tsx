@@ -5,13 +5,18 @@ import { checkWorkspaceAccess } from "@/db/actions/authorization-check";
 import { redirect } from "next/navigation";
 import { auth } from "@/auth";
 
-export default async function WorkspaceLayout({
-  children,
-  params,
-}: {
-  children: React.ReactNode;
-  params: { workspaceId: string };
-}) {
+export default async function WorkspaceLayout(
+  props: {
+    children: React.ReactNode;
+    params: Promise<{ workspaceId: string }>;
+  }
+) {
+  const params = await props.params;
+
+  const {
+    children
+  } = props;
+
   const session = await auth();
   if (!session?.user || session === null) redirect("/login");
 

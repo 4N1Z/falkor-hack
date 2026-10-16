@@ -12,10 +12,12 @@ import { ScrollArea } from "@/components/ui/scroll-area";
 import FoldersDropdownList from "./folders-list";
 import EnableAIWorkspace from "./enable-ai-workspace";
 import ResearchPaperMain from "./researchpaper/researchPaper-main";
+import ResearchGraphCard from "./research-graph-card";
 import UserProfile from "./user-profile";
 import { redirect } from "next/navigation";
 import { auth } from "@/auth";
 import TestBtn from "@/components/test-btn";
+import { TooltipProvider } from "@/components/ui/tooltip";
 
 interface SidebarProps {
   params: {
@@ -73,6 +75,7 @@ export default async function Sidebar({ params, className }: SidebarProps) {
   // ];
 
   return (
+    <TooltipProvider delayDuration={400} skipDelayDuration={300}>
     <aside
       className={cn(
         "hidden sm:flex m-2 border rounded-sm border-sky-100 sm:flex-col w-[320px] shrink-0 p-4 gap-4 bg-card-foreground font-sans h-full max-h-[97vh]",
@@ -103,24 +106,25 @@ export default async function Sidebar({ params, className }: SidebarProps) {
           />
           <NativeNavigation myWorkspaceId={params.workspaceId} userId={userData.id!} />
           <EnableAIWorkspace myWorkspaceId={params.workspaceId} />
+
+          {/* Research: library dialog + graph page, same card design */}
+          <div className="space-y-2">
+            <ResearchPaperMain myWorkspaceId={params.workspaceId} />
+            <ResearchGraphCard myWorkspaceId={params.workspaceId} />
+          </div>
         </div>
 
         {/* <TestBtn/> */}
 
         {/* Scrollable Content Area */}
         <div className="flex-1 min-h-0 mt-4">
-          <ScrollArea className="h-full">
+          <ScrollArea className="h-full [&_[data-radix-scroll-area-viewport]>div]:!block [&_[data-radix-scroll-area-viewport]]:!overflow-x-hidden">
             {/* Folders Section */}
             <div className="space-y-4">
               <FoldersDropdownList
                 workspaceFolders={folderData || []}
                 workspaceId={params.workspaceId}
               />
-
-              {/* Research Papers Section */}
-              <div className="pt-4 border-t">
-                <ResearchPaperMain myWorkspaceId={params.workspaceId} />
-              </div>
             </div>
 
             <div
@@ -142,6 +146,7 @@ export default async function Sidebar({ params, className }: SidebarProps) {
         </div>
       </div>
     </aside>
+    </TooltipProvider>
   );
 
   // redirect("/dashboard");

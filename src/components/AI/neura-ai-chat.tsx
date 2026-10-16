@@ -62,7 +62,7 @@ export default function NeuraAIChat({
 }: NeuraAIChatProps) {
   const pathname = usePathname();
   const fileId = pathname.split("/")[3];
-  const { state, dispatch } = useAppState();
+  const { state, dispatch, workspaceId } = useAppState();
 
   const chatKey = `chat_neura_ai_${fileId}`;
 
@@ -105,6 +105,9 @@ export default function NeuraAIChat({
     body: {
       id,
       modelId,
+      // Lets the server route research requests to the workspace's specialist agents
+      workspaceId,
+      fileId,
     },
     maxSteps: 4,
   });

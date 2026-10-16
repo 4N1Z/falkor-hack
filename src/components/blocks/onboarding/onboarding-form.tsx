@@ -94,25 +94,25 @@ export default function OnboardingForm() {
         <Button
           variant={"zotero"}
           onClick={handleBack}
-          className={`text-primary font-medium transition-colors bg-none leading-none duration-500
-          bg-card hover:bg-card opacity-100 hover:duration-500`}
+          className={`text-primary font-medium transition-colors bg-none leading-none duration-150
+          bg-card hover:bg-card opacity-100 hover:duration-150`}
         >
           <p className="py-0 px-3">Back</p>
         </Button>
       )}
 
-      {/* className={` text-primary font-medium transition-colors bg-none leading-none duration-500
+      {/* className={` text-primary font-medium transition-colors bg-none leading-none duration-150
               ${
                 nextDisabled
-                  ? "bg-card text-secondary cursor-not-allowed duration-500"
-                  : "bg-card hover:bg-card opacity-100 duration-500"}`} */}
+                  ? "bg-card text-secondary cursor-not-allowed duration-150"
+                  : "bg-card hover:bg-card opacity-100 duration-150"}`} */}
       {showNext && (
         <Button
           variant={"zotero"}
           onClick={onNext}
           disabled={nextDisabled}
           className={`
-     text-primary font-medium transition-colors bg-none leading-none duration-500
+     text-primary font-medium transition-colors bg-none leading-none duration-150
      ${
        submitButton
          ? nextDisabled
@@ -125,8 +125,8 @@ export default function OnboardingForm() {
            
            `
          : nextDisabled
-         ? "bg-card text-secondary cursor-not-allowed duration-500"
-         : "bg-card hover:bg-card opacity-100 duration-500"
+         ? "bg-card text-secondary cursor-not-allowed duration-150"
+         : "bg-card hover:bg-card opacity-100 duration-150"
      }
    `}
         >

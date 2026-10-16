@@ -22,10 +22,12 @@ export function useWorkspaceFiles(workspaceId: string) {
   return useMemo(() => {
     const workspace = state.workspaces.find((w) => w.id === workspaceId);
 
-    // Sort files by `updatedAt` and take the top 4
+    // Most recently edited files, skipping anything archived (or inside an archived folder)
     return (
       workspace?.folders
+        .filter((f) => !f.inTrash)
         .flatMap((f) => f.files)
+        .filter((file) => !file.inTrash)
         .sort((a, b) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime())
         .slice(0, 4) || []
     );

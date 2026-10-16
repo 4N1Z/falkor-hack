@@ -9,7 +9,9 @@ export const env = createEnv({
     PW: z.string().min(1),
     REACT_EDITOR: z.string().min(1),
     STRAPI_API_KEY: z.string().min(1),
-    OPENAI_API_KEY: z.string().min(1),
+    DEEPSEEK_API_KEY: z.string().min(1),
+    DEEPSEEK_MODEL: z.string().optional(),
+    COHERE_API_KEY: z.string().min(1),
     STRIPE_SECRET_KEY: z.string().optional(),
     STRIPE_WEBHOOK_SECRET: z.string().optional(),
     AUTH_SECRET: z.string().min(1),
@@ -22,6 +24,9 @@ export const env = createEnv({
     APP_URL: z.string().url(),
     ZOTERO_CLIENT_SECRET: z.string().min(1),
     SHOW_OUTRAGEOUS_CONTENT: z.string().min(1),
+    FALKORDB_URL: z.string().url(),
+    TYPESAFE_API_KEY: z.string().optional(),
+    MCP_TOKEN: z.string().min(16).optional(),
   },
   // Everything that goes in this should go in the experimental__runtimeEnv
   client: {

@@ -5,6 +5,7 @@ import db from "@/db";
 import { auth } from "@/auth";
 import { users } from "@/db/schema";
 import { eq } from "drizzle-orm";
+import { safeCallback } from "@/components/zotero/safe-callback";
 // Create an OAuth instance
 const oauth = new OAuth({
   consumer: {
@@ -35,7 +36,7 @@ export async function GET(request: Request) {
     return new Response("Missing required parameters", { status: 400 });
   }
 
-  const cookiesStore = cookies();
+  const cookiesStore = await cookies();
   const requestToken = cookiesStore.get("requestToken")?.value;
   const requestTokenSecret = cookiesStore.get("requestTokenSecret")?.value;
 
@@ -125,7 +126,7 @@ export async function GET(request: Request) {
       cookiesStore.delete("callback");
       if (callback) {
         // console.log("↪️ Redirecting to callback:", callback);
-        return Response.redirect(callback);
+        return Response.redirect(safeCallback(callback));
       }
     }
 

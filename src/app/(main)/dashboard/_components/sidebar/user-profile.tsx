@@ -9,12 +9,16 @@ import {
   DropdownMenuTrigger,
   DropdownMenuSeparator,
 } from "@/components/ui/dropdown-menu";
-import { AuthUser } from "@supabase/supabase-js";
-import { LogOutIcon, Settings, MoreVertical, User } from "lucide-react";
+import { LogOutIcon, Settings, MoreVertical, User, Loader2 } from "lucide-react";
 import Image from "next/image";
 import { Subscription } from "@/db/database.types";
 import PlanUsage from "./plan-uage";
+import SettingsMenu from "./settings/settings-main";
 import { User as ActiveUser } from "next-auth";
+import { signOut } from "next-auth/react";
+import { useAppState } from "@/lib/providers/state-providers";
+import { useState } from "react";
+import { toast } from "sonner";
 
 interface UserProfileProps {
   user: ActiveUser;
@@ -23,6 +27,21 @@ interface UserProfileProps {
 }
 
 export default function UserProfile({ user, subscription, foldersLength }: UserProfileProps) {
+  const { dispatch } = useAppState();
+  const [settingsOpen, setSettingsOpen] = useState(false);
+  const [signingOut, setSigningOut] = useState(false);
+
+  const handleSignOut = async () => {
+    setSigningOut(true);
+    try {
+      dispatch({ type: "SET_WORKSPACES", payload: { workspaces: [] } });
+      await signOut({ callbackUrl: "/login" });
+    } catch {
+      setSigningOut(false);
+      toast.error("Could not sign out. Please try again.");
+    }
+  };
+
   return (
     <div className="w-full h-fit bg-white rounded-md flex flex-col justify-start items-center p-2">
       <div className="flex w-full justify-between items-center my-2">
@@ -52,28 +71,44 @@ export default function UserProfile({ user, subscription, foldersLength }: UserP
           </div>    
         </div>
         
-        <DropdownMenu>
+        <DropdownMenu modal={false}>
           <DropdownMenuTrigger asChild>
-            <Button 
-              variant="ghost" 
-              size="icon" 
+            <Button
+              variant="ghost"
+              size="icon"
+              aria-label="Account menu"
               className="h-8 w-8 hover:bg-muted"
             >
               <MoreVertical size={14}/>
             </Button>
           </DropdownMenuTrigger>
           <DropdownMenuContent align="end" className="w-48">
-            <DropdownMenuItem>
+            <DropdownMenuItem onSelect={() => setSettingsOpen(true)}>
               <Settings className="mr-2 h-4 w-4"/>
-              Account Settings
+              Account settings
             </DropdownMenuItem>
             <DropdownMenuSeparator />
-            <DropdownMenuItem className="text-destructive focus:text-destructive">
-              <LogOutIcon className="mr-2 h-4 w-4"/>
-              Sign Out
+            <DropdownMenuItem
+              className="text-destructive focus:text-destructive"
+              disabled={signingOut}
+              onSelect={(e) => {
+                // Keep the menu open so the spinner is visible until the redirect
+                e.preventDefault();
+                handleSignOut();
+              }}
+            >
+              {signingOut ? (
+                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+              ) : (
+                <LogOutIcon className="mr-2 h-4 w-4"/>
+              )}
+              {signingOut ? "Signing out…" : "Sign out"}
             </DropdownMenuItem>
           </DropdownMenuContent>
         </DropdownMenu>
+
+        {/* Controlled so it survives the menu closing */}
+        <SettingsMenu open={settingsOpen} onOpenChange={setSettingsOpen} />
       </div>
 
       <PlanUsage 

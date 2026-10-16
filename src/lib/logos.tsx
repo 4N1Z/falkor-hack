@@ -287,6 +287,27 @@ export const search = (
   </svg>
 );
 
+// Same language as powerAI: amber fill with a darker amber stroke
+export const hypothesisLogo = (
+  <svg
+    xmlns="http://www.w3.org/2000/svg"
+    width="24"
+    height="24"
+    viewBox="0 0 24 24"
+    fill="none"
+  >
+    <path
+      d="M12 2.75a6.25 6.25 0 0 0-3.9 11.14c.66.53 1.15 1.3 1.15 2.15v.46h5.5v-.46c0-.85.49-1.62 1.15-2.15A6.25 6.25 0 0 0 12 2.75Z"
+      fill="#F7B63D"
+      stroke="#F59E0B"
+      strokeWidth="1.6"
+      strokeLinejoin="round"
+    />
+    <path d="M9.75 19.25h4.5M10.75 21.5h2.5" stroke="#F59E0B" strokeWidth="1.6" strokeLinecap="round" />
+    <path d="M10 7.25a3 3 0 0 1 2.25-1" stroke="#FFF4D6" strokeWidth="1.4" strokeLinecap="round" />
+  </svg>
+);
+
 export const extract_papers = (
   <svg
     xmlns="http://www.w3.org/2000/svg"

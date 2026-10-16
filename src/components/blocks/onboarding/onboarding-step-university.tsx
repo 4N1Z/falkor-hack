@@ -33,7 +33,7 @@ export function StepUniversity({
         bg-white/5 backdrop-blur-sm text-primary placeholder:text-secondary-foreground
         
         focus:outline-none outline-none
-        transition-all duration-200"
+        transition-colors duration-150"
         />
         {(clientError || error) && (
           <p className="text-red-500">{clientError || error}</p>

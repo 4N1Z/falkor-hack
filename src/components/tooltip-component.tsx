@@ -2,7 +2,6 @@ import React from 'react';
 import {
   Tooltip,
   TooltipContent,
-  TooltipProvider,
   TooltipTrigger,
 } from '@/components/ui/tooltip';
 
@@ -17,12 +16,10 @@ const TooltipComponent: React.FC<TooltipComponentProps> = ({
   message,
 }) => {
   return (
-    <TooltipProvider>
       <Tooltip>
-        <TooltipTrigger>{children}</TooltipTrigger>
+        <TooltipTrigger asChild>{children}</TooltipTrigger>
         <TooltipContent>{message}</TooltipContent>
       </Tooltip>
-    </TooltipProvider>
   );
 };
 
