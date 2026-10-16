@@ -43,11 +43,20 @@ RETURN cites, count(e) AS claimLinks`;
 export const CONFLICT_PAIRS = `
 MATCH (a:Claim {projectId: $projectId})-[r:CONTRADICTS]->(b:Claim)
 WHERE a.state IN ['agent_verified', 'human_approved', 'conflict'] AND b.state IN ['agent_verified', 'human_approved', 'conflict']
-MATCH (pa:Paper {paperId: a.paperId}), (pb:Paper {paperId: b.paperId})
+MATCH (pa:Paper) WHERE pa.paperId = a.paperId
+MATCH (pb:Paper) WHERE pb.paperId = b.paperId
+OPTIONAL MATCH (a)-[:DEPENDS_ON]->(xa:Assumption)
+WITH a, b, r, pa, pb, collect(DISTINCT coalesce(xa.text, '')) AS aAssumptions
+OPTIONAL MATCH (b)-[:DEPENDS_ON]->(xb:Assumption)
+WITH a, b, r, pa, pb, aAssumptions, collect(DISTINCT coalesce(xb.text, '')) AS bAssumptions
+OPTIONAL MATCH (a)-[:USES]->(ma:Method)
+WITH a, b, r, pa, pb, aAssumptions, bAssumptions, collect(DISTINCT coalesce(ma.name, '')) AS aMethods
+OPTIONAL MATCH (b)-[:USES]->(mb:Method)
+WITH a, b, r, pa, pb, aAssumptions, bAssumptions, aMethods, collect(DISTINCT coalesce(mb.name, '')) AS bMethods
 RETURN a.id AS aId, a.text AS aText, coalesce(a.conditions, []) AS aConditions, pa.title AS aPaper, coalesce(pa.year, 0) AS aYear,
        b.id AS bId, b.text AS bText, coalesce(b.conditions, []) AS bConditions, pb.title AS bPaper, coalesce(pb.year, 0) AS bYear,
-       [(a)-[:DEPENDS_ON]->(x:Assumption) | x.text] AS aAssumptions, [(b)-[:DEPENDS_ON]->(y:Assumption) | y.text] AS bAssumptions,
-       [(a)-[:USES]->(m:Method) | m.name] AS aMethods, [(b)-[:USES]->(n:Method) | n.name] AS bMethods,
+       [x IN aAssumptions WHERE x <> ''] AS aAssumptions, [x IN bAssumptions WHERE x <> ''] AS bAssumptions,
+       [x IN aMethods WHERE x <> ''] AS aMethods, [x IN bMethods WHERE x <> ''] AS bMethods,
        coalesce(r.confidence, 0) AS confidence, coalesce(r.status, '') AS status
 ORDER BY confidence DESC
 LIMIT $limit`;
