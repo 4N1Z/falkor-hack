@@ -1,0 +1,108 @@
+# Production compose for neuraquery.com on the `tiledesk` host.
+# Self-contained — use alone, NOT merged with docker-compose.yaml:
+#   docker compose -f docker-compose.prod.yaml up -d --build
+#
+# Differences from the dev compose:
+#   - falkordb publishes no host ports (dev exposes 6379 + 3001; on a public
+#     box that would put the graph store and its browser UI on the internet)
+#   - a hocuspocus service, so /ws actually has a backend
+#   - memory limits on every service (the host has ~3.8 GB total and also runs
+#     the Frappe/ERPNext stack)
+#   - restart policies, healthchecks and log rotation
+services:
+  app:
+    restart: unless-stopped
+    build:
+      context: .
+      args:
+        DATABASE_URL: ${DATABASE_URL}
+    environment:
+      - FALKORDB_URL=falkor://falkordb:6379
+    env_file:
+      - .env
+    depends_on:
+      falkordb:
+        condition: service_healthy
+    mem_limit: 1g
+    memswap_limit: 2g
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://127.0.0.1:3000/"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+    logging:
+      driver: json-file
+      options: { max-size: "10m", max-file: "3" }
+    networks:
+      - app-network
+      - proxy
+    labels:
+      - "traefik.enable=true"
+      - "traefik.docker.network=proxy"
+      - "traefik.http.routers.neuraquery.rule=Host(`neuraquery.com`,`www.neuraquery.com`)"
+      - "traefik.http.routers.neuraquery.entrypoints=websecure"
+      - "traefik.http.routers.neuraquery.tls.certresolver=letsencrypt"
+      - "traefik.http.routers.neuraquery.service=neuraquery"
+      - "traefik.http.services.neuraquery.loadbalancer.server.port=3000"
+      - "traefik.http.routers.neuraquery.middlewares=secure-headers@file,gzip-compress@file"
+
+  # Yjs collaboration server. Traefik terminates TLS and forwards /ws here with
+  # the prefix stripped. Every socket is authenticated (see scripts/serve.mts).
+  hocuspocus:
+    restart: unless-stopped
+    build:
+      context: .
+      target: ws
+    environment:
+      - NODE_ENV=production
+      - HOCUSPOCUS_PORT=1414
+    env_file:
+      - .env
+    mem_limit: 256m
+    memswap_limit: 512m
+    logging:
+      driver: json-file
+      options: { max-size: "10m", max-file: "3" }
+    networks:
+      - app-network
+      - proxy
+    labels:
+      - "traefik.enable=true"
+      - "traefik.docker.network=proxy"
+      - "traefik.http.routers.neuraquery-ws.rule=Host(`neuraquery.com`,`www.neuraquery.com`) && PathPrefix(`/ws`)"
+      - "traefik.http.routers.neuraquery-ws.entrypoints=websecure"
+      - "traefik.http.routers.neuraquery-ws.tls.certresolver=letsencrypt"
+      - "traefik.http.routers.neuraquery-ws.service=neuraquery-ws"
+      - "traefik.http.services.neuraquery-ws.loadbalancer.server.port=1414"
+      # Hocuspocus serves at the root; Traefik matched on /ws so strip it back off.
+      - "traefik.http.routers.neuraquery-ws.middlewares=ws-strip"
+      - "traefik.http.middlewares.ws-strip.stripprefix.prefixes=/ws"
+
+  falkordb:
+    image: falkordb/falkordb:latest
+    restart: unless-stopped
+    volumes:
+      - falkordb_data:/var/lib/falkordb/data
+    mem_limit: 512m
+    memswap_limit: 1g
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 20s
+    logging:
+      driver: json-file
+      options: { max-size: "10m", max-file: "3" }
+    networks:
+      - app-network
+
+volumes:
+  falkordb_data:
+
+networks:
+  app-network:
+    driver: bridge
+  proxy:
+    external: true
