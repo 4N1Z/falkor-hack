@@ -13,6 +13,7 @@ import FoldersDropdownList from "./folders-list";
 import EnableAIWorkspace from "./enable-ai-workspace";
 import ResearchPaperMain from "./researchpaper/researchPaper-main";
 import ResearchGraphCard from "./research-graph-card";
+import AdamCard from "./adam-card";
 import UserProfile from "./user-profile";
 import { redirect } from "next/navigation";
 import { auth } from "@/auth";
@@ -111,6 +112,7 @@ export default async function Sidebar({ params, className }: SidebarProps) {
           <div className="space-y-2">
             <ResearchPaperMain myWorkspaceId={params.workspaceId} />
             <ResearchGraphCard myWorkspaceId={params.workspaceId} />
+            <AdamCard myWorkspaceId={params.workspaceId} />
           </div>
         </div>
 

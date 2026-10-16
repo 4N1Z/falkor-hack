@@ -100,22 +100,58 @@ RETURN sum(CASE WHEN p.suspect THEN 1 ELSE 0 END) AS n`;
 
 // ---------------------------------------------------------------- Full text (writes)
 
+/** Chunks of one document kind of a paper (body | supplement | artefact). Pre-v2 chunks have no `doc` and count as body. */
 export const DELETE_PAPER_CHUNKS = `
 MATCH (c:Chunk {paperId: $paperId})
+WHERE coalesce(c.doc, 'body') = $doc
 DETACH DELETE c`;
 
+/**
+ * Section-aware passages (document-index.ts): page range, section, kind (body | caption),
+ * locator ("Figure 3"), which document of the paper, and where it came from.
+ */
 export const UPSERT_CHUNKS = `
 MATCH (p:Paper {paperId: $paperId})
 UNWIND $rows AS r
 MERGE (c:Chunk {id: r.id})
-SET c.paperId = $paperId, c.idx = r.idx, c.text = r.text, c.embedding = vecf32(r.embedding)
+SET c.paperId = $paperId, c.idx = r.idx, c.text = r.text, c.embedding = vecf32(r.embedding),
+    c.page = r.page, c.pageEnd = r.pageEnd, c.section = r.section, c.sectionRaw = r.sectionRaw,
+    c.kind = r.kind, c.locator = r.locator, c.charStart = r.charStart,
+    c.doc = $doc, c.sourceUrl = $sourceUrl
 MERGE (c)-[:CHUNK_OF]->(p)
 RETURN count(c) AS n`;
 
+export const PAPER_TEXT_VERSION = `
+MATCH (p:Paper {paperId: $paperId})
+RETURN p.textSha1 AS sha, p.textVersion AS version`;
+
+/** Body text indexed: chunk schema 2 (sections + pages), text version for preprint changes, access status. */
 export const SET_PAPER_INDEXED = `
 MATCH (p:Paper {paperId: $paperId})
-SET p.chunkCount = $chunks, p.indexedAt = $at
+SET p.chunkCount = $chunks, p.indexedAt = $at, p.chunkSchema = 2, p.pageCount = $pages,
+    p.textSha1 = $textSha1, p.textVersion = $textVersion, p.accessStatus = 'full_text'
 RETURN p.paperId AS paperId`;
+
+/** A supplementary file (or linked artefact) was indexed as extra passages of the paper. */
+export const SET_PAPER_SUPPLEMENT = `
+MATCH (p:Paper {paperId: $paperId})
+SET p.supplementChunks = $chunks, p.supplementUrl = $url, p.supplementAt = $at, p.supplementState = $state
+RETURN p.paperId AS paperId`;
+
+/** Passages of one paper in reading order (for the extractor, the queue's passage view, and debugging). */
+export const PAPER_CHUNKS = `
+MATCH (c:Chunk {paperId: $paperId})
+RETURN c.id AS id, c.idx AS idx, c.text AS text, coalesce(c.page, 0) AS page, coalesce(c.pageEnd, 0) AS pageEnd,
+       coalesce(c.section, 'unknown') AS section, c.sectionRaw AS sectionRaw, coalesce(c.kind, 'body') AS kind,
+       c.locator AS locator, coalesce(c.doc, 'body') AS doc
+ORDER BY doc, idx`;
+
+/** Papers whose full text couldn't be read: abstract-only claims are capped at low confidence. */
+export const SET_PAPER_ACCESS = `
+MATCH (p:Paper) WHERE p.pgPaperId IN $pgIds AND coalesce(p.accessStatus, '') <> 'full_text'
+SET p.accessStatus = CASE WHEN p.abstract IS NOT NULL AND p.abstract <> '' THEN 'abstract_only' ELSE 'unavailable' END,
+    p.fullTextState = $state
+RETURN count(p) AS n`;
 
 /** Map Postgres paper ids to their (canonical) graph nodes. */
 export const PAPERS_BY_PG_ID = `
@@ -176,7 +212,7 @@ OPTIONAL MATCH (a:Author)
 WITH papers, library, suspect, citations, passages, count(a) AS authors
 OPTIONAL MATCH (t:Concept)
 WITH papers, library, suspect, citations, passages, authors, count(t) AS concepts
-OPTIONAL MATCH (cl:Claim)
+OPTIONAL MATCH (cl:Sentence)
 RETURN papers, library, suspect, citations, passages, authors, concepts, count(cl) AS claims`;
 
 // ---------------------------------------------------------------- Documents (writes)
@@ -192,14 +228,14 @@ RETURN d.fileId AS fileId`;
 
 /** Sentences that no longer exist in the draft go away (with any verdicts attached). */
 export const DELETE_STALE_CLAIMS = `
-MATCH (d:Document {fileId: $fileId})-[:CONTAINS]->(c:Claim)
+MATCH (d:Document {fileId: $fileId})-[:CONTAINS]->(c:Sentence)
 WHERE NOT c.id IN $ids
 DETACH DELETE c`;
 
 export const UPSERT_CLAIMS = `
 MATCH (d:Document {fileId: $fileId})
 UNWIND $claims AS r
-MERGE (c:Claim {id: r.id})
+MERGE (c:Sentence {id: r.id})
 SET c.text = r.text, c.order = r.order, c.fileId = $fileId, c.citedUrls = r.citedUrls
 MERGE (d)-[:CONTAINS]->(c)
 RETURN count(c) AS n`;
@@ -207,13 +243,13 @@ RETURN count(c) AS n`;
 // Two statements on purpose: in FalkorDB, `MATCH … DELETE r WITH count(*) UNWIND … MERGE`
 // silently creates nothing (verified Oct 15), although each half works on its own.
 export const DELETE_CLAIM_CITES = `
-MATCH (:Document {fileId: $fileId})-[:CONTAINS]->(:Claim)-[r:CITES]->(:Paper)
+MATCH (:Document {fileId: $fileId})-[:CONTAINS]->(:Sentence)-[r:CITES]->(:Paper)
 DELETE r`;
 
 /** Citations the author inserted are user-made, so they are accepted facts, not proposals. */
 export const INSERT_CLAIM_CITES = `
 UNWIND $cites AS e
-MATCH (c:Claim {id: e.claimId}), (p:Paper {paperId: e.paperId})
+MATCH (c:Sentence {id: e.claimId}), (p:Paper {paperId: e.paperId})
 MERGE (c)-[r:CITES]->(p)
 SET r.status = 'accepted', r.by = 'user'
 RETURN count(r) AS n`;
@@ -275,13 +311,13 @@ RETURN id AS paperId,
 
 /** Papers already cited by the claim, and any the user dismissed for it (never re-suggest). */
 export const CLAIM_EXCLUSIONS = `
-MATCH (c:Claim {id: $claimId})-[r]->(p:Paper)
+MATCH (c:Sentence {id: $claimId})-[r]->(p:Paper)
 WHERE type(r) = 'CITES' OR (type(r) = 'SUGGESTS_CITE' AND r.status = 'rejected')
 RETURN p.paperId AS paperId`;
 
 /** Record Cite Scout's suggestions as proposals on the claim (status: suggested). */
 export const UPSERT_CITE_PROPOSALS = `
-MATCH (c:Claim {id: $claimId})
+MATCH (c:Sentence {id: $claimId})
 UNWIND $rows AS r
 MATCH (p:Paper {paperId: r.paperId})
 MERGE (c)-[s:SUGGESTS_CITE]->(p)
@@ -291,7 +327,7 @@ RETURN count(s) AS n`;
 
 /** A person accepts or dismisses one Cite Scout suggestion (by claim + paper). */
 export const DECIDE_CITE_PROPOSAL = `
-MATCH (c:Claim {id: $claimId})
+MATCH (c:Sentence {id: $claimId})
 MATCH (p:Paper {paperId: $paperId})
 MERGE (c)-[s:SUGGESTS_CITE]->(p)
 SET s.status = $decision, s.decidedBy = $userId, s.decidedAt = $at, s.by = coalesce(s.by, 'agent:cite-scout')
@@ -301,7 +337,7 @@ RETURN count(s) AS n`;
 
 /** Every claim in a document with each paper it cites (one row per claim×paper; uncited → null paper). */
 export const DOCUMENT_CLAIMS = `
-MATCH (:Document {fileId: $fileId})-[:CONTAINS]->(c:Claim)
+MATCH (:Document {fileId: $fileId})-[:CONTAINS]->(c:Sentence)
 OPTIONAL MATCH (c)-[:CITES]->(p:Paper)
 RETURN c.id AS claimId, c.text AS text, c.order AS ord, size(coalesce(c.citedUrls, [])) AS urlCount,
        p.paperId AS paperId, p.title AS title, p.abstract AS abstract, p.year AS year,
@@ -312,12 +348,13 @@ ORDER BY ord`;
 export const BEST_PASSAGES_IN_PAPERS = `
 CALL db.idx.vector.queryNodes('Chunk', 'embedding', $k, vecf32($v)) YIELD node, score
 WHERE node.paperId IN $paperIds
-RETURN node.paperId AS paperId, node.text AS text, score
+RETURN node.paperId AS paperId, node.text AS text, score, node.id AS chunkId,
+       node.page AS page, node.section AS section, node.kind AS kind, node.locator AS locator
 ORDER BY score ASC`;
 
 /** Record a verdict as a proposal edge (agents never assert; people decide). */
 export const UPSERT_SUPPORT_VERDICT = `
-MATCH (c:Claim {id: $claimId}), (p:Paper {paperId: $paperId})
+MATCH (c:Sentence {id: $claimId}), (p:Paper {paperId: $paperId})
 MERGE (c)-[s:SUPPORTED_BY]->(p)
 SET s.level = $level, s.score = $score, s.confidence = $confidence, s.runId = $runId,
     s.by = 'agent:citation-checker', s.at = $at, s.status = coalesce(s.status, 'suggested')
@@ -537,7 +574,8 @@ export const TEAM_CHUNK_SEARCH = `
 CALL db.idx.vector.queryNodes('Chunk', 'embedding', $k, vecf32($v)) YIELD node, score
 MATCH (node)-[:CHUNK_OF]->(p:Paper)
 WHERE p.inLibrary = true
-RETURN p.paperId AS paperId, score, node.id AS chunkId, node.text AS text
+RETURN p.paperId AS paperId, score, node.id AS chunkId, node.text AS text,
+       node.page AS page, node.section AS section, node.kind AS kind, node.locator AS locator
 ORDER BY score ASC
 LIMIT $limit`;
 
@@ -614,32 +652,32 @@ LIMIT 10`;
 
 /** The Citation Checker's latest verdict, stored on the claim itself. */
 export const SET_CLAIM_VERDICT = `
-MATCH (c:Claim {id: $claimId})
+MATCH (c:Sentence {id: $claimId})
 SET c.verdict = $verdict, c.why = $why, c.checkedAt = $at, c.checkRun = $runId
 RETURN c.id AS id`;
 
 /** Checker fix for an uncited claim, as a proposal (never overrides a person's decision). */
 export const UPSERT_CHECKER_SUGGESTION = `
-MATCH (c:Claim {id: $claimId}), (p:Paper {paperId: $paperId})
+MATCH (c:Sentence {id: $claimId}), (p:Paper {paperId: $paperId})
 MERGE (c)-[s:SUGGESTS_CITE]->(p)
 ON CREATE SET s.status = 'suggested', s.by = 'agent:citation-checker', s.runId = $runId, s.at = $at
 RETURN count(s) AS n`;
 
 export const EVIDENCE_CLAIMS = `
-MATCH (:Document {fileId: $fileId})-[:CONTAINS]->(c:Claim)
+MATCH (:Document {fileId: $fileId})-[:CONTAINS]->(c:Sentence)
 RETURN c.id AS id, c.text AS text, c.order AS ord, c.verdict AS verdict, c.why AS why, c.checkedAt AS checkedAt,
        size(coalesce(c.citedUrls, [])) AS urlCount
 ORDER BY ord`;
 
 export const EVIDENCE_CITES = `
-MATCH (:Document {fileId: $fileId})-[:CONTAINS]->(c:Claim)-[:CITES]->(p:Paper)
+MATCH (:Document {fileId: $fileId})-[:CONTAINS]->(c:Sentence)-[:CITES]->(p:Paper)
 OPTIONAL MATCH (c)-[s:SUPPORTED_BY]->(p)
 RETURN c.id AS claimId, p.paperId AS paperId, p.title AS title, p.year AS year,
        coalesce(p.inLibrary, false) AS inLibrary, [(u:User)-[:IMPORTED]->(p) | u.id] AS ownerIds,
        s.level AS level, s.score AS score`;
 
 export const EVIDENCE_SUGGESTIONS = `
-MATCH (:Document {fileId: $fileId})-[:CONTAINS]->(c:Claim)-[s:SUGGESTS_CITE]->(p:Paper)
+MATCH (:Document {fileId: $fileId})-[:CONTAINS]->(c:Sentence)-[s:SUGGESTS_CITE]->(p:Paper)
 WHERE s.status = 'suggested'
 RETURN c.id AS claimId, p.paperId AS paperId, p.title AS title, p.year AS year,
        coalesce(p.inLibrary, false) AS inLibrary, [(u:User)-[:IMPORTED]->(p) | u.id] AS ownerIds,
