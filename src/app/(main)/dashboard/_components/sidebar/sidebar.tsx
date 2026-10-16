@@ -118,7 +118,7 @@ export default async function Sidebar({ params, className }: SidebarProps) {
 
         {/* Scrollable Content Area */}
         <div className="flex-1 min-h-0 mt-4">
-          <ScrollArea className="h-full">
+          <ScrollArea className="h-full [&_[data-radix-scroll-area-viewport]>div]:!block [&_[data-radix-scroll-area-viewport]]:!overflow-x-hidden">
             {/* Folders Section */}
             <div className="space-y-4">
               <FoldersDropdownList

@@ -1,11 +1,25 @@
 "use client";
 
-import { useState, useEffect, useCallback, useRef } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { Card, CardContent, CardHeader } from "@/components/ui/card";
-import { GraduationCap, Loader2, MousePointerClick } from "lucide-react";
+import { GraduationCap, RotateCw } from "lucide-react";
+import { cn } from "@/lib/utils";
 
 import { useResearchSummary } from "@/lib/hooks/use-research-summary";
 import Markdown from "react-markdown";
+
+// Same height as the Research papers card so the two sit level side by side
+export const DASHBOARD_CARD_HEIGHT = "h-[440px]";
+
+const cardStyle = `
+  rounded-xl
+  bg-[linear-gradient(0deg,rgba(255,255,255,0.70)_0%,rgba(255,255,255,0.70)_100%),linear-gradient(140deg,#FFF_24.44%,#93C7FB_92.29%)]
+  backdrop-blur-sm
+  shadow-[inset_5.471px_5.471px_10.941px_rgba(238,244,251,0.50),0px_8.206px_13.677px_rgba(109,205,247,0.52)]
+  ring-4 ring-white/40
+  border-2 border-sky-100
+  relative overflow-hidden flex flex-col
+`;
 
 export default function ResearchTrendsSummary() {
   const [summary, setSummary] = useState<string>("");
@@ -16,6 +30,7 @@ export default function ResearchTrendsSummary() {
   const loadSummary = useCallback(async () => {
     try {
       setIsLoading(true);
+      setError(null);
       const { data: freshSummary } = await getCachedSummary("ai");
       if (freshSummary) {
         setSummary(freshSummary);
@@ -24,7 +39,7 @@ export default function ResearchTrendsSummary() {
       }
     } catch (err) {
       console.error("Error loading research trends:", err);
-      setError("Stay tuned for your personalized updates!");
+      setError("Suggestions will appear here once Neura has read a few of your papers.");
     } finally {
       setIsLoading(false);
     }
@@ -32,86 +47,59 @@ export default function ResearchTrendsSummary() {
 
   useEffect(() => {
     loadSummary();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  if (isLoading) {
-    return (
-      <Card className="w-full">
-        <CardContent className="flex justify-center items-center p-6">
-          <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-          <span className="text-muted-foreground italic text-xs">
-            Personalizing your Research !{" "}
-          </span>
-        </CardContent>
-      </Card>
-    );
-  }
-
-  if (error) {
-    return (
-      <Card className="w-full border-primary ring-card">
-        <CardContent className="p-6 text-muted-foreground italic">
-          {error}
-        </CardContent>
-      </Card>
-    );
-  }
-
   return (
-    <Card
-      className={`
-    rounded-xl
-    bg-[linear-gradient(0deg,rgba(255,255,255,0.70)_0%,rgba(255,255,255,0.70)_100%),linear-gradient(140deg,#FFF_24.44%,#93C7FB_92.29%)]
-    backdrop-blur-sm
-    shadow-[inset_5.471px_5.471px_10.941px_rgba(238,244,251,0.50),0px_8.206px_13.677px_rgba(109,205,247,0.52)]
-    ring-4 ring-white/40
-    border-2 border-sky-100
-    relative overflow-hidden
-  `}
-    >
-      <CardHeader className="flex justify-between pt-3 pb-2">
-        <div className="flex items-center gap-2">
-          <GraduationCap size={16} className="text-muted-foreground" />
-          <h3 className="text-sm text-muted-foreground">
-            Your personalized suggestion
-          </h3>
-        </div>
+    <Card className={cn(cardStyle, DASHBOARD_CARD_HEIGHT)}>
+      <CardHeader className="flex flex-row items-center justify-between space-y-0 px-5 pb-3 pt-4">
+        <h3 className="flex items-center gap-1.5 text-sm text-muted-foreground">
+          <GraduationCap size={14} />
+          Suggested reading
+        </h3>
+        {!isLoading && (
+          <button
+            type="button"
+            onClick={loadSummary}
+            aria-label="Refresh suggestions"
+            className="flex size-7 items-center justify-center rounded-md text-muted-foreground transition-[background-color,color,transform] duration-150 ease-out hover:bg-white/70 hover:text-foreground active:scale-90"
+          >
+            <RotateCw size={14} />
+          </button>
+        )}
       </CardHeader>
 
-      <div className="relative">
-        {/* Top shadow overlay */}
-        <div
-          className="absolute top-0 left-0 right-0 h-4 
-      bg-gradient-to-b from-card/60 to-transparent 
-      z-10 pointer-events-none"
-        />
-
-        {/* Bottom shadow overlay */}
-        <div
-          className="absolute bottom-0 left-0 right-0 h-4 
-      bg-gradient-to-t from-white/50 to-transparent 
-      z-10 pointer-events-none"
-        />
-
-        <CardContent className="overflow-y-auto max-h-[calc(60vh-4rem)] relative pb-6">
-        {/* <CardContent className="overflow-y-auto h-fit relative"> */}
-
-          <Markdown className="prose prose-sm dark:prose-invert text-black/60">
-            {summary || "No summary available."}
-          </Markdown>
-
-          {/* {true && (
-            <div
-              className="absolute bottom-4 right-4  text-sky-500/70
-                flex items-center gap-2 text-sm bg-white/80 px-3 py-1.5 rounded-full
-                shadow-sm transition-opacity duration-300"
+      <CardContent
+        className={cn(
+          "min-h-0 flex-1 overflow-y-auto px-5 pb-6 [scrollbar-gutter:stable]",
+          // Fade the bottom edge so it's clear the summary continues
+          !isLoading && !error && "[mask-image:linear-gradient(to_bottom,black_calc(100%-28px),transparent)]"
+        )}
+      >
+        {isLoading ? (
+          <div className="space-y-3 pt-1" aria-label="Loading suggestions">
+            {["w-11/12", "w-full", "w-4/5", "w-2/3", "w-full", "w-3/4"].map((w, i) => (
+              <div key={i} className={cn("h-3.5 rounded bg-white/70 animate-pulse motion-reduce:animate-none", w)} />
+            ))}
+          </div>
+        ) : error ? (
+          <div className="flex h-full flex-col items-center justify-center gap-3 px-6 text-center">
+            <GraduationCap className="size-7 text-muted-foreground" strokeWidth={1.5} />
+            <p className="text-sm text-muted-foreground">{error}</p>
+            <button
+              type="button"
+              onClick={loadSummary}
+              className="rounded-md px-3 py-1.5 text-sm font-medium text-primary transition-[background-color,transform] duration-150 ease-out hover:bg-white/70 active:scale-[0.97]"
             >
-              <MousePointerClick size={14} />
-              <span>Scroll for more</span>
-            </div>
-          )} */}
-        </CardContent>
-      </div>
+              Try again
+            </button>
+          </div>
+        ) : (
+          <Markdown className="prose prose-sm max-w-none text-black/65 prose-headings:text-foreground prose-strong:text-foreground prose-a:text-primary">
+            {summary}
+          </Markdown>
+        )}
+      </CardContent>
     </Card>
   );
 }

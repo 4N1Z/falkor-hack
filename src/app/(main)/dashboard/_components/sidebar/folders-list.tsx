@@ -166,16 +166,17 @@ export default function FoldersDropdownList({
 
   return (
     <>
-      <div className="flex bg-card-foreground sticky z-10 top-0 my-2 border-b w-full h-10 group/title justify-between items-center">
-        <span className="text-slate-400 font-medium text-xs uppercase tracking-wide">
-          Workspace folders
+      <div className="sticky top-0 z-10 mb-1 flex h-8 w-full items-center justify-between bg-card-foreground pl-1.5">
+        <span className="text-[11px] font-medium uppercase tracking-wide text-muted-foreground">
+          Folders
+          <span className="ml-1.5 tabular-nums text-muted-foreground/70">{folders.filter((f) => !f.inTrash).length}</span>
         </span>
         <TooltipComponent message="New folder">
           <button
             type="button"
             aria-label="New folder"
             onClick={addFolderHandler}
-            className="flex items-center justify-center h-6 w-6 rounded-sm m-2 text-slate-500 transition-[color,background-color,transform] duration-150 ease-out hover:text-primary hover:bg-accent active:scale-90"
+            className="flex size-6 items-center justify-center rounded text-muted-foreground transition-[color,background-color,transform] duration-150 ease-out hover:bg-black/[0.06] hover:text-foreground active:scale-90"
           >
             <PlusIcon size={16} />
           </button>
@@ -185,12 +186,12 @@ export default function FoldersDropdownList({
         type="multiple"
         value={openFolders}
         onValueChange={setOpenFolders}
-        className="space-y-2"
+        className="space-y-0.5"
       >
         {folders
           .filter((folder) => !folder.inTrash)
           .map((folder) => (
-            <Suspense key={folder.id} fallback={<div className="h-10 rounded-md bg-muted/60 animate-pulse" />}>
+            <Suspense key={folder.id} fallback={<div className="h-8 rounded-md bg-black/[0.04] animate-pulse motion-reduce:animate-none" />}>
               <DropDown
                 title={folder.title}
                 listType="folder"

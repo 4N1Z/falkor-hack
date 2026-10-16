@@ -14,7 +14,7 @@ import {
   updateFolder,
 } from "@/db/actions/action-workspace";
 import { toast } from "sonner";
-import { Archive, FilePlus, Pencil } from "lucide-react";
+import { Archive, ChevronRight, FilePlus, Pencil } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { v4 } from "uuid";
 import { File } from "@/db/database.types";
@@ -65,8 +65,8 @@ function RowAction({
           }
         }}
         className={cn(
-          "flex h-6 w-6 items-center justify-center rounded-sm text-slate-400",
-          "transition-[color,background-color,transform] duration-150 ease-out hover:bg-accent active:scale-90",
+          "flex size-6 items-center justify-center rounded text-slate-400",
+          "transition-[color,background-color,transform] duration-150 ease-out hover:bg-black/[0.06] active:scale-90",
           className
         )}
       >
@@ -425,8 +425,7 @@ export default function DropDown({
   const listStyles = useMemo(
     () =>
       clsx("relative", {
-        "border-none text-md": isFolder,
-        "border-none ml-6 text-[16px] py-1": !isFolder,
+        "text-sm": true,
       }),
     [isFolder]
   );
@@ -466,18 +465,15 @@ export default function DropDown({
     <AccordionItem
       value={id}
       className={cn(
-        "p-1 font-medium transition-colors duration-150 gap-2 rounded-md border border-transparent animate-fadeIn",
-        listStyles,
-        "bg-white data-[state=open]:bg-white hover:border-sky-100",
-        !isFolder && "hover:bg-neura-dashboardBG",
-        isActive && "bg-neura-dashboardBG border-sky-100"
+        "group/item rounded-md border-0 animate-fadeIn",
+        listStyles
       )}
       onDoubleClick={handleDoubleClick}
       onBlur={handleBlur}
       onClick={(e) => {
         e.stopPropagation();
         if (isEditing) return;
-        // The chevron is a real button and toggles itself
+        // The (visually hidden) accordion trigger is a real button and toggles itself
         if ((e.target as HTMLElement).closest("button")) return;
         if (isFolder) onToggle?.(id);
         else navigatePage(id, listType);
@@ -485,16 +481,31 @@ export default function DropDown({
     >
       <AccordionTrigger
         id={listType}
-        className={cn(
-          "hover:no-underline p-2 text-md font-regular",
-          isFolder ? "text-muted-foreground/90" : "text-muted-foreground"
-        )}
+        // Kept for keyboard and screen readers; the row itself is the visual control
+        className="sr-only"
         disabled={!isFolder}
       >
-        <div className={groupIdentifies}>
-          <div className="flex min-w-0 flex-1 items-center gap-3 cursor-pointer">
+        <div
+          className={cn(
+            groupIdentifies,
+            "h-8 cursor-pointer rounded-md px-1.5 transition-colors duration-150",
+            isActive
+              ? "bg-white text-foreground shadow-[0_1px_2px_rgba(0,0,0,0.05)] ring-1 ring-black/[0.06]"
+              : "hover:bg-black/[0.035]"
+          )}
+        >
+          <div className="flex min-w-0 flex-1 items-center gap-1.5">
+            {isFolder ? (
+              <ChevronRight
+                size={14}
+                aria-hidden
+                className="shrink-0 text-muted-foreground/70 transition-transform duration-150 ease-out group-data-[state=open]/item:rotate-90"
+              />
+            ) : (
+              <span aria-hidden className="w-3.5 shrink-0" />
+            )}
             <div
-              className="relative shrink-0 bg-slate-200 rounded-sm p-0.5"
+              className="flex size-5 shrink-0 items-center justify-center rounded text-sm leading-none transition-colors duration-150 hover:bg-black/[0.06]"
               onClick={(e) => e.stopPropagation()}
             >
               <EmojiPicker getValue={onChangeEmoji}>{iconId}</EmojiPicker>
@@ -503,19 +514,18 @@ export default function DropDown({
             <input
               ref={inputRef}
               type="text"
+              size={1}
               aria-label={isFolder ? "Folder name" : "File name"}
               title={isEditing ? undefined : "Double-click to rename"}
               value={isFolder ? folderTitle : fileTitle}
               className={clsx(
-                "outline-none min-w-0 flex-1 truncate rounded-sm px-1 -mx-1 transition-[background-color,box-shadow] duration-150",
-                isEditing
-                  ? "bg-muted cursor-text ring-1 ring-sky-200"
-                  : "bg-transparent cursor-pointer",
+                "min-w-0 flex-1 truncate rounded-sm px-1 text-sm outline-none transition-[background-color,box-shadow] duration-150",
+                isEditing ? "bg-white cursor-text ring-1 ring-sky-300" : "bg-transparent cursor-pointer",
                 isActive
-                  ? "text-foreground"
+                  ? "font-medium text-foreground"
                   : isFolder
-                  ? "text-neura-dashboardGray group-hover/folder:text-foreground"
-                  : "text-neura-dashboardGray group-hover/file:text-foreground"
+                  ? "font-medium text-[#37352F]/80 group-hover/folder:text-foreground"
+                  : "text-[#37352F]/70 group-hover/file:text-foreground"
               )}
               readOnly={!isEditing}
               onClick={(e) => {
@@ -538,12 +548,12 @@ export default function DropDown({
 
           {!isEditing && (
             <div className={hoverStyles}>
-              <RowAction label="Rename" onAction={startEditing} className="hover:text-primary">
-                <Pencil size={14} />
+              <RowAction label="Rename" onAction={startEditing} className="hover:text-foreground">
+                <Pencil size={13} />
               </RowAction>
               {isFolder && (
-                <RowAction label="New file" onAction={addNewFile} className="hover:text-primary">
-                  <FilePlus size={14} />
+                <RowAction label="New file" onAction={addNewFile} className="hover:text-foreground">
+                  <FilePlus size={13} />
                 </RowAction>
               )}
               <RowAction
@@ -551,7 +561,7 @@ export default function DropDown({
                 onAction={moveToTrash}
                 className="hover:text-red-600"
               >
-                <Archive size={14} />
+                <Archive size={13} />
               </RowAction>
             </div>
           )}
@@ -559,7 +569,7 @@ export default function DropDown({
       </AccordionTrigger>
 
       {isFolder && (
-        <AccordionContent className="space-y-1 pb-1">
+        <AccordionContent className="ml-[13px] mt-0.5 space-y-0.5 border-l border-black/[0.07] pb-1 pl-1.5">
           {folderFiles.length ? (
             folderFiles.map((file) => (
               <DropDown
@@ -578,7 +588,7 @@ export default function DropDown({
                 e.stopPropagation();
                 addNewFile();
               }}
-              className="ml-6 flex items-center gap-1.5 rounded-md px-2 py-1 text-xs text-muted-foreground transition-[background-color,color,transform] duration-150 ease-out hover:bg-accent hover:text-primary active:scale-[0.97]"
+              className="flex h-7 w-full items-center gap-1.5 rounded-md px-2 text-xs text-muted-foreground transition-[background-color,color] duration-150 hover:bg-black/[0.035] hover:text-foreground"
             >
               <FilePlus size={12} />
               Add a file

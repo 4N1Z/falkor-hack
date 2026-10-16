@@ -6,6 +6,7 @@ import { useLibrary } from "@/lib/hooks/use-library";
 import { cn } from "@/lib/utils";
 import { ArrowUpRight, FileText, Notebook } from "lucide-react";
 import UploadResearchPapers from "./upload-research-papers";
+import { DASHBOARD_CARD_HEIGHT } from "./research-suggestion";
 
 const sourceLabel = (p: LibraryPaper) =>
   p.externalSource === "openalex" ? "OpenAlex" : p.source === "zotero" ? "Zotero" : p.source === "manual" ? "Upload" : null;
@@ -85,7 +86,7 @@ export default function ResearchPapers({ workspaceId }: { workspaceId: string })
   const { papers } = useLibrary(workspaceId);
 
   return (
-    <Card className="w-full border-2 border-sky-100">
+    <Card className={cn("flex w-full flex-col border-2 border-sky-100", DASHBOARD_CARD_HEIGHT)}>
       <CardHeader className="flex flex-row items-center justify-between space-y-0 px-5 pb-3 pt-4">
         <h3 className="flex items-center gap-1.5 text-sm text-muted-foreground">
           <Notebook size={14} />
@@ -94,10 +95,10 @@ export default function ResearchPapers({ workspaceId }: { workspaceId: string })
         </h3>
         <UploadResearchPapers workspaceId={workspaceId} workspaceName="workspace" />
       </CardHeader>
-      <CardContent className="px-3 pb-3">
+      <CardContent className="min-h-0 flex-1 px-3 pb-3">
         <div
           className={cn(
-            "h-[300px] overflow-y-auto pr-1 [scrollbar-gutter:stable]",
+            "h-full overflow-y-auto pr-1 [scrollbar-gutter:stable]",
             // Fade the bottom edge so it's clear the list continues; padding lets the last row clear it
             papers?.length && "pb-6 [mask-image:linear-gradient(to_bottom,black_calc(100%-24px),transparent)]"
           )}

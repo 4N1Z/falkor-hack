@@ -4,12 +4,10 @@ import type { AgentResult } from "@/lib/agents/base";
 import type { MemoryItem, MemoryKind } from "@/lib/agents/historian";
 import type { Idea } from "@/lib/agents/next-steps";
 import { Button } from "@/components/ui/button";
-import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle, SheetTrigger } from "@/components/ui/sheet";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useAppState } from "@/lib/providers/state-providers";
 import { cn } from "@/lib/utils";
-import { toolbarButton } from "./toolbar-button";
-import { BookOpen, Check, CornerDownLeft, FileText, Lightbulb, Loader2, Target, X } from "lucide-react";
+import { Check, CornerDownLeft, FileText, Lightbulb, Loader2, Target, X } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
 
@@ -57,9 +55,8 @@ async function api<T>(url: string, init?: RequestInit): Promise<T> {
  * Opens on what already exists — notes, earlier suggestions, the plan — so nobody waits on an
  * empty panel, and the agents are asked for more only on request.
  */
-export function NotebookSheet({ fileId }: { fileId: string }) {
+export function NotebookPanel({ fileId, visible, onOpenCount }: { fileId: string; visible: boolean; onOpenCount: (n: number) => void }) {
   const { workspaceId } = useAppState();
-  const [open, setOpen] = useState(false);
   const [tab, setTab] = useState("memory");
   const [items, setItems] = useState<MemoryItem[] | null>(null);
   const [planCount, setPlanCount] = useState<number | null>(null);
@@ -117,56 +114,48 @@ export function NotebookSheet({ fileId }: { fileId: string }) {
     }
   };
 
+  // Fetch on mount (the panel stays mounted in the rail) and again each time it is shown.
+  // A data fetch is the external system here; state is set when the response arrives.
+  useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    load();
+  }, [load, visible]);
+
   const openCount = items?.filter((m) => m.status === "active").length ?? 0;
   const droppedCount = items?.filter((m) => m.status === "dropped").length ?? 0;
+  useEffect(() => onOpenCount(openCount), [openCount, onOpenCount]);
   const summary = items
     ? [`${items.length} note${items.length === 1 ? "" : "s"}`, droppedCount ? `${droppedCount} dropped` : null, planCount ? `${planCount} in the plan` : null]
         .filter(Boolean)
         .join(" · ")
-    : null;
+    : "Shared by the whole workspace";
 
+  if (!visible) return null;
   return (
-    <Sheet
-      open={open}
-      onOpenChange={(o) => {
-        setOpen(o);
-        if (o) load();
-      }}
-    >
-      <SheetTrigger asChild>
-        <Button size={null} variant="none" className={toolbarButton}>
-          <BookOpen /> Notebook
-        </Button>
-      </SheetTrigger>
-      <SheetContent side="right" className="w-full sm:max-w-md flex flex-col gap-3 font-sans">
-        <SheetHeader className="space-y-0.5">
-          <SheetTitle>Research notebook</SheetTitle>
-          <SheetDescription className="tabular-nums">
-            {summary ?? "What the team believes, found and asked, and what to do next. Shared by the whole workspace."}
-          </SheetDescription>
-        </SheetHeader>
-
-        <Tabs value={tab} onValueChange={setTab} className="flex min-h-0 flex-1 flex-col gap-3">
-          <TabsList className="grid w-full grid-cols-2">
-            <TabsTrigger value="memory" className="gap-1.5">
+    <div className="flex min-h-0 flex-1 flex-col gap-3 p-3">
+      <Tabs value={tab} onValueChange={setTab} className="flex min-h-0 flex-1 flex-col gap-3">
+        <div className="flex items-center justify-between gap-2">
+          <TabsList className="h-8">
+            <TabsTrigger value="memory" className="h-6 gap-1.5 text-xs">
               Memory {openCount > 0 && <Count n={openCount} />}
             </TabsTrigger>
-            <TabsTrigger value="next" className="gap-1.5">
+            <TabsTrigger value="next" className="h-6 gap-1.5 text-xs">
               Next steps {planCount ? <Count n={planCount} /> : null}
             </TabsTrigger>
           </TabsList>
+          <p className="truncate text-[11px] text-muted-foreground tabular-nums">{summary}</p>
+        </div>
 
-          <TabsContent value="memory" className="mt-0 flex min-h-0 flex-1 flex-col gap-3">
-            <MemoryTimeline items={items} onStatus={setStatus} />
-            <Compose onSave={save} />
-          </TabsContent>
+        <TabsContent value="memory" className="mt-0 flex min-h-0 flex-1 flex-col gap-3">
+          <MemoryTimeline items={items} onStatus={setStatus} />
+          <Compose onSave={save} />
+        </TabsContent>
 
-          <TabsContent value="next" className="mt-0 flex min-h-0 flex-1 flex-col">
-            <NextSteps workspaceId={workspaceId} fileId={fileId} onPlanCount={setPlanCount} active={open && tab === "next"} />
-          </TabsContent>
-        </Tabs>
-      </SheetContent>
-    </Sheet>
+        <TabsContent value="next" className="mt-0 flex min-h-0 flex-1 flex-col">
+          <NextSteps workspaceId={workspaceId} fileId={fileId} onPlanCount={setPlanCount} active={visible && tab === "next"} />
+        </TabsContent>
+      </Tabs>
+    </div>
   );
 }
 
@@ -449,18 +438,19 @@ function NextSteps({
   }, [workspaceId, onPlanCount]);
 
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- data fetch; state is set on response
     if (active) loadStored();
   }, [active, loadStored]);
 
-  // Cycle the stage line while the agent runs
+  // Cycle the stage line while the agent runs (reset to 0 happens where the run starts)
   useEffect(() => {
     if (!loading) return;
-    setStage(0);
     const t = setInterval(() => setStage((s) => Math.min(s + 1, STAGES.length - 1)), 1100);
     return () => clearInterval(t);
   }, [loading]);
 
   const suggest = async () => {
+    setStage(0);
     setLoading(true);
     try {
       const r = await api<AgentResult<Idea>>("/api/agents/next-steps", { method: "POST", body: JSON.stringify({ workspaceId, fileId }) });

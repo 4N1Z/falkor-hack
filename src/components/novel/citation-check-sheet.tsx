@@ -3,22 +3,21 @@
 import type { ClaimCheck, Verdict } from "@/lib/agents/citation-checker";
 import type { AgentResult } from "@/lib/agents/base";
 import { Button } from "@/components/ui/button";
-import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle, SheetTrigger } from "@/components/ui/sheet";
 import { useAppState } from "@/lib/providers/state-providers";
 import { cn } from "@/lib/utils";
-import { toolbarButton } from "./toolbar-button";
-import { CheckCircle2, CircleAlert, CircleHelp, Loader2, ShieldCheck, XCircle } from "lucide-react";
-import { useState } from "react";
+import { CheckCircle2, CircleAlert, CircleHelp, Loader2, RotateCw, XCircle } from "lucide-react";
+import { useEffect, useState } from "react";
 
 const press = "transition-transform duration-150 ease-out active:scale-[0.97]";
+const enter = "animate-in fade-in-0 slide-in-from-bottom-1 duration-150 ease-out fill-mode-both motion-reduce:animate-none";
 
 const META: Record<Verdict, { label: string; tone: string; icon: React.ComponentType<{ className?: string }>; rank: number }> = {
-  contradicted: { label: "Contradicted", tone: "text-red-700 bg-red-50", icon: XCircle, rank: 0 },
-  unsupported: { label: "Not supported", tone: "text-red-700 bg-red-50", icon: XCircle, rank: 1 },
-  "unknown-source": { label: "Unknown source", tone: "text-amber-800 bg-amber-50", icon: CircleHelp, rank: 2 },
-  uncited: { label: "Needs citation", tone: "text-amber-800 bg-amber-50", icon: CircleAlert, rank: 3 },
-  weak: { label: "Partly supported", tone: "text-amber-800 bg-amber-50", icon: CircleAlert, rank: 4 },
-  supported: { label: "Supported", tone: "text-emerald-700 bg-emerald-50", icon: CheckCircle2, rank: 5 },
+  contradicted: { label: "Contradicted", tone: "text-red-700 bg-red-50 dark:bg-red-950 dark:text-red-300", icon: XCircle, rank: 0 },
+  unsupported: { label: "Not supported", tone: "text-red-700 bg-red-50 dark:bg-red-950 dark:text-red-300", icon: XCircle, rank: 1 },
+  "unknown-source": { label: "Unknown source", tone: "text-amber-800 bg-amber-50 dark:bg-amber-950 dark:text-amber-200", icon: CircleHelp, rank: 2 },
+  uncited: { label: "Needs citation", tone: "text-amber-800 bg-amber-50 dark:bg-amber-950 dark:text-amber-200", icon: CircleAlert, rank: 3 },
+  weak: { label: "Partly supported", tone: "text-amber-800 bg-amber-50 dark:bg-amber-950 dark:text-amber-200", icon: CircleAlert, rank: 4 },
+  supported: { label: "Supported", tone: "text-emerald-700 bg-emerald-50 dark:bg-emerald-950 dark:text-emerald-300", icon: CheckCircle2, rank: 5 },
   ok: { label: "No citation needed", tone: "text-muted-foreground bg-muted", icon: CheckCircle2, rank: 6 },
 };
 
@@ -39,18 +38,28 @@ export function revealClaim(text: string) {
 }
 
 /**
- * "Check citations": runs the Citation Checker over the saved draft and lists a verdict for
- * every claim — worst first — with the passage each verdict was judged on.
+ * Check citations: runs the Citation Checker over the saved draft and lists a verdict for
+ * every claim, worst first, with the passage each verdict was judged on. Lives in the research
+ * rail beside the text, so clicking a verdict scrolls to the sentence without closing anything.
  */
-export function CitationCheckSheet({ fileId }: { fileId: string }) {
+export function CitationCheckPanel({
+  fileId,
+  visible,
+  onProblems,
+}: {
+  fileId: string;
+  visible: boolean;
+  /** Number of claims to review after a run, or null before the first run */
+  onProblems: (n: number | null) => void;
+}) {
   const { workspaceId } = useAppState();
-  const [open, setOpen] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [result, setResult] = useState<AgentResult<ClaimCheck> | null>(null);
+  const [checkedAt, setCheckedAt] = useState<number | null>(null);
 
   const run = async () => {
-    if (!workspaceId) return;
+    if (!workspaceId || loading) return;
     setLoading(true);
     setError(null);
     try {
@@ -62,6 +71,7 @@ export function CitationCheckSheet({ fileId }: { fileId: string }) {
       const body = await res.json();
       if (!res.ok) throw new Error(body.error ?? "Check failed");
       setResult(body);
+      setCheckedAt(Date.now());
     } catch (e) {
       setError(e instanceof Error ? e.message : "Check failed");
     } finally {
@@ -69,39 +79,45 @@ export function CitationCheckSheet({ fileId }: { fileId: string }) {
     }
   };
 
+  // First time the panel is opened: start a check of the latest saved draft without asking.
+  // Kicked off as a task (it is a network request), not as state work inside the effect itself.
+  useEffect(() => {
+    if (!visible || result || loading || error) return;
+    const t = setTimeout(run, 0);
+    return () => clearTimeout(t);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [visible]);
+
   const items = [...(result?.items ?? [])].sort((a, b) => META[a.verdict].rank - META[b.verdict].rank || a.order - b.order);
   const problems = items.filter((c) => META[c.verdict].rank <= 4).length;
   const counts = items.reduce<Record<string, number>>((acc, c) => ((acc[c.verdict] = (acc[c.verdict] ?? 0) + 1), acc), {});
 
-  return (
-    <Sheet
-      open={open}
-      onOpenChange={(o) => {
-        setOpen(o);
-        if (o) run(); // always check the latest saved draft
-      }}
-    >
-      <SheetTrigger asChild>
-        <Button
-          size={null}
-          variant="none"
-          className={toolbarButton}
-        >
-          <ShieldCheck /> Check citations
-        </Button>
-      </SheetTrigger>
-      <SheetContent side="right" className="w-full sm:max-w-md flex flex-col gap-3 font-sans">
-        <SheetHeader>
-          <SheetTitle>Citation check</SheetTitle>
-          <SheetDescription>
-            Every claim in this draft, checked against your team&apos;s research graph and the cited papers&apos; text.
-          </SheetDescription>
-        </SheetHeader>
+  useEffect(() => onProblems(result ? problems : null), [result, problems, onProblems]);
 
-        {loading ? (
-          <p className="flex items-center gap-2 text-sm text-muted-foreground">
-            <Loader2 className="size-4 animate-spin" /> Reading the cited papers…
-          </p>
+  if (!visible) return null;
+  return (
+    <div className="flex min-h-0 flex-1 flex-col">
+      <div className="flex items-center justify-between gap-2 border-b px-3 py-1.5 text-[11px] text-muted-foreground">
+        <span className="tabular-nums">
+          {loading ? "Reading the cited papers…" : checkedAt ? `Checked ${new Date(checkedAt).toLocaleTimeString(undefined, { hour: "2-digit", minute: "2-digit" })}` : "Not checked yet"}
+        </span>
+        <Button size="sm" variant="ghost" onClick={run} disabled={loading} className={cn("h-6 gap-1 px-1.5 text-[11px]", press)}>
+          {loading ? <Loader2 className="size-3 animate-spin" /> : <RotateCw className="size-3" />}
+          {result ? "Re-check" : "Check"}
+        </Button>
+      </div>
+
+      <div className="min-h-0 flex-1 overflow-y-auto p-3">
+        {loading && !result ? (
+          <ul className="space-y-1" aria-busy="true">
+            {[0, 1, 2].map((i) => (
+              <li key={i} className="rounded-md p-2">
+                <div className="h-4 w-24 rounded bg-muted" />
+                <div className="mt-1.5 h-3.5 w-full rounded bg-muted" />
+                <div className="mt-1 h-3 w-2/3 rounded bg-muted" />
+              </li>
+            ))}
+          </ul>
         ) : error ? (
           <div className="space-y-2">
             <p className="text-sm text-muted-foreground">{error}</p>
@@ -110,30 +126,31 @@ export function CitationCheckSheet({ fileId }: { fileId: string }) {
             </Button>
           </div>
         ) : result && items.length === 0 ? (
-          <p className="text-sm text-muted-foreground">No claims yet. Write a few sentences, then check again.</p>
+          <p className="text-xs text-muted-foreground">No claims yet. Write a few sentences, wait for the save, then check again.</p>
         ) : result ? (
-          <>
+          <div className="space-y-2">
             <div className="flex flex-wrap items-center gap-1.5 text-xs">
-              <span className={cn("font-medium", problems ? "text-red-700" : "text-emerald-700")}>
+              <span className={cn("font-medium", problems ? "text-red-700 dark:text-red-300" : "text-emerald-700 dark:text-emerald-300")}>
                 {problems ? `${problems} to review` : "All claims look good"}
               </span>
               {Object.entries(counts).map(([v, n]) => (
-                <span key={v} className={cn("rounded px-1.5 py-0.5", META[v as Verdict].tone)}>
+                <span key={v} className={cn("rounded px-1.5 py-0.5 tabular-nums", META[v as Verdict].tone)}>
                   {n} {META[v as Verdict].label.toLowerCase()}
                 </span>
               ))}
             </div>
-            <ul className="-mx-2 flex-1 space-y-1 overflow-y-auto px-2">
-              {items.map((c) => {
+            <ul className="space-y-1">
+              {items.map((c, i) => {
                 const m = META[c.verdict];
                 const Icon = m.icon;
                 const evidence = c.sources.find((s) => s.evidence);
                 return (
-                  <li key={c.claimId}>
+                  <li key={c.claimId} className={enter} style={{ animationDelay: `${Math.min(i, 8) * 30}ms` }}>
                     <button
                       type="button"
                       onClick={() => revealClaim(c.text)}
-                      className="w-full rounded-md p-2 text-left transition-colors duration-150 hover:bg-muted/60"
+                      title="Show in the draft"
+                      className="w-full rounded-md p-2 text-left transition-colors duration-150 hover:bg-muted/60 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
                     >
                       <span className={cn("inline-flex items-center gap-1 rounded px-1.5 py-0.5 text-xs font-medium", m.tone)}>
                         <Icon className="size-3.5" /> {m.label}
@@ -159,9 +176,9 @@ export function CitationCheckSheet({ fileId }: { fileId: string }) {
             <p className="text-[11px] text-muted-foreground tabular-nums">
               Judged by Neura on the cited papers&apos; full text · {(result.ms / 1000).toFixed(1)}s · Verdicts saved to FalkorDB
             </p>
-          </>
+          </div>
         ) : null}
-      </SheetContent>
-    </Sheet>
+      </div>
+    </div>
   );
 }

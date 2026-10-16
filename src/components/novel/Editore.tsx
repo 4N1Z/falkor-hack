@@ -11,10 +11,6 @@ import {
   type JSONContent,
 } from "./headless/index";
 import { defaultEditorContent } from "./content";
-import { CitationCheckSheet } from "./citation-check-sheet";
-import { NotebookSheet } from "./notebook-sheet";
-import { SynthesisSheet } from "./synthesis-sheet";
-import { EvidenceMapSheet } from "./evidence-map-sheet";
 import { defaultExtensions } from "./extensions";
 import { slashCommand, suggestionItems } from "./slash-command";
 import {
@@ -531,8 +527,8 @@ const NovelTailwindEditore = ({
         </div>
       )}
 
-      {/* xl:pr reserves room for the Cite Scout panel (fixed, right, xl+ only) so it never covers text */}
-      <div className="flex justify-center items-center flex-col mt-2 relative xl:pr-[324px]">
+      {/* Right padding keeps the text clear of the research rail: the icon strip always, plus the open panel on xl+ (the rail sets --research-rail) */}
+      <div className="flex justify-center items-center flex-col mt-2 relative md:pr-14 xl:pr-[var(--research-rail,56px)]">
         {" "}
         {/* Need to chnage it to a different component */}
         <div className="w-full max-w-[800px] flex flex-col gap-3 px-7 lg:my-8">
@@ -555,13 +551,6 @@ const NovelTailwindEditore = ({
             aria-label="Document tools"
             className="-ml-2.5 flex flex-wrap items-center gap-0.5 border-b border-border/70 pb-3"
           >
-            <NotebookSheet fileId={fileId} />
-            <SynthesisSheet fileId={fileId} />
-            <EvidenceMapSheet fileId={fileId} />
-            <CitationCheckSheet fileId={fileId} />
-
-            <span aria-hidden className="mx-1.5 h-4 w-px bg-border" />
-
             <BannerUpload id={fileId} dirType={dirType} className="w-auto">
               <span className={toolbarButton}>
                 <ImageIcon />

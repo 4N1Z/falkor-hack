@@ -20,44 +20,41 @@ export default async function WordspaceIdPage(
 
   const greetings = getGreeting();
   const isSharedWorkspace = data[0].workspaceOwner !== session?.user?.id;
+  const firstName = session?.user?.name?.split(" ")[0] || "there";
 
   return (
-    <div className="relative h-full max-h-screen grid w-full max-w-screen-lg mx-auto ">
-      <div className={`flex items-center flex-col gap-2`}>
-        <div className={`flex flex-col w-full pt-8 mb-12`}>
-          <h1 className={`text-2xl font-semibold`}>
-            {greetings}, {session?.user?.name || "User"}
-          </h1>
-          <div className="flex items-center gap-2">
-            <p className={`font-xs`}>Welcome to {data[0].title} workspace</p>
-            {isSharedWorkspace ? (
-              <span className="inline-flex items-center rounded-full bg-amber-50 px-2 py-1 text-xs font-medium text-amber-700 ring-1 ring-inset ring-amber-700/10">
-                Shared
-              </span>
-            ) : (
-              <span className="inline-flex items-center rounded-full bg-blue-50 px-2 py-1 text-xs font-medium text-primary ring-1 ring-inset ring-blue-700/10">
-                owner
-              </span>
-            )}
-          </div>
+    <div className="mx-auto w-full max-w-6xl px-6 pb-16 pt-10 lg:px-10">
+      {/* Header */}
+      <header>
+        <h1 className="text-[28px] font-semibold leading-tight tracking-[-0.02em] text-foreground">
+          {greetings}, {firstName}
+        </h1>
+        <div className="mt-2 flex flex-wrap items-center gap-2 text-sm text-muted-foreground">
+          <span>
+            You&apos;re in <span className="font-medium text-foreground">{data[0].title}</span>
+          </span>
+          {isSharedWorkspace ? (
+            <span className="inline-flex items-center rounded-full bg-amber-50 px-2 py-0.5 text-[11px] font-medium uppercase tracking-wide text-amber-700 ring-1 ring-inset ring-amber-700/10">
+              Shared with you
+            </span>
+          ) : (
+            <span className="inline-flex items-center rounded-full bg-blue-50 px-2 py-0.5 text-[11px] font-medium uppercase tracking-wide text-primary ring-1 ring-inset ring-blue-700/10">
+              Owner
+            </span>
+          )}
         </div>
-        <div className="w-full h-screen max-h-screen grid grid-cols-4 grid-rows-4">
-          {/* <div className="grid row-span-2 col-span-2 justify-center">
-            <RecentCreateFiles workspaceId={data[0].id} />
-            <ResearchPapers workspaceId={params.workspaceId} />
-          </div> */}
+      </header>
 
-          <div className="grid col-span-3 row-span-1 mx-4 items-end mb-4">
-            <RecentCreateFiles workspaceId={data[0].id} />
-          </div>
-          <div className=" col-span-2 row-span-2 col-start-3 row-start-2 mx-4 ">
-            <ResearchSuggestion />
-          </div>
-          <div className="col-span-2 row-span-2 col-start-1 row-start-2 mx-4">
-            <ResearchPapers workspaceId={params.workspaceId} />
-          </div>
-        </div>
-      </div>
+      {/* Pick up where you left off */}
+      <section className="mt-10" aria-labelledby="recent-heading">
+        <RecentCreateFiles workspaceId={data[0].id} />
+      </section>
+
+      {/* Library + suggestions, equal height side by side; stacked on smaller screens */}
+      <section className="mt-10 grid items-stretch gap-6 lg:grid-cols-2">
+        <ResearchPapers workspaceId={params.workspaceId} />
+        <ResearchSuggestion />
+      </section>
     </div>
   );
 }

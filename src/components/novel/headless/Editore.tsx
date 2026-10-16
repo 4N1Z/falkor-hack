@@ -33,7 +33,7 @@ import { ImageResizer } from '../extensions/index'
 import Link from '@tiptap/extension-link'
 import { TabIndent } from '../extensions/tab-indent'
 import { FindPapersDialog } from '../find-papers-dialog'
-import { CiteScoutPanel } from '../cite-scout-panel'
+import { ResearchRail } from '../research-rail'
 import { GhostText } from '../extensions/ghost-text'
 import { GhostWriter } from '../ghost-writer'
 
@@ -342,7 +342,7 @@ const Editore = ({
             </EditorCommand>
 
             <FindPapersDialog />
-            <CiteScoutPanel fileId={fileId} />
+            <ResearchRail fileId={fileId} />
             <GhostWriter />
 
             <GenerativeMenuSwitch open={openAI} onOpenChange={setOpenAI}>

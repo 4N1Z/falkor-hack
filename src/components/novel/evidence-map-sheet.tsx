@@ -5,11 +5,10 @@ import type { Verdict } from "@/lib/agents/citation-checker";
 import type { SupportLevel } from "@/lib/jev";
 import { FalkorCanvas, type CanvasLink, type CanvasNode } from "@/components/graph/falkor-canvas";
 import { Button } from "@/components/ui/button";
-import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle, SheetTrigger } from "@/components/ui/sheet";
+import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle } from "@/components/ui/sheet";
 import { useAppState } from "@/lib/providers/state-providers";
 import { cn } from "@/lib/utils";
-import { toolbarButton } from "./toolbar-button";
-import { Loader2, Network, RotateCw } from "lucide-react";
+import { Loader2, RotateCw } from "lucide-react";
 import { useMemo, useState } from "react";
 import useSWR from "swr";
 import { toast } from "sonner";
@@ -60,9 +59,9 @@ const verdictOf = (c: EvidenceClaim) => c.verdict ?? "unchecked";
  * suggest for claims that need one. It shows what a list can't: which claims rest on a single
  * paper, which papers carry several claims, and whose reading the argument actually uses.
  */
-export function EvidenceMapSheet({ fileId }: { fileId: string }) {
+export function EvidenceMapSheet({ fileId, open, onOpenChange }: { fileId: string; open: boolean; onOpenChange: (open: boolean) => void }) {
   const { workspaceId } = useAppState();
-  const [open, setOpen] = useState(false);
+  const setOpen = onOpenChange;
   const [selected, setSelected] = useState<string | null>(null);
   const [showPaperCites, setShowPaperCites] = useState(false);
   const [checking, setChecking] = useState(false);
@@ -177,11 +176,6 @@ export function EvidenceMapSheet({ fileId }: { fileId: string }) {
 
   return (
     <Sheet open={open} onOpenChange={setOpen}>
-      <SheetTrigger asChild>
-        <Button size={null} variant="none" className={toolbarButton}>
-          <Network /> Evidence map
-        </Button>
-      </SheetTrigger>
       <SheetContent side="right" className="w-full sm:max-w-[min(1100px,96vw)] flex flex-col gap-3 font-sans">
         <SheetHeader>
           <SheetTitle>Evidence map</SheetTitle>
