@@ -18,7 +18,7 @@ import { papers } from "@/db/schema";
 import { startRun, type AgentRunRecorder } from "../../agents/base";
 import { embedTexts, paperEmbeddingText } from "../../graph/embeddings";
 import { ingestPaperRows, type PaperRow } from "../../graph/ingest-rows";
-import { getCitingSweepWorks, searchWorksFiltered, titleKey, type SweepWork } from "../../graph/openalex";
+import { getCitingSweepWorks, getRecentCitingWorks, searchWorksFiltered, titleKey, type SweepWork } from "../../graph/openalex";
 import { PAPERS_BY_PG_ID, TEAM_PAPER_DETAILS } from "../../graph/queries";
 import { classifyMany } from "../../jev";
 import { spend } from "../project";
@@ -123,7 +123,7 @@ const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
 // ---------------------------------------------------------------- gathering
 
-async function gatherSeed(graph: Graph, project: AdamProject, page: QuestionPage, run: AgentRunRecorder): Promise<Candidate[]> {
+async function gatherSeed(graph: Graph, project: AdamProject, page: QuestionPage, run: AgentRunRecorder, skipClusters: string[] = []): Promise<Candidate[]> {
   const out: Candidate[] = [];
   // Trusted / distrusted seeds are already graph papers
   if (project.seeds.length) {
@@ -135,6 +135,8 @@ async function gatherSeed(graph: Graph, project: AdamProject, page: QuestionPage
   }
   const twoYearsAgo = new Date(Date.now() - 2 * 365 * 86400_000).toISOString().slice(0, 10);
   for (const sq of page.subquestions) {
+    // Saturation rule: a cluster whose last papers added nothing new is not searched again this pass
+    if (skipClusters.includes(sq.id)) continue;
     const q = sq.text.length > 220 ? sq.text.slice(0, 220) : sq.text;
     const batches = await run.step(
       `openalex.seed.${sq.id}`,
@@ -170,8 +172,20 @@ async function searchEach(queries: string[], perPage: number): Promise<SweepWork
   return out;
 }
 
-async function gatherCitation(graph: Graph, project: AdamProject, run: AgentRunRecorder, onlyPaperIds?: string[]): Promise<Candidate[]> {
+async function gatherCitation(graph: Graph, project: AdamProject, run: AgentRunRecorder, onlyPaperIds?: string[], recentSince?: string): Promise<Candidate[]> {
   const out: Candidate[] = [];
+  // Re-sweep: only what has cited the core since the last sweep (one request per 50 core papers)
+  if (recentSince) {
+    const cores = ((await graph.roQuery<{ paperId: string; clusterId: string | null }>(CORE_PAPERS, params({ projectId: project.id }))).data ?? []).filter((c) => /^W\d+$/.test(c.paperId));
+    const recent = await run.step("openalex.recentCiting", () => getRecentCitingWorks(cores.map((c) => c.paperId), recentSince, 200), { source: "graph" });
+    for (const w of recent) {
+      const parent = cores.find((c) => w.references.includes(c.paperId));
+      const c = fromWork({ ...w, references: w.references, concepts: [], publicationDate: w.publicationDate }, "citation", parent?.paperId ?? "resweep");
+      c.clusterHint = parent?.clusterId ?? null;
+      out.push(c);
+    }
+    return out;
+  }
   // Backward: references already in the graph via the Librarian's CITES fan-out
   const backward = await run.step(
     "graph.backwardCandidates",
@@ -341,7 +355,7 @@ export async function runSearchRing(
   project: AdamProject,
   page: QuestionPage,
   ring: Ring,
-  opts: { round?: number; onlyPaperIds?: string[]; heartbeat?: (p: Record<string, unknown>) => Promise<void>; log?: (m: string) => void } = {},
+  opts: { round?: number; onlyPaperIds?: string[]; recentSince?: string; skipClusters?: string[]; heartbeat?: (p: Record<string, unknown>) => Promise<void>; log?: (m: string) => void } = {},
 ): Promise<RingResult> {
   const run = await startRun("adam-searcher", workspaceId, { projectId: project.id, pass: project.pass, ring, round: opts.round ?? 1 });
   const beat = opts.heartbeat ?? (async () => {});
@@ -349,7 +363,7 @@ export async function runSearchRing(
 
   // 1. Gather
   let raw =
-    ring === "seed" ? await gatherSeed(graph, project, page, run) : ring === "citation" ? await gatherCitation(graph, project, run, opts.onlyPaperIds) : await gatherAdjacent(graph, project, page, run);
+    ring === "seed" ? await gatherSeed(graph, project, page, run, opts.skipClusters) : ring === "citation" ? await gatherCitation(graph, project, run, opts.onlyPaperIds, opts.recentSince) : await gatherAdjacent(graph, project, page, run);
   await beat({ step: "gathered", n: raw.length });
 
   // Dedupe (first finder wins), drop already-triaged, cap

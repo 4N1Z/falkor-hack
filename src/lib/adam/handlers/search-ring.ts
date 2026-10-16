@@ -17,8 +17,10 @@ export async function runSearchRing_(ctx: JobContext) {
   if (!RINGS.includes(ring)) throw new Error(`unknown ring ${ring}`);
   const round = Number(ctx.job.payload.round ?? 1);
   const onlyPaperIds = ctx.job.payload.paperIds as string[] | undefined;
+  const recentSince = ctx.job.payload.recentSince as string | undefined;
+  const skipClusters = ctx.job.payload.skipClusters as string[] | undefined;
 
-  const result = await runSearchRing(ctx.graph, ctx.workspaceId, project, page, ring, { round, onlyPaperIds, heartbeat: ctx.heartbeat, log: ctx.log });
+  const result = await runSearchRing(ctx.graph, ctx.workspaceId, project, page, ring, { round, onlyPaperIds, recentSince, skipClusters, heartbeat: ctx.heartbeat, log: ctx.log });
   await emit(ctx.graph, project.id, "ring_done", { ...result, round });
 
   // The checker: what is still missing after this ring?

@@ -15,6 +15,7 @@ import { runAnalyzeGraph } from "./analyze-graph";
 import { runWriteHypotheses } from "./write-hypotheses";
 import { runFalsify } from "./falsify";
 import { runDesignExperiment } from "./design-experiment";
+import { runSaturation } from "./saturation";
 
 export interface JobContext {
   workspaceId: string;
@@ -44,4 +45,5 @@ export const HANDLERS: Partial<Record<JobKind, Handler>> = {
   write_hypotheses: runWriteHypotheses,
   falsify: runFalsify,
   design_experiment: runDesignExperiment,
+  saturation: runSaturation,
 };

@@ -18,8 +18,9 @@ import { KnowledgeTab } from "./knowledge-tab";
 import { MethodsTab } from "./methods-tab";
 import { HypothesesTab } from "./hypotheses-tab";
 import { ExperimentsTab } from "./experiments-tab";
+import { SaturationTab } from "./saturation-tab";
 
-type Tab = "question" | "sweep" | "queue" | "knowledge" | "methods" | "hypotheses" | "experiments" | "activity";
+type Tab = "question" | "sweep" | "queue" | "knowledge" | "methods" | "hypotheses" | "experiments" | "saturation" | "activity";
 
 const TABS: { id: Tab; label: string }[] = [
   { id: "question", label: "Question" },
@@ -29,6 +30,7 @@ const TABS: { id: Tab; label: string }[] = [
   { id: "methods", label: "Methods" },
   { id: "hypotheses", label: "Hypotheses" },
   { id: "experiments", label: "Experiments" },
+  { id: "saturation", label: "Saturation" },
   { id: "activity", label: "Activity" },
 ];
 
@@ -137,6 +139,9 @@ export default function AdamWorkbench({ workspaceId }: { workspaceId: string }) 
             </TabsContent>
             <TabsContent value="experiments" className="mt-0">
               <ExperimentsTab workspaceId={workspaceId} status={status} />
+            </TabsContent>
+            <TabsContent value="saturation" className="mt-0">
+              <SaturationTab workspaceId={workspaceId} status={status} />
             </TabsContent>
             <TabsContent value="activity" className="mt-0">
               <ActivityTab status={status} />

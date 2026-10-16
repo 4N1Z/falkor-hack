@@ -67,6 +67,8 @@ export const extractStep: PhaseStep = async ({ graph, project }) => {
   }
 
   if (pending > 0) return { enqueued };
+  // The saturation bar is recomputed after each extraction batch
+  await jobs.enqueue(graph, { projectId: project.id, kind: "saturation", subject: `pass-${project.pass}`, payload: { pass: project.pass }, priority: PRIORITY.saturation, dedupeKey: `saturation:${project.id}:pass${project.pass}:${readable.length}`, maxAttempts: 2 });
   const notes = failed ? [`${failed} extraction or verification job(s) failed; continuing with the verified cards`] : [];
   return { enqueued, advance: true, notes };
 };

@@ -215,15 +215,25 @@ export async function runExtractor(
   }
   await beat({ step: "read", calls });
 
-  // 2. Guards: unknown chunkIds are dropped (the Verifier does the fine check); quotes are clipped
+  // 2. Guards: a chunkId the paper does not have is repaired from the quote when the quote can be
+  // found (models echo the "c:" prefix or pick a neighbouring chunk); otherwise the item is dropped.
+  // The Verifier does the fine check afterwards; this only keeps unsourced items out of the graph.
   let dropped = 0;
+  const normQ = (s: string) => s.toLowerCase().replace(/[\u2018\u2019]/g, "'").replace(/[\u201c\u201d]/g, '"').replace(/\s+/g, " ").trim();
+  const normChunks = chunks.map((c) => ({ id: c.id, text: normQ(c.text) }));
   const keepItem = <T extends { chunkId: string; quote: string }>(it: T): boolean => {
-    if (!chunkIds.has(it.chunkId)) {
-      dropped++;
-      return false;
-    }
+    it.chunkId = it.chunkId.trim().replace(/^c:/i, "");
     it.quote = clip(it.quote.trim(), QUOTE_MAX);
-    return true;
+    if (chunkIds.has(it.chunkId)) return true;
+    const q = normQ(it.quote);
+    const probe = q.length > 60 ? q.slice(0, 60) : q;
+    const found = probe.length >= 15 ? normChunks.find((c) => c.text.includes(probe)) : undefined;
+    if (found) {
+      it.chunkId = found.id;
+      return true;
+    }
+    dropped++;
+    return false;
   };
   card.claims = card.claims.filter(keepItem);
   card.evidence = card.evidence.filter(keepItem);

@@ -14,7 +14,11 @@ import {
 } from "../graph/queries";
 import { searchTeamLibrary } from "../graph/team-search";
 import { needsCitation, scoreSupport, type SupportLevel } from "../jev";
+import { CLAIMS_OF_PAPERS } from "../adam/queries-review";
 import { startRun, type AgentResult } from "./base";
+
+/** A verified adam claim this close (cosine distance) to the draft sentence is the evidence to judge on. */
+const CLAIM_MATCH_DISTANCE = 0.3;
 
 export type Verdict = "supported" | "weak" | "unsupported" | "contradicted" | "uncited" | "unknown-source" | "ok";
 
@@ -33,9 +37,12 @@ export interface CheckedSource {
   level: SupportLevel;
   score: number;
   confidence: number;
-  /** The passage the verdict was judged on (full text when indexed, else abstract) */
+  /** The passage the verdict was judged on: a verified adam claim (with page and section), a full-text passage, or the abstract */
   evidence: string | null;
-  evidenceKind: "passage" | "abstract" | "none";
+  evidenceKind: "claim" | "passage" | "abstract" | "none";
+  /** For adam claims: where in the paper the claim was made */
+  page?: number | null;
+  section?: string | null;
 }
 
 export interface ClaimCheck {
@@ -114,13 +121,26 @@ export async function runCitationCheck(input: { workspaceId: string; fileId: str
             })).data ?? [];
           const best = new Map<string, string>();
           for (const p of passages) if (!best.has(p.paperId)) best.set(p.paperId, p.text);
+          // Adam: a verified claim of the cited paper, with its page and section, beats a raw passage
+          const claims =
+            (await run.graph
+              .roQuery<{ paperId: string; claimId: string; text: string; page: number; section: string; speculative: boolean; score: number }>(CLAIMS_OF_PAPERS, {
+                params: { v: vecOf.get(c.claimId)!, k: 200, paperIds: ids } as never,
+              })
+              .catch(() => ({ data: [] }))).data ?? [];
+          const bestClaim = new Map<string, (typeof claims)[number]>();
+          for (const cl of claims) if (cl.score <= CLAIM_MATCH_DISTANCE && !bestClaim.has(cl.paperId)) bestClaim.set(cl.paperId, cl);
 
           const evidence = c.papers.map((p) => {
+            const claim = bestClaim.get(p.paperId!);
             const passage = best.get(p.paperId!);
             return {
               p,
-              text: passage ?? p.abstract ?? null,
-              kind: (passage ? "passage" : p.abstract ? "abstract" : "none") as CheckedSource["evidenceKind"],
+              text: claim?.text ?? passage ?? p.abstract ?? null,
+              kind: (claim ? "claim" : passage ? "passage" : p.abstract ? "abstract" : "none") as CheckedSource["evidenceKind"],
+              page: claim?.page ?? null,
+              section: claim?.section ?? null,
+              speculative: claim?.speculative ?? false,
             };
           });
           const judged = await scoreSupport(
@@ -139,6 +159,8 @@ export async function runCitationCheck(input: { workspaceId: string; fileId: str
               confidence: j.confidence,
               evidence: e.text?.replace(/\s+/g, " ").trim().slice(0, 360) ?? null,
               evidenceKind: e.kind,
+              page: e.page,
+              section: e.section,
             };
           });
           // The claim is as good as its best source, but any contradiction is surfaced
@@ -146,11 +168,13 @@ export async function runCitationCheck(input: { workspaceId: string; fileId: str
             ? "contradicted"
             : LEVEL_TO_VERDICT[[...sources].sort((a, b) => b.score - a.score)[0].level];
           const lead = sources.find((s) => LEVEL_TO_VERDICT[s.level] === verdict) ?? sources[0];
+          // A verified adam claim says where in the paper the judgement comes from
+          const where = lead.evidenceKind === "claim" ? ` (a verified ${lead.section || "paper"} claim${lead.page ? ` on p.${lead.page}` : ""})` : "";
           const why = {
-            contradicted: `“${lead.title}” says the opposite of this claim.`,
+            contradicted: `“${lead.title}” says the opposite of this claim${where}.`,
             unsupported: `“${lead.title}” doesn't address this claim. It may be the wrong citation.`,
-            weak: `“${lead.title}” only partly supports this claim. Consider softening it or adding a source.`,
-            supported: `“${lead.title}” supports this claim.`,
+            weak: `“${lead.title}” only partly supports this claim${where}. Consider softening it or adding a source.`,
+            supported: `“${lead.title}” supports this claim${where}.`,
           }[verdict as "contradicted" | "unsupported" | "weak" | "supported"];
           return { ...base, verdict, why, sources };
         }

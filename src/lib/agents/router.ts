@@ -15,6 +15,9 @@ import { runSynthesis } from "./synthesis";
 
 import { ROUTE_NAMES, type Route } from "../chat/route-names";
 import { similarQuestions } from "../chat/mirror";
+import { hypothesisQuery } from "../adam/hypothesis-query";
+import { listProjects } from "../adam/project";
+import { getWorkspaceGraph } from "../graph/client";
 
 export { ROUTE_NAMES };
 export type { Route };
@@ -28,6 +31,8 @@ const ROUTES: Record<Route, string> = {
   scout_watcher: "Finding new or recent papers published since the team's library was built, or what new work cites the team's papers",
   // Paper searches land here (not in general): the team's graph is searched first, then OpenAlex.
   team_library: "Searching or finding papers on a topic or by name, asking which papers the team or a collaborator has, or what the team's papers say about a topic",
+  hypothesis:
+    "Testing a hypothesis the user states (\"is it true that…\", \"would X cause Y\", \"could we show that…\"): what verified evidence supports or contradicts it, under what conditions it holds, which chain of known methods could test it, and where the chain breaks",
   general: "Anything else: explanations of concepts, general questions, or help with writing and wording",
 };
 
@@ -113,6 +118,39 @@ export async function routeMessage(input: {
       lines.push(`Drafted "${r.title}" as a new document in the workspace (tell the user to open it from the sidebar). Sections:`);
       for (const s of r.items) lines.push(`- ${s.heading}: ${s.papers.map((p) => p.label).join(", ")}`);
     } else lines.push("Not enough team papers on this topic to draft a review.");
+  } else if (route === "hypothesis") {
+    // Adam: the most recent research project in the workspace answers hypothesis-as-a-query
+    const [project] = await listProjects(input.workspaceId);
+    if (!project) {
+      lines.push("There is no Adam research project in this workspace yet. Open Adam from the sidebar, write the question page and run the loop; then hypotheses can be tested against the graph of known steps.");
+    } else {
+      const graph = await getWorkspaceGraph(input.workspaceId);
+      const r = await hypothesisQuery(graph, input.workspaceId, project, { text: input.message, userId: input.userId });
+      runId = r.runId;
+      lines.push(`Hypothesis: ${r.statement}`);
+      lines.push(`Predicted result: ${r.predictedResult}`);
+      for (const s of r.subclaims) {
+        lines.push(`Sub-claim: ${s.text}${s.gap ? " — GAP: nothing verified in the graph supports this" : ""}`);
+        for (const h of s.for) {
+          paperIds.add(h.paperId);
+          lines.push(`  - supports: "${h.text.slice(0, 200)}" (${h.paper}${h.year ? `, ${h.year}` : ""}${h.page ? `, p.${h.page}` : ""}${h.section ? `, ${h.section}` : ""})`);
+        }
+        for (const h of s.against) {
+          paperIds.add(h.paperId);
+          lines.push(`  - contradicts: "${h.text.slice(0, 200)}" (${h.paper}${h.year ? `, ${h.year}` : ""}${h.page ? `, p.${h.page}` : ""})`);
+        }
+      }
+      if (r.boundary.holds.length) lines.push(`Holds under: ${r.boundary.holds.slice(0, 6).join("; ")}`);
+      if (r.boundary.fails.length) lines.push(`Fails under: ${r.boundary.fails.slice(0, 6).join("; ")}`);
+      if (r.boundary.assumptions.length) lines.push(`Rests on assumptions: ${r.boundary.assumptions.slice(0, 5).map((a) => `${a.text}${a.loadBearing ? " (load-bearing)" : ""}`).join("; ")}`);
+      if (r.chains.length) {
+        lines.push(`Candidate chains of known steps (cheapest to kill first):`);
+        for (const c of r.chains.slice(0, 3)) lines.push(`  ${c.rank}. ${c.steps.map((s) => `${s.name} [${s.status}]`).join(" → ")} → ${c.resultText.slice(0, 120)} (cost ${Math.round(c.cost)}, ${c.gaps} gap(s), ${c.feasible ? "feasible for this lab" : "not feasible as is"})`);
+      } else lines.push("No chain of procedures in the graph reaches the predicted result yet; the Methods Hunter has been pointed at the gap.");
+      for (const g of r.gaps) lines.push(`Gap: ${g.text}`);
+      if (r.rivals.length) lines.push(`Rival chains reach a similar result without the mechanism: ${r.rivals.slice(0, 2).map((c) => c.steps.map((s) => s.name).join(" → ")).join(" | ")}`);
+      if (r.costToKill) lines.push(`Cost to kill: ${r.costToKill.cost} via ${r.costToKill.description}`);
+    }
   } else if (route === "team_library") {
     const found = await searchTeamLibrary(input.workspaceId, input.message, { limit: 10 });
     // "Which papers does Bea have…" — keep only that collaborator's papers when one is named

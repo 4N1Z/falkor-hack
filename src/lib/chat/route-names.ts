@@ -9,6 +9,7 @@ export const ROUTE_NAMES = {
   team_library: "Team library",
   synthesis: "Synthesis",
   scout_watcher: "Scout Watcher",
+  hypothesis: "Adam",
   general: "Neura AI",
 } as const;
 
