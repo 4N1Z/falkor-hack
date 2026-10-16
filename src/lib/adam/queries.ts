@@ -232,3 +232,122 @@ export const QUEUE_OPEN_COUNT = ["Claim", "Evidence", "Method", "Assumption", "P
       `MATCH (n:${l} {projectId: $projectId}) WHERE (n.state IN ['conflict', 'low_confidence'] OR coalesce(n.loadBearing, false) = true OR coalesce(n.stateReason, '') = 'quote_not_found') AND coalesce(n.queueDecided, false) = false RETURN count(n) AS n`,
   )
   .join("\nUNION ALL\n");
+
+// ---------------------------------------------------------------- Sweep (Searcher, triage, coverage)
+
+/**
+ * Triage edges from the project to papers. A person's label (decidedBy set) is never
+ * overwritten by an agent; the agent's own label can be refreshed by a later ring.
+ */
+export const UPSERT_TRIAGED = `
+MATCH (a:AdamProject {id: $projectId})
+UNWIND $rows AS r
+MATCH (p:Paper {paperId: r.paperId})
+MERGE (a)-[t:TRIAGED]->(p)
+ON CREATE SET t.at = $at, t.ring = r.ring, t.via = r.via, t.pass = $pass
+SET t.label = CASE WHEN t.decidedBy IS NOT NULL THEN t.label ELSE r.label END,
+    t.agentLabel = r.label, t.confidence = r.confidence, t.reason = r.reason,
+    t.clusterId = coalesce(r.clusterId, t.clusterId), t.runId = $runId,
+    t.userLabel = coalesce(r.userLabel, t.userLabel)
+RETURN count(t) AS n`;
+
+/** The researcher relabels a paper (or marks a seed trusted / distrusted). */
+export const SET_TRIAGE_LABEL = `
+MATCH (a:AdamProject {id: $projectId})-[t:TRIAGED]->(p:Paper {paperId: $paperId})
+SET t.label = coalesce($label, t.label), t.userLabel = coalesce($userLabel, t.userLabel),
+    t.decidedBy = $userId, t.decidedAt = $at
+RETURN t.label AS label`;
+
+export const TRIAGED_IDS = `
+MATCH (:AdamProject {id: $projectId})-[t:TRIAGED]->(p:Paper)
+RETURN p.paperId AS paperId, t.label AS label`;
+
+/** Everything the Sweep tab shows per paper. */
+export const TRIAGED_PAPERS = `
+MATCH (:AdamProject {id: $projectId})-[t:TRIAGED]->(p:Paper)
+OPTIONAL MATCH (s:IngestStatus {pgPaperId: p.pgPaperId})
+RETURN p.paperId AS paperId, p.pgPaperId AS pgPaperId, p.title AS title, p.year AS year, p.venue AS venue,
+       coalesce(p.citationCount, 0) AS citationCount, p.doi AS doi, p.arxivId AS arxivId,
+       t.label AS label, t.agentLabel AS agentLabel, t.userLabel AS userLabel, t.ring AS ring, t.via AS via,
+       t.clusterId AS clusterId, coalesce(t.confidence, 0) AS confidence, t.reason AS reason, t.decidedBy AS decidedBy,
+       t.at AS at, coalesce(t.nodesNew, 0) AS nodesNew, coalesce(t.nodesReused, 0) AS nodesReused,
+       coalesce(p.accessStatus, CASE WHEN coalesce(p.chunkCount, 0) > 0 THEN 'full_text' ELSE 'unknown' END) AS accessStatus,
+       coalesce(p.chunkCount, 0) AS chunks, coalesce(p.chunkSchema, 0) AS chunkSchema, s.fullText AS fullTextState, s.state AS ingestState,
+       p.adamState AS adamState
+ORDER BY t.at DESC`;
+
+/** Core / contradicting papers that have an OpenAlex id (so the citation ring can expand them). */
+export const CORE_PAPERS = `
+MATCH (:AdamProject {id: $projectId})-[t:TRIAGED]->(p:Paper)
+WHERE t.label IN ['core', 'contradicts']
+RETURN p.paperId AS paperId, p.title AS title, t.clusterId AS clusterId, coalesce(p.chunkCount, 0) AS chunks`;
+
+/**
+ * Backward ring from the graph: references of core papers (the Librarian already fanned
+ * them out as CITES edges), ranked by how many core papers cite them, then by citations.
+ * Not yet triaged for this project.
+ */
+export const BACKWARD_CANDIDATES = `
+MATCH (a:AdamProject {id: $projectId})-[t:TRIAGED]->(core:Paper)-[:CITES]->(ref:Paper)
+WHERE t.label IN ['core', 'contradicts'] AND NOT (a)-[:TRIAGED]->(ref) AND coalesce(ref.suspect, false) = false
+WITH ref, count(DISTINCT core) AS citedByCore, collect(DISTINCT core.paperId)[0] AS via, collect(DISTINCT t.clusterId)[0] AS clusterId
+RETURN ref.paperId AS paperId, ref.title AS title, ref.abstract AS abstract, ref.year AS year, ref.venue AS venue,
+       coalesce(ref.citationCount, 0) AS citationCount, ref.doi AS doi, ref.arxivId AS arxivId, ref.pgPaperId AS pgPaperId,
+       citedByCore, coalesce(via, '') AS via, coalesce(clusterId, '') AS clusterId
+ORDER BY citedByCore DESC, citationCount DESC
+LIMIT $limit`;
+
+/**
+ * Adjacent ring from the graph: papers sharing ≥2 concepts with core papers but with no
+ * citation link to any of them (the "same problem under other vocabulary" case).
+ */
+export const CONCEPT_OVERLAP_CANDIDATES = `
+MATCH (a:AdamProject {id: $projectId})-[t:TRIAGED]->(core:Paper)-[:ABOUT]->(c:Concept)<-[:ABOUT]-(p:Paper)
+WHERE t.label IN ['core', 'contradicts'] AND NOT (a)-[:TRIAGED]->(p) AND NOT (p)-[:CITES]-(core)
+  AND coalesce(p.suspect, false) = false
+WITH p, count(DISTINCT c) AS shared, collect(DISTINCT core.paperId)[0] AS via, collect(DISTINCT t.clusterId)[0] AS clusterId
+WHERE shared >= 2
+RETURN p.paperId AS paperId, p.title AS title, p.abstract AS abstract, p.year AS year, p.venue AS venue,
+       coalesce(p.citationCount, 0) AS citationCount, p.doi AS doi, p.arxivId AS arxivId, p.pgPaperId AS pgPaperId,
+       shared, coalesce(via, '') AS via, coalesce(clusterId, '') AS clusterId
+ORDER BY shared DESC, citationCount DESC
+LIMIT $limit`;
+
+/**
+ * Coverage check (the Searcher's checker): for each core paper, how many of its ten most-cited
+ * references the project has triaged. Core papers with no CITES edges yield no row.
+ */
+export const CORE_REFERENCE_COVERAGE = `
+MATCH (a:AdamProject {id: $projectId})-[t:TRIAGED]->(core:Paper)-[:CITES]->(ref:Paper)
+WHERE t.label IN ['core', 'contradicts']
+WITH a, core, ref ORDER BY coalesce(ref.citationCount, 0) DESC
+WITH a, core, collect(ref) AS refs
+WITH a, core, refs[0..10] AS top
+UNWIND top AS ref
+OPTIONAL MATCH (a)-[tr:TRIAGED]->(ref)
+WITH core, count(ref) AS refs, count(tr) AS covered
+RETURN core.paperId AS paperId, core.title AS title, refs, covered`;
+
+/** Adjacent-field presence: triaged papers found through each adjacent term. */
+export const ADJACENT_PRESENCE = `
+MATCH (:AdamProject {id: $projectId})-[t:TRIAGED {ring: 'adjacent'}]->(p:Paper)
+RETURN t.via AS via, count(p) AS n`;
+
+export const SET_PROJECT_COVERAGE = `
+MATCH (p:AdamProject {id: $id})
+SET p.coverage = $coverage, p.updatedAt = $at
+RETURN p.id AS id`;
+
+export const GET_PROJECT_COVERAGE = `
+MATCH (p:AdamProject {id: $id})
+RETURN coalesce(p.coverage, '{}') AS coverage`;
+
+/** Background (metadata-only) papers the sweep found: nodes without a library row. */
+export const UPSERT_SWEEP_PAPERS = `
+UNWIND $rows AS r
+MERGE (p:Paper {paperId: r.paperId})
+ON CREATE SET p.inLibrary = false, p.createdAt = timestamp(), p.title = r.title, p.titleKey = r.titleKey,
+              p.abstract = r.abstract, p.year = r.year, p.venue = r.venue, p.citationCount = r.citationCount,
+              p.doi = r.doi, p.arxivId = r.arxivId, p.metaSuspect = false
+SET p.accessStatus = coalesce(p.accessStatus, CASE WHEN r.abstract IS NULL THEN 'unavailable' ELSE 'abstract_only' END)
+RETURN count(p) AS n`;

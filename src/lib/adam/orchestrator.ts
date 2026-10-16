@@ -13,6 +13,13 @@ import { getProject, setProjectState } from "./project";
 import { PHASES, type AdamProject, type Gate, type JobKind, type Phase } from "./types";
 import type { JobContext } from "./handlers";
 import { questionStep } from "./phases/question";
+import { sweepStep } from "./phases/sweep";
+import { extractStep } from "./phases/extract";
+import { methodsStep } from "./phases/methods";
+import { connectStep } from "./phases/connect";
+import { hypothesiseStep } from "./phases/hypothesise";
+import { attackStep } from "./phases/attack";
+import { experimentStep } from "./phases/experiment";
 
 /** How soon the orchestrator looks again while jobs are in flight. */
 const TICK_MS = 20_000;
@@ -35,6 +42,8 @@ export interface StepResult {
   gate?: Gate;
   /** Something to tell the researcher (recorded as an event) */
   notes?: string[];
+  /** Human hold: stop the loop with this reason; the researcher resumes after looking */
+  pause?: string;
 }
 
 export type PhaseStep = (ctx: PhaseContext) => Promise<StepResult>;
@@ -42,6 +51,13 @@ export type PhaseStep = (ctx: PhaseContext) => Promise<StepResult>;
 /** Phase steps register here as each is built; a phase without a step holds the project. */
 const STEPS: Partial<Record<Exclude<Phase, "done">, PhaseStep>> = {
   question: questionStep,
+  sweep: sweepStep,
+  extract: extractStep,
+  methods: methodsStep,
+  connect: connectStep,
+  hypothesise: hypothesiseStep,
+  attack: attackStep,
+  experiment: experimentStep,
 };
 
 const nextPhase = (p: Phase): Phase => PHASES[Math.min(PHASES.indexOf(p) + 1, PHASES.length - 1)];
@@ -84,6 +100,11 @@ export async function tick(graph: Graph, workspaceId: string, projectId: string,
   const result = await step({ graph, workspaceId, project, log });
   for (const note of result.notes ?? []) await emit(graph, projectId, "note", { phase: project.phase, note });
 
+  if (result.pause) {
+    await setProjectState(graph, projectId, { status: "paused" });
+    await emit(graph, projectId, "loop_paused", { phase: project.phase, reason: result.pause });
+    return { phase: project.phase, stopped: result.pause, enqueued: result.enqueued };
+  }
   if (result.gate) {
     await setProjectState(graph, projectId, { status: "blocked_on_gate", gate: result.gate });
     await emit(graph, projectId, "gate_pending", { gate: result.gate, phase: project.phase });

@@ -5,6 +5,12 @@
 
 const BASE = "https://api.openalex.org";
 const MAILTO = process.env.OPENALEX_MAILTO ?? "dev@neuraquery.com";
+/**
+ * OpenAlex now meters keyless traffic against a daily budget shared by everyone without a key
+ * ("Insufficient budget" 429s once it is spent). A free key from openalex.org lifts that;
+ * set OPENALEX_API_KEY in .env.local. Without it, sweeps and the Librarian degrade to 429s.
+ */
+const API_KEY = process.env.OPENALEX_API_KEY;
 
 const WORK_FIELDS = [
   "id",
@@ -110,18 +116,21 @@ async function openAlexFetch<T>(path: string, params: Record<string, string>): P
   const url = new URL(`${BASE}${path}`);
   for (const [k, v] of Object.entries(params)) url.searchParams.set(k, v);
   url.searchParams.set("mailto", MAILTO);
+  if (API_KEY) url.searchParams.set("api_key", API_KEY);
 
-  for (let attempt = 0; attempt < 4; attempt++) {
+  for (let attempt = 0; attempt < 6; attempt++) {
     const res = await fetch(url, { headers: { Accept: "application/json" } });
     if (res.ok) return (await res.json()) as T;
     if (res.status === 404) return null;
     if (res.status === 429 || res.status >= 500) {
-      await new Promise((r) => setTimeout(r, 500 * 2 ** attempt));
+      // The polite pool allows ~10 req/s; a burst of searches trips it, so back off for real
+      const retryAfter = Number(res.headers.get("retry-after")) * 1000;
+      await new Promise((r) => setTimeout(r, Math.max(retryAfter || 0, 1000 * 2 ** attempt)));
       continue;
     }
     throw new Error(`OpenAlex ${res.status} for ${url.pathname}`);
   }
-  throw new Error(`OpenAlex kept failing for ${url.pathname}`);
+  throw new Error(`OpenAlex kept failing for ${url.pathname} (rate limited${API_KEY ? "" : "; no OPENALEX_API_KEY set, the keyless daily budget may be spent"})`);
 }
 
 export async function getWorkByDoi(doi: string): Promise<OpenAlexWork | null> {
@@ -344,4 +353,67 @@ export async function getRecentCitingWorks(workIds: string[], sinceDate: string,
     }
   }
   return [...out.values()];
+}
+
+// ---------------------------------------------------------------- adam Searcher
+
+/** A search result with what the sweep needs beyond display: references and keywords. */
+export type SweepWork = PaperSearchResult & { references: string[]; concepts: string[]; publicationDate: string | null };
+
+export interface SweepSearchOptions {
+  perPage?: number;
+  /** OpenAlex sort, e.g. "cited_by_count:desc" or "publication_date:desc"; relevance when omitted */
+  sort?: string;
+  /** Extra OpenAlex filter clauses, e.g. "type:review" or "from_publication_date:2024-01-01" */
+  filter?: string[];
+}
+
+const toSweepWork = (w: SearchWork & { publication_date?: string }): SweepWork => ({
+  ...toSearchResult(w),
+  references: (w.referenced_works ?? []).map(shortId),
+  concepts: (w.keywords ?? []).filter((k) => (k.score ?? 1) >= 0.3).map((k) => k.display_name.toLowerCase()),
+  publicationDate: w.publication_date ?? null,
+});
+
+/** Relevance (or sorted / filtered) search for the Searcher's rings. */
+export async function searchWorksFiltered(query: string, opts: SweepSearchOptions = {}): Promise<SweepWork[]> {
+  // "*" and "?" are wildcards to OpenAlex and make a stemmed search a 400; sub-questions end in "?"
+  const q = query.replace(/[*?"]/g, " ").replace(/\s+/g, " ").trim();
+  if (q.length < 3) return [];
+  const params: Record<string, string> = {
+    search: q,
+    "per-page": String(opts.perPage ?? 15),
+    select: `${SEARCH_FIELDS},publication_date`,
+  };
+  if (opts.sort) params.sort = opts.sort;
+  if (opts.filter?.length) params.filter = opts.filter.join(",");
+  const res = await openAlexFetch<{ results: (SearchWork & { publication_date?: string })[] }>("/works", params);
+  const works = (res?.results ?? []).filter((w) => w.title).map(toSweepWork);
+  const corrected = await correctArxivTitles(works);
+  return corrected.map((r, i) => ({ ...works[i], ...r }));
+}
+
+/** Works by OpenAlex id with the sweep's fields (abstract, references, keywords). */
+export async function getSweepWorksByIds(ids: string[]): Promise<SweepWork[]> {
+  const out: SweepWork[] = [];
+  for (let i = 0; i < ids.length; i += BATCH_SIZE) {
+    const res = await openAlexFetch<{ results: (SearchWork & { publication_date?: string })[] }>("/works", {
+      filter: `openalex:${ids.slice(i, i + BATCH_SIZE).join("|")}`,
+      "per-page": String(BATCH_SIZE),
+      select: `${SEARCH_FIELDS},publication_date`,
+    });
+    out.push(...(res?.results ?? []).filter((w) => w.title).map(toSweepWork));
+  }
+  return out;
+}
+
+/** Works citing `workId`, with the sweep's fields. */
+export async function getCitingSweepWorks(workId: string, limit: number): Promise<SweepWork[]> {
+  const res = await openAlexFetch<{ results: (SearchWork & { publication_date?: string })[] }>("/works", {
+    filter: `cites:${workId}`,
+    sort: "cited_by_count:desc",
+    "per-page": String(limit),
+    select: `${SEARCH_FIELDS},publication_date`,
+  });
+  return (res?.results ?? []).filter((w) => w.title).map(toSweepWork);
 }

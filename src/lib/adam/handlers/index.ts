@@ -7,6 +7,14 @@ import type { Graph } from "falkordb";
 import type { AdamJob, JobKind } from "../types";
 import { orchestrate } from "../orchestrator";
 import { runScope } from "./scope";
+import { runSearchRing } from "./search-ring";
+import { runExtractPaper } from "./extract-paper";
+import { runVerifyCard } from "./verify-card";
+import { runHuntMethod } from "./hunt-method";
+import { runAnalyzeGraph } from "./analyze-graph";
+import { runWriteHypotheses } from "./write-hypotheses";
+import { runFalsify } from "./falsify";
+import { runDesignExperiment } from "./design-experiment";
 
 export interface JobContext {
   workspaceId: string;
@@ -28,4 +36,12 @@ export const HANDLERS: Partial<Record<JobKind, Handler>> = {
   noop,
   orchestrate,
   scope: runScope,
+  search_ring: runSearchRing,
+  extract_paper: runExtractPaper,
+  verify_card: runVerifyCard,
+  hunt_method: runHuntMethod,
+  analyze_graph: runAnalyzeGraph,
+  write_hypotheses: runWriteHypotheses,
+  falsify: runFalsify,
+  design_experiment: runDesignExperiment,
 };

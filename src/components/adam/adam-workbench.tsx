@@ -12,11 +12,23 @@ import { toast } from "sonner";
 import { ActivityTab } from "./activity-tab";
 import { AdamStatusBar } from "./adam-status-bar";
 import { QuestionTab } from "./question-tab";
+import { SweepTab } from "./sweep-tab";
+import { QueueTab } from "./queue-tab";
+import { KnowledgeTab } from "./knowledge-tab";
+import { MethodsTab } from "./methods-tab";
+import { HypothesesTab } from "./hypotheses-tab";
+import { ExperimentsTab } from "./experiments-tab";
 
-type Tab = "question" | "activity";
+type Tab = "question" | "sweep" | "queue" | "knowledge" | "methods" | "hypotheses" | "experiments" | "activity";
 
 const TABS: { id: Tab; label: string }[] = [
   { id: "question", label: "Question" },
+  { id: "sweep", label: "Sweep" },
+  { id: "queue", label: "Queue" },
+  { id: "knowledge", label: "Knowledge" },
+  { id: "methods", label: "Methods" },
+  { id: "hypotheses", label: "Hypotheses" },
+  { id: "experiments", label: "Experiments" },
   { id: "activity", label: "Activity" },
 ];
 
@@ -93,11 +105,38 @@ export default function AdamWorkbench({ workspaceId }: { workspaceId: string }) 
                   {t.id === "question" && status.project.status === "blocked_on_gate" && status.project.gate === "scope" && (
                     <span className="ml-1.5 inline-block size-1.5 rounded-full bg-amber-500" />
                   )}
+                  {t.id === "hypotheses" && status.project.status === "blocked_on_gate" && (status.project.gate === "select" || status.project.gate === "kill") && (
+                    <span className="ml-1.5 inline-block size-1.5 rounded-full bg-amber-500" />
+                  )}
+                  {t.id === "experiments" && status.project.status === "blocked_on_gate" && status.project.gate === "plan" && (
+                    <span className="ml-1.5 inline-block size-1.5 rounded-full bg-amber-500" />
+                  )}
+                  {t.id === "queue" && status.queueOpen > 0 && (
+                    <span className="ml-1.5 rounded-full bg-amber-100 text-amber-800 px-1.5 text-[10px] tabular-nums">{status.queueOpen}</span>
+                  )}
                 </TabsTrigger>
               ))}
             </TabsList>
             <TabsContent value="question" className="mt-0">
               <QuestionTab workspaceId={workspaceId} status={status} />
+            </TabsContent>
+            <TabsContent value="sweep" className="mt-0">
+              <SweepTab workspaceId={workspaceId} status={status} />
+            </TabsContent>
+            <TabsContent value="queue" className="mt-0">
+              <QueueTab workspaceId={workspaceId} status={status} />
+            </TabsContent>
+            <TabsContent value="knowledge" className="mt-0">
+              <KnowledgeTab workspaceId={workspaceId} status={status} />
+            </TabsContent>
+            <TabsContent value="methods" className="mt-0">
+              <MethodsTab workspaceId={workspaceId} status={status} />
+            </TabsContent>
+            <TabsContent value="hypotheses" className="mt-0">
+              <HypothesesTab workspaceId={workspaceId} status={status} />
+            </TabsContent>
+            <TabsContent value="experiments" className="mt-0">
+              <ExperimentsTab workspaceId={workspaceId} status={status} />
             </TabsContent>
             <TabsContent value="activity" className="mt-0">
               <ActivityTab status={status} />
