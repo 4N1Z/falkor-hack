@@ -19,8 +19,8 @@ const ITEM_FIELDS = (label: string) => `
 export const QUEUE_ITEMS = REVIEW_LABELS.map(
   (l) => `MATCH (n:${l} {projectId: $projectId})
 WHERE ${QUEUE_WHERE}
-OPTIONAL MATCH (p:Paper {paperId: n.paperId})
-OPTIONAL MATCH (ch:Chunk {id: n.chunkId})
+OPTIONAL MATCH (p:Paper) WHERE p.paperId = n.paperId
+OPTIONAL MATCH (ch:Chunk) WHERE ch.id = n.chunkId
 RETURN ${ITEM_FIELDS(l)}`,
 ).join("\nUNION ALL\n");
 
@@ -28,8 +28,8 @@ RETURN ${ITEM_FIELDS(l)}`,
 export const NODE_DETAIL = `
 MATCH (n {id: $id})
 WHERE n.projectId = $projectId
-OPTIONAL MATCH (p:Paper {paperId: n.paperId})
-OPTIONAL MATCH (ch:Chunk {id: n.chunkId})
+OPTIONAL MATCH (p:Paper) WHERE p.paperId = n.paperId
+OPTIONAL MATCH (ch:Chunk) WHERE ch.id = n.chunkId
 RETURN labels(n)[0] AS label, n.id AS id, coalesce(n.text, n.name, '') AS text, n.state AS state, coalesce(n.stateReason, '') AS reason,
        coalesce(n.confidence, 0) AS confidence, coalesce(n.loadBearing, false) AS loadBearing, coalesce(n.dependents, 0) AS dependents,
        coalesce(n.quote, '') AS quote, n.chunkId AS chunkId, coalesce(n.page, 0) AS page, coalesce(n.section, '') AS section,
@@ -54,7 +54,7 @@ RETURN 'in' AS dir, type(r) AS type, labels(m)[0] AS label, coalesce(m.id, m.pap
 /** Mentions of a Method across papers (each USED_IN edge carries its own quote). */
 export const METHOD_MENTIONS = `
 MATCH (m:Method {id: $id})-[u:USED_IN]->(p:Paper)
-OPTIONAL MATCH (ch:Chunk {id: u.chunkId})
+OPTIONAL MATCH (ch:Chunk) WHERE ch.id = u.chunkId
 RETURN p.paperId AS paperId, p.title AS paperTitle, p.year AS year, coalesce(u.name, m.name) AS name, coalesce(u.quote, '') AS quote,
        coalesce(u.page, 0) AS page, coalesce(u.state, '') AS state, coalesce(u.parameters, []) AS parameters, coalesce(ch.text, '') AS chunkText`;
 
@@ -103,7 +103,7 @@ MATCH (m)-[u:USED_IN]->(p:Paper) WHERE u.name = $alias
 CREATE (n)-[u2:USED_IN {cardId: u.cardId}]->(p)
 SET u2 = u
 WITH m, n, u, p
-MATCH (c:Claim {paperId: p.paperId})-[x:USES]->(m)
+MATCH (c:Claim)-[x:USES]->(m) WHERE c.paperId = p.paperId
 CREATE (c)-[x2:USES]->(n)
 SET x2 = x
 DELETE x, u
@@ -141,7 +141,7 @@ export const KNOWLEDGE_NODES = ["Claim", "Evidence", "Method", "Assumption", "Co
   .map(
     (l) => `MATCH (n:${l} {projectId: $projectId})
 WHERE n.state <> 'retracted' OR $includeRetracted
-OPTIONAL MATCH (p:Paper {paperId: n.paperId})
+OPTIONAL MATCH (p:Paper) WHERE p.paperId = n.paperId
 RETURN ${KNOWLEDGE_FIELDS(l)}`,
   )
   .join("\nUNION ALL\n");

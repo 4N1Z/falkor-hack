@@ -26,7 +26,8 @@ ORDER BY clusterId`;
 /** Which clusters a brief rests on: the clusters of the papers behind its evidence. */
 export const BRIEF_CLUSTERS = `
 MATCH (h:Hypothesis {projectId: $projectId})-[:EVIDENCE_FOR]->(c:Claim)
-MATCH (:AdamProject {id: $projectId})-[t:TRIAGED]->(p:Paper {paperId: c.paperId})
+MATCH (:AdamProject {id: $projectId})-[t:TRIAGED]->(p:Paper)
+WHERE p.paperId = c.paperId
 RETURN h.id AS hypothesisId, coalesce(t.clusterId, '') AS clusterId, count(c) AS claims`;
 
 export const SET_BRIEF_THIN = `

@@ -127,7 +127,7 @@ RETURN ${BRIEF_FIELDS}`;
 
 export const BRIEF_EVIDENCE = `
 MATCH (h:Hypothesis {id: $id})-[r:EVIDENCE_FOR|EVIDENCE_AGAINST]->(c:Claim)
-MATCH (p:Paper {paperId: c.paperId})
+MATCH (p:Paper) WHERE p.paperId = c.paperId
 RETURN type(r) AS type, c.id AS id, c.text AS text, p.title AS paper, coalesce(p.year, 0) AS year, coalesce(c.page, 0) AS page,
        coalesce(c.section, '') AS section, c.state AS state, coalesce(c.conditions, []) AS conditions, coalesce(c.speculative, false) AS speculative`;
 

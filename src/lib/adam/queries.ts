@@ -265,7 +265,7 @@ RETURN p.paperId AS paperId, t.label AS label`;
 /** Everything the Sweep tab shows per paper. */
 export const TRIAGED_PAPERS = `
 MATCH (:AdamProject {id: $projectId})-[t:TRIAGED]->(p:Paper)
-OPTIONAL MATCH (s:IngestStatus {pgPaperId: p.pgPaperId})
+OPTIONAL MATCH (s:IngestStatus) WHERE s.pgPaperId = p.pgPaperId
 RETURN p.paperId AS paperId, p.pgPaperId AS pgPaperId, p.title AS title, p.year AS year, p.venue AS venue,
        coalesce(p.citationCount, 0) AS citationCount, p.doi AS doi, p.arxivId AS arxivId,
        t.label AS label, t.agentLabel AS agentLabel, t.userLabel AS userLabel, t.ring AS ring, t.via AS via,
