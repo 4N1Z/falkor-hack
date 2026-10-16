@@ -43,7 +43,7 @@ export const NEAREST_VERIFIED_CLAIMS = `
 CALL db.idx.vector.queryNodes('Claim', 'embedding', $k, vecf32($v)) YIELD node, score
 WHERE node.projectId = $projectId AND node.state IN ['agent_verified', 'human_approved']
 MATCH (node)-[:EXTRACTED_FROM]->(p:Paper)
-RETURN node.id AS id, node.text AS text, p.title AS paper, coalesce(p.year, 0) AS year, coalesce(node.page, 0) AS page,
+RETURN node.id AS id, node.text AS text, p.paperId AS paperId, p.title AS paper, coalesce(p.year, 0) AS year, coalesce(node.page, 0) AS page,
        coalesce(node.section, '') AS section, coalesce(node.conditions, []) AS conditions, score
 ORDER BY score ASC`;
 

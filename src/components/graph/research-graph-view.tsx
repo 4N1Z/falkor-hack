@@ -17,6 +17,17 @@ const AGENT_NAMES: Record<string, string> = {
   historian: "Historian",
   synthesis: "Synthesis",
   "scout-watcher": "Scout Watcher",
+  "adam-scoper": "Adam · Scoper",
+  "adam-searcher": "Adam · Searcher",
+  "adam-extractor": "Adam · Extractor",
+  "adam-verifier": "Adam · Verifier",
+  "adam-methods-hunter": "Adam · Methods Hunter",
+  "adam-runnability": "Adam · Runnability check",
+  "adam-analyst": "Adam · Graph Analyst",
+  "adam-writer": "Adam · Hypothesis Writer",
+  "adam-falsifier": "Adam · Falsifier",
+  "adam-designer": "Adam · Experiment Designer",
+  "adam-orchestrator": "Adam · Orchestrator",
 };
 /** Stored traces name the internal model ("jev.classify", source "jev"); show it as Neura. */
 const brandTrace = (s: string) => s.replace(/\bjev\b/gi, "neura");

@@ -10,6 +10,7 @@ import { z } from "zod";
 import { TEAM_PAPER_DETAILS } from "../../graph/queries";
 import { startRun } from "../../agents/base";
 import { structured } from "../llm";
+import { carryover } from "../loop";
 import { writeQuestionPage, type QuestionPage, type ScopeChecks } from "../question-page";
 import type { AdamProject } from "../types";
 
@@ -55,6 +56,19 @@ const SCOPER_SYSTEM = `You are the Scoper in a research-agent system. The premis
 
 const CHECKER_SYSTEM = `You are the scope checker. You see only a Question page, never the reasoning behind it. Answer two questions honestly: (1) for each sub-question, could a specific experiment or body of evidence actually settle it? A question no experiment could settle is a failure. (2) Does the scope fence exclude something the hunch itself depends on? Be strict but fair; most reasonable pages pass.`;
 
+/** What the previous passes left open: fatal and open attacks, gaps, the fate of each brief, saturated clusters. */
+async function carryoverText(graph: Graph, projectId: string): Promise<string> {
+  const c = await carryover(graph, projectId);
+  return [
+    c.briefs.length ? `Briefs so far:\n${c.briefs.map((b) => `- pass ${b.pass} · ${b.status}: ${b.statement}`).join("\n")}` : "",
+    c.openAttacks.length ? `Attacks still open or fatal:\n${c.openAttacks.map((a) => `- (${a.kind}, ${a.status}) ${a.text} [on: ${a.hypothesis.slice(0, 80)}]`).join("\n")}` : "",
+    c.openQuestions.length ? `Gaps the path search found:\n${c.openQuestions.map((q) => `- (${q.kind}) ${q.text}`).join("\n")}` : "",
+    c.saturated.length ? `Clusters already saturated (reading more there adds nothing): ${c.saturated.join("; ")}. Point the new sub-questions elsewhere.` : "",
+  ]
+    .filter(Boolean)
+    .join("\n\n");
+}
+
 export async function runScoper(graph: Graph, workspaceId: string, project: AdamProject, opts: { note?: string } = {}): Promise<QuestionPage> {
   const run = await startRun("adam-scoper", workspaceId, { projectId: project.id, pass: project.pass });
 
@@ -79,7 +93,7 @@ export async function runScoper(graph: Graph, workspaceId: string, project: Adam
     `Constraints: equipment ${c.equipment.join(", ") || "unspecified"}; data ${c.data.join(", ") || "unspecified"}; skills ${c.skills.join(", ") || "unspecified"}; time ${c.timeWeeks ?? "?"} weeks; budget ${c.budgetUsd ?? "?"} USD`,
     seedLines.length ? `Seed papers:\n${seedLines.join("\n")}` : "",
     opts.note ? `Note from the researcher on the previous version: ${opts.note}` : "",
-    project.pass > 1 ? `This is pass ${project.pass}: sharpen the sub-questions from what earlier passes left open.` : "",
+    project.pass > 1 ? `This is pass ${project.pass}: sharpen the sub-questions from what earlier passes left open.\n${await carryoverText(graph, project.id)}` : "",
   ]
     .filter(Boolean)
     .join("\n\n");

@@ -159,7 +159,12 @@ export function CitationCheckPanel({
                       <p className="mt-0.5 text-xs text-muted-foreground">{c.why}</p>
                       {evidence && c.verdict !== "supported" && c.verdict !== "ok" && (
                         <p className="mt-1 border-l-2 pl-2 text-xs italic text-muted-foreground line-clamp-3">
-                          {evidence.evidenceKind === "passage" ? "From the paper: " : "Abstract: "}“{evidence.evidence}”
+                          {evidence.evidenceKind === "claim"
+                            ? `Verified claim${evidence.page ? `, p.${evidence.page}` : ""}${evidence.section ? ` · ${evidence.section}` : ""}: `
+                            : evidence.evidenceKind === "passage"
+                              ? "From the paper: "
+                              : "Abstract: "}
+                          “{evidence.evidence}”
                         </p>
                       )}
                       {c.suggestion && (

@@ -16,6 +16,7 @@
 | 6. Research Graph page | ✅ Done (@falkordb/canvas: team map, paper focus, agent provenance tree + trace panel) |
 | 7. Stretch (Synthesis, Scout Watcher, MCP) | ✅ Done (CDLP-grouped review drafts, new-paper watcher with vector-fit + JEV contradiction flag, read-only MCP server) |
 | 8. Submission (README, video, blog) | 🟡 Docs done (README, demo script, blog draft); video, blog publish and submission pending |
+| 9. Adam (research-agent system, `docs/adam-spec-creation.md`) | ✅ Built: full-text index v2, Scoper + gate 1, Searcher rings + coverage, Extractor + Verifier + queue, Methods Hunter, Graph Analyst, Writer + Falsifier + gates 2/3, hypothesis-as-query + Experiment Designer + plan gate, saturation bar + next pass; chat intent, MCP tools, Citation Checker integration. Needs `OPENALEX_API_KEY` for sweeps; benchmark field still to pick |
 
 **Platform upgrade (branch `chore/next-16`):**
 - Next 14.2.15 → **16.4.1** (Turbopack) and React 18 → **19**. next-auth beta.25 → beta.32. ESLint 8 → 9 with flat config (`eslint.config.mjs`).

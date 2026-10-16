@@ -38,6 +38,8 @@ import {
   UPSERT_CONTRADICTS,
 } from "../queries-extract";
 import type { AdamProject, NodeState } from "../types";
+import { emit } from "../events";
+import { FLAG_BRIEFS_EVIDENCE_CHANGED } from "../queries-saturation";
 
 /** Items whose quote cannot be found in any passage of the paper. */
 export const QUOTE_NOT_FOUND = "quote_not_found";
@@ -292,6 +294,11 @@ export async function runVerifier(
     }
   }
   if (mine.length) await beat({ step: "contradictions", found: totals.contradictions });
+  // Living briefs (spec "Stale graph"): a new contradiction of evidence a brief rests on flags the brief
+  if (totals.contradictions) {
+    const flagged = (await graph.roQuery<{ id: string; statement: string; newClaim: string }>(FLAG_BRIEFS_EVIDENCE_CHANGED, params({ projectId: project.id, since: at - 1000, at: Date.now() })).catch(() => ({ data: [] }))).data ?? [];
+    for (const f of flagged) await emit(graph, project.id, "brief_evidence_changed", { hypothesisId: f.id, statement: f.statement.slice(0, 120), newClaim: f.newClaim.slice(0, 160) });
+  }
 
   // 7. Load-bearing marks (project-wide; cheap)
   await graph.query(MARK_LOAD_BEARING_ASSUMPTIONS, params({ projectId: project.id, threshold: LOAD_BEARING_DEPENDENTS }));

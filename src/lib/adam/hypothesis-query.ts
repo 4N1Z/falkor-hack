@@ -90,6 +90,7 @@ export interface Chain {
 export interface EvidenceHit {
   id: string;
   text: string;
+  paperId: string;
   paper: string;
   year: number;
   page: number;
@@ -162,11 +163,11 @@ export async function hypothesisQuery(
   // 2. Sub-claims: evidence for / against, gaps
   const subclaims: SubclaimReport[] = [];
   for (const [i, sc] of q.subclaims.entries()) {
-    const near = ((await graph.roQuery<{ id: string; text: string; paper: string; year: number; page: number; section: string; conditions: string[]; score: number }>(NEAREST_VERIFIED_CLAIMS, params({ projectId: pid, k: 8, v: subVecs[i] })).catch(() => ({ data: [] }))).data ?? []).filter((n) => n.score <= SUBCLAIM_DISTANCE);
+    const near = ((await graph.roQuery<{ id: string; text: string; paperId: string; paper: string; year: number; page: number; section: string; conditions: string[]; score: number }>(NEAREST_VERIFIED_CLAIMS, params({ projectId: pid, k: 8, v: subVecs[i] })).catch(() => ({ data: [] }))).data ?? []).filter((n) => n.score <= SUBCLAIM_DISTANCE);
     const judged = near.length ? await scoreSupport(sc, near.map((n) => ({ id: n.id, title: n.paper, abstract: n.text }))) : null;
-    const hits: EvidenceHit[] = near.map((n) => {
+    const hits: (EvidenceHit & { conditions: string[] })[] = near.map((n) => {
       const j = judged?.result.get(n.id);
-      return { id: n.id, text: n.text, paper: n.paper, year: n.year, page: n.page, section: n.section, level: j?.level ?? "unrelated", confidence: j?.confidence ?? 0 };
+      return { id: n.id, text: n.text, paperId: n.paperId, paper: n.paper, year: n.year, page: n.page, section: n.section, conditions: n.conditions, level: j?.level ?? "unrelated", confidence: j?.confidence ?? 0 };
     });
     const forHits = hits.filter((h) => h.level === "supports" || h.level === "partial");
     const againstHits = hits.filter((h) => h.level === "contradicts");

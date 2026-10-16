@@ -7,17 +7,21 @@ import { RINGS, type Ring } from "../agents/searcher";
 import { getCoverage } from "../coverage";
 import * as jobs from "../jobs";
 import { PRIORITY, type PhaseStep } from "../orchestrator";
+import { clusterStats } from "../saturation";
 
 const MAX_CITATION_ROUNDS = 2;
 
 export const sweepStep: PhaseStep = async ({ graph, project }) => {
-  const all = await jobs.byKindAndStatus(graph, project.id, ["search_ring"], ["queued", "running", "done", "failed"]);
+  const all = await jobs.byKindAndStatus(graph, project.id, ["search_ring"], ["queued", "running", "done", "failed", "cancelled"]);
   const forPass = all.filter((j) => Number(j.payload.pass) === project.pass).sort((a, b) => b.createdAt - a.createdAt);
   // The latest job for a ring and round: a retry supersedes the failed run it replaces
   const find = (ring: Ring, round: number) => forPass.find((j) => j.payload.ring === ring && Number(j.payload.round ?? 1) === round);
 
   let enqueued = 0;
   const notes: string[] = [];
+
+  // Saturation rule (pass 2+): clusters whose last papers added nothing new are not searched again
+  const skipClusters = project.pass > 1 ? (await clusterStats(graph, project.id)).filter((s) => s.saturated).map((s) => s.clusterId) : [];
 
   // Rings run in order; each waits for the previous one
   for (const ring of RINGS) {
@@ -27,7 +31,7 @@ export const sweepStep: PhaseStep = async ({ graph, project }) => {
         projectId: project.id,
         kind: "search_ring",
         subject: `${ring} · pass ${project.pass}`,
-        payload: { ring, round: 1, pass: project.pass },
+        payload: { ring, round: 1, pass: project.pass, skipClusters },
         priority: PRIORITY.search_ring,
         dedupeKey: `search_ring:${project.id}:${project.pass}:${ring}:1`,
         maxAttempts: 2,
@@ -35,6 +39,10 @@ export const sweepStep: PhaseStep = async ({ graph, project }) => {
       return { enqueued: created ? 1 : 0 };
     }
     if (job.status === "queued" || job.status === "running") return { enqueued: 0 };
+    if (job.status === "cancelled") {
+      notes.push(`The ${ring} ring was cancelled; skipping it for this pass`);
+      continue;
+    }
     if (job.status === "failed") {
       // One retry per pass; a second failure (usually an OpenAlex rate limit) skips the ring with a note
       const attemptsForRing = forPass.filter((j) => j.payload.ring === ring && Number(j.payload.round ?? 1) === 1).length;
@@ -60,7 +68,9 @@ export const sweepStep: PhaseStep = async ({ graph, project }) => {
   const coverage = await getCoverage(graph, project.id);
   if (coverage?.gaps.length) {
     const round2 = find("citation", 2);
-    if (!round2 && MAX_CITATION_ROUNDS >= 2) {
+    if (round2 && (round2.status === "failed" || round2.status === "cancelled")) {
+      notes.push(`The second citation round did not complete (${round2.error ?? round2.status}); ${coverage.gaps.length} core paper(s) keep thin reference coverage this pass`);
+    } else if (!round2 && MAX_CITATION_ROUNDS >= 2) {
       const { created } = await jobs.enqueue(graph, {
         projectId: project.id,
         kind: "search_ring",

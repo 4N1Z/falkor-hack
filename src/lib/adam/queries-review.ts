@@ -109,6 +109,25 @@ SET x2 = x
 DELETE x, u
 RETURN n.id AS id`;
 
+// ---------------------------------------------------------------- Integration with the editor agents
+
+/** Verified adam claims of the given papers nearest a draft sentence (Citation Checker evidence with page + section). */
+export const CLAIMS_OF_PAPERS = `
+CALL db.idx.vector.queryNodes('Claim', 'embedding', $k, vecf32($v)) YIELD node, score
+WHERE node.paperId IN $paperIds AND node.state IN ['agent_verified', 'human_approved'] AND node.projectId IS NOT NULL
+RETURN node.paperId AS paperId, node.id AS claimId, node.text AS text, coalesce(node.page, 0) AS page, coalesce(node.section, '') AS section,
+       coalesce(node.speculative, false) AS speculative, score
+ORDER BY score ASC`;
+
+/** A paper's verified claims and methods, for the MCP server and the chat. */
+export const PAPER_CLAIMS = `
+MATCH (c:Claim {paperId: $paperId})
+WHERE c.projectId IS NOT NULL AND c.state <> 'retracted'
+RETURN c.id AS id, c.text AS text, c.state AS state, coalesce(c.page, 0) AS page, coalesce(c.section, '') AS section,
+       coalesce(c.speculative, false) AS speculative, coalesce(c.conditions, []) AS conditions, coalesce(c.quote, '') AS quote,
+       [(c)-[:USES]->(m:Method) | m.name] AS methods
+ORDER BY CASE c.state WHEN 'human_approved' THEN 0 WHEN 'agent_verified' THEN 1 ELSE 2 END, page`;
+
 // ---------------------------------------------------------------- Knowledge view
 
 const KNOWLEDGE_FIELDS = (label: string) => `

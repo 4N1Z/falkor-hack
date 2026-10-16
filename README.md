@@ -67,7 +67,20 @@ Most "chat with your papers" tools use vector search over chunks. That answers *
 (:Memory)-[:DROPPED_BECAUSE]->(:Paper)                               ← Historian
 (:Idea {status, novelty, feasibility})-[:GROUNDED_IN]->(:Paper|:Concept)   ← Next-Step
 (:AgentRun {agent, trace, highlight, ms})                            ← every agent run, for provenance
+
+Adam (the research-agent system, docs/adam-spec-creation.md):
+(:AdamProject)-[:TRIAGED {label, ring, clusterId, nodesNew}]->(:Paper)
+(:Claim {text, section, quote, chunkId, page, state})-[:EXTRACTED_FROM]->(:Paper)   ← every node cites a passage
+(:Evidence)-[:SUPPORTS]->(:Claim)   (:Claim)-[:USES]->(:Method)-[:USED_IN {quote, page}]->(:Paper)
+(:Claim)-[:DEPENDS_ON]->(:Assumption)   (:Claim)-[:FAILS_UNDER]->(:Condition)   (:Claim)-[:CONTRADICTS]->(:Claim)
+(:Procedure {inputs, outputs, steps, runnability})-[:SPECIFIES]->(:Method)   (:Procedure)-[:USES]->(:Instrument)
+(:Procedure)-[:PRODUCES]->(:Result)   (:Procedure)-[:DEPENDS_ON]->(:Procedure)        ← the chain a hypothesis query walks
+(:Candidate {kind: hole|conflict|load_bearing})-[:SHOWS]->(…)                          ← Graph Analyst
+(:Hypothesis)-[:EVIDENCE_FOR|EVIDENCE_AGAINST]->(:Claim)   (:Attack {kind, status})-[:ON]->(:Hypothesis)
+(:ExperimentPlan)-[:TESTS]->(:Hypothesis)   (:AdamJob)  (:AdamEvent)  (:ClusterStat)   ← the loop's own state
 ```
+
+Draft sentences in documents are `(:Sentence)` nodes (they were `Claim` before Adam; a `Claim` is now a statement extracted from a paper).
 
 The exact Cypher is in [`src/lib/graph/queries.ts`](src/lib/graph/queries.ts) and the indexes are in [`src/lib/graph/schema.ts`](src/lib/graph/schema.ts).
 
@@ -105,8 +118,35 @@ The exact Cypher is in [`src/lib/graph/queries.ts`](src/lib/graph/queries.ts) an
 | **Router** | Send a chat message to the right agent | – | `choice` over 8 intents |
 
 **MCP server** (`/api/mcp`, read-only)
-- **Tools:** `list_workspaces`, `search_team_library`, `find_papers`, `paper_neighbourhood`, `citation_path`, `research_frontier` and `team_memory`.
+- **Tools:** `list_workspaces`, `search_team_library`, `find_papers`, `paper_neighbourhood`, `citation_path`, `research_frontier`, `team_memory`, and Adam's `adam_projects`, `paper_claims`, `methods_dossier`, `open_questions` and `hypothesis_query`.
 - **Clients:** gives Claude Code, Claude Desktop or Cursor the same graph tools the agents use.
+
+## Adam: the research-agent system
+
+Adam is the flagship (spec: [`docs/adam-spec-creation.md`](docs/adam-spec-creation.md)). Its premise: **a new result is a new combination of known steps.** The literature is not a pile of papers to summarise; it is an inventory of known steps, each with known inputs, outputs and conditions. So Adam's product is a graph of known steps, dense enough that when a researcher states a hypothesis the system can answer which steps exist, which are verified, which are missing, and where the chain breaks.
+
+It lives at `/dashboard/<workspace>/adam` and runs as a loop (question → sweep → extract → methods → connect → hypothesise → attack → experiment → read again), driven by an orchestrator that reads the graph's state and enqueues jobs. The jobs are `(:AdamJob)` nodes in the same FalkorDB graph, drained by `scripts/adam-worker.ts` (`pnpm adam`, included in `pnpm dev:all`).
+
+| Agent | Its one job | Checked by |
+|---|---|---|
+| **Scoper** | The topic becomes a question page: hunch, sub-questions, vocabulary incl. neighbouring fields' terms, scope fence | Scope checker; the researcher approves (gate 1) |
+| **Searcher** | Three rings (seed, citation backward+forward, adjacent fields) over OpenAlex; triage core / method / contradicts / background | Coverage check: are the core papers' key references present? |
+| **Extractor** | One extraction card per paper from its section-aware passages: claims, evidence, methods, assumptions, limitations, gaps, each with a verbatim quote, page and section. Two independent cards for core papers | **Verifier**: the quote must be in the source (no model is asked otherwise), the section must match, a typed rubric judges the rest; disagreements between the two cards become conflicts |
+| **Methods Hunter** | Each Method filled in to a Procedure a lab could run: inputs, outputs, steps, equipment, time, cost, reliability, from the paper's methods sections, supplements and linked READMEs/protocols | Runnability check (runnable / partial / unknown) and feasibility against the lab's constraints |
+| **Graph Analyst** | Holes between related clusters, conflicts between opposite claims, load-bearing assumptions nobody tested | Sanity check: an edge needs more than vocabulary overlap |
+| **Hypothesis Writer** | Two to four competing briefs with boundary, evidence for and against, prediction and kill criteria | **Falsifier** (sees the brief and the graph, never the writer's reasoning): pre-mortem, dependency attack, rival explanations, null and ablation, baseline replication, boundary probe. The writer answers in writing; a brief with an open fatal attack cannot proceed. The researcher selects briefs (gate 2) and signs kill criteria (gate 3) |
+| **Experiment Designer** | The chain of procedures per surviving brief, cheapest-to-kill first, gaps marked, controls from the rivals | Design check: does each experiment test the kill criterion and not something adjacent? The researcher approves the plan |
+| **Orchestrator** | Who runs next; stopping rules: saturation per cluster, budget, convergence, diminishing chains, human hold | The researcher can pause, resume, redraw scope, start the next pass |
+
+**Hypothesis as a query** (the Experiments tab, the chat's Adam intent, and the `hypothesis_query` MCP tool): the researcher types a hypothesis; the system returns the evidence for and against each sub-claim with pages, the boundary (conditions and assumptions), candidate chains of procedures with each step's status, gaps (which re-prioritise the Methods Hunter), rival chains that reach the same result without the mechanism, and the cost to kill.
+
+**The exception queue**: people see only what the Verifier flagged (conflicts, low confidence, load-bearing, unsourced), each beside its quoted passage, with approve / correct / reject / send back. Everything else is one click away for audit. A person's decision outranks every agent write.
+
+**Full-text indexing** is the foundation: PDFs are chunked by section (not token count) with page numbers, figure and table captions as their own passages, supplements and linked artefacts as extra documents of the paper, and an access status per paper. See `src/lib/graph/document-index.ts`.
+
+**OpenAlex**: keyless traffic is metered against a shared daily budget; set `OPENALEX_API_KEY` (free from openalex.org) in `.env.local` or sweeps and the Librarian degrade to rate-limit errors.
+
+**Benchmark**: `scripts/adam-benchmark.ts <workspaceId> <projectId> <reviewOpenAlexId>` measures coverage against a review's reference list, writes an extraction sample for an expert to grade, and lists method completeness, the Analyst's candidates and the briefs.
 
 ### Where JEV fits
 
