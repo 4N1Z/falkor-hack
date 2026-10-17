@@ -20,6 +20,7 @@ import { Check, ChevronDown, ChevronRight, Loader2, Pencil, RotateCw, ShieldAler
 import { useEffect, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
 import useSWR, { mutate } from "swr";
+import { HypothesisMapView } from "./hypothesis-map";
 import { NodeSheet } from "./knowledge-tab";
 
 const key = (workspaceId: string, projectId: string) => `/api/adam/${projectId}/hypotheses?workspaceId=${workspaceId}`;
@@ -367,6 +368,9 @@ function BriefCard({ brief: b, workspaceId, projectId, selectable, picked, onPic
         ) : (
           <p className="text-xs text-muted-foreground">None yet. The Falsifier lists them when the brief is attacked.</p>
         )}
+      </Section>
+      <Section {...sec("map")} title="Map" count="papers · topics · methods · attacks · review">
+        {open === "map" ? <HypothesisMapView workspaceId={workspaceId} projectId={projectId} hypothesisId={b.id} onOpen={onOpenNode} /> : null}
       </Section>
       <Section {...sec("attacks")} title="Attack log" count={b.attacks.length}>
         {b.attacks.length === 0 ? (
