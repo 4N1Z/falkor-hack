@@ -95,7 +95,8 @@ async function openItems(graph: Graph, projectId: string): Promise<Omit<QueueIte
 /** Attach the quoted passage (or the paper's abstract) to a page of items. */
 async function withPassages<T extends { chunkId: string | null; paperId: string | null }>(graph: Graph, items: T[]): Promise<(T & { chunkText: string; chunkSection: string; chunkPage: number })[]> {
   const chunkIds = [...new Set(items.map((i) => i.chunkId).filter((x): x is string => !!x))];
-  const paperIds = [...new Set(items.filter((i) => !i.chunkId && i.paperId).map((i) => i.paperId!))];
+  // Abstract-only papers were read from a virtual passage that is not a stored chunk: fall back to the abstract
+  const paperIds = [...new Set(items.filter((i) => i.paperId).map((i) => i.paperId!))];
   const [chunks, abstracts] = await Promise.all([
     chunkIds.length ? graph.roQuery<{ id: string; text: string; section: string; page: number }>(QUEUE_PASSAGES, params({ ids: chunkIds })).then((r) => r.data ?? []) : Promise.resolve([]),
     paperIds.length ? graph.roQuery<{ id: string; abstract: string }>(PAPER_ABSTRACTS, params({ ids: paperIds })).then((r) => r.data ?? []) : Promise.resolve([]),
