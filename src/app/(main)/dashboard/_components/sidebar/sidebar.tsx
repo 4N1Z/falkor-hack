@@ -79,11 +79,12 @@ export default async function Sidebar({ params, className }: SidebarProps) {
     <TooltipProvider delayDuration={400} skipDelayDuration={300}>
     <aside
       className={cn(
-        "hidden sm:flex m-2 border rounded-sm border-sky-100 sm:flex-col w-[320px] shrink-0 p-4 gap-4 bg-card-foreground font-sans h-full max-h-[97vh]",
+        // A definite height (viewport minus the margins) is what lets the folder list scroll under the profile card
+        "hidden sm:flex m-2 border rounded-sm border-sky-100 sm:flex-col w-[320px] shrink-0 p-4 gap-4 bg-card-foreground font-sans h-[calc(100vh-1rem)] max-h-[calc(100vh-1rem)] overflow-hidden",
         className
       )}
     >
-      <div className="flex flex-col h-full">
+      <div className="flex flex-col h-full min-h-0">
         {/* Top Section - Always Visible */}
         <div className="space-y-2 flex-shrink-0">
           {/* <WorkspaceDropdown
