@@ -112,7 +112,7 @@ const JOB_FIELDS = `
   coalesce(j.payload, '{}') AS payload, j.status AS status, coalesce(j.priority, 100) AS priority,
   coalesce(j.runAfter, 0) AS runAfter, coalesce(j.attempts, 0) AS attempts, coalesce(j.maxAttempts, 3) AS maxAttempts,
   j.lockedBy AS lockedBy, j.lockedAt AS lockedAt, j.heartbeatAt AS heartbeatAt, j.error AS error,
-  j.result AS result, j.createdAt AS createdAt, j.finishedAt AS finishedAt`;
+  j.result AS result, j.createdAt AS createdAt, j.finishedAt AS finishedAt, coalesce(j.progress, '{}') AS progress`;
 
 /**
  * Enqueue once per dedupeKey. A re-tick that enqueues the same key is a no-op (the spec's

@@ -16,6 +16,7 @@ import { runWriteHypotheses } from "./write-hypotheses";
 import { runFalsify } from "./falsify";
 import { runDesignExperiment } from "./design-experiment";
 import { runSaturation } from "./saturation";
+import { runAutoReviewJob } from "./auto-review";
 
 export interface JobContext {
   workspaceId: string;
@@ -46,4 +47,5 @@ export const HANDLERS: Partial<Record<JobKind, Handler>> = {
   falsify: runFalsify,
   design_experiment: runDesignExperiment,
   saturation: runSaturation,
+  auto_review: runAutoReviewJob,
 };

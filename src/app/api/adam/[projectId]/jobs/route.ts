@@ -8,7 +8,7 @@ import { readBody, requireProject } from "../../_access";
 export const runtime = "nodejs";
 
 /** Kinds a person may enqueue by hand (the orchestrator enqueues the rest). */
-const MANUAL: JobKind[] = ["noop", "scope", "index_paper", "extract_paper", "verify_card", "hunt_method", "analyze_graph", "write_hypotheses", "falsify", "design_experiment", "saturation"];
+const MANUAL: JobKind[] = ["noop", "scope", "index_paper", "extract_paper", "verify_card", "hunt_method", "analyze_graph", "write_hypotheses", "falsify", "design_experiment", "saturation", "auto_review"];
 
 /** GET /api/adam/[projectId]/jobs?workspaceId= — recent jobs. */
 export async function GET(req: Request, { params }: { params: Promise<{ projectId: string }> }) {

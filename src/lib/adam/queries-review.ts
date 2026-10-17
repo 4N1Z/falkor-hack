@@ -12,17 +12,69 @@ const ITEM_FIELDS = (label: string) => `
   coalesce(n.quote, '') AS quote, n.chunkId AS chunkId, coalesce(n.page, 0) AS page, coalesce(n.section, '') AS section,
   coalesce(n.slot, '') AS slot, n.conflictWith AS conflictWith, n.agreedText AS agreedText, coalesce(n.aliases, []) AS aliases,
   coalesce(n.mergedFrom, 0) AS mergedFrom, coalesce(n.speculative, false) AS speculative, n.locator AS locator,
-  coalesce(n.createdAt, 0) AS createdAt, n.paperId AS paperId, coalesce(p.title, '') AS paperTitle, p.year AS year,
-  coalesce(ch.text, p.abstract, '') AS chunkText, coalesce(ch.section, '') AS chunkSection, coalesce(ch.page, 0) AS chunkPage`;
+  coalesce(n.createdAt, 0) AS createdAt, n.paperId AS paperId, coalesce(p.title, '') AS paperTitle, p.year AS year`;
 
-/** Open queue items across labels, with the quoted passage beside each. */
+/**
+ * Open queue items across labels (light: no passage text; the page's passages are fetched with
+ * QUEUE_PASSAGES so a 600-item queue stays a small payload and polling stays cheap).
+ */
 export const QUEUE_ITEMS = REVIEW_LABELS.map(
   (l) => `MATCH (n:${l} {projectId: $projectId})
 WHERE ${QUEUE_WHERE}
 OPTIONAL MATCH (p:Paper) WHERE p.paperId = n.paperId
-OPTIONAL MATCH (ch:Chunk) WHERE ch.id = n.chunkId
 RETURN ${ITEM_FIELDS(l)}`,
 ).join("\nUNION ALL\n");
+
+/** Passages for one page of queue items (abstract-only items fall back to the paper's abstract). */
+export const QUEUE_PASSAGES = `
+MATCH (ch:Chunk) WHERE ch.id IN $ids
+RETURN ch.id AS id, ch.text AS text, coalesce(ch.section, '') AS section, coalesce(ch.page, 0) AS page`;
+
+export const PAPER_ABSTRACTS = `
+MATCH (p:Paper) WHERE p.paperId IN $ids
+RETURN p.paperId AS id, coalesce(p.abstract, '') AS abstract`;
+
+/** Bulk approve / reject (no text change): one round trip for a whole selection. */
+export const DECIDE_NODES_BATCH = `
+UNWIND $rows AS r
+MATCH (n {id: r.id})
+WHERE n.projectId = $projectId AND (n:Claim OR n:Evidence OR n:Assumption OR n:Condition OR n:OpenQuestion OR n:Method)
+SET n.state = r.state, n.stateReason = r.reason, n.decidedBy = $userId, n.decidedAt = $at, n.queueDecided = true
+WITH n, r
+OPTIONAL MATCH (n)-[e]-() WHERE e.status = 'suggested'
+SET e.status = r.edgeStatus, e.decidedBy = $userId, e.decidedAt = $at
+RETURN count(DISTINCT n) AS n`;
+
+/**
+ * Auto-review (optional, a person asks for it): JEV + graph signals decide the clear cases and
+ * leave the rest. Decided items are agent_verified or retracted, never human_approved: a
+ * machine does not sign as a person. They stay auditable under the queue's "auto-reviewed" filter.
+ */
+export const AUTO_DECIDE_BATCH = `
+UNWIND $rows AS r
+MATCH (n {id: r.id})
+WHERE n.projectId = $projectId AND (n:Claim OR n:Evidence OR n:Assumption OR n:Condition OR n:OpenQuestion OR n:Method)
+  AND coalesce(n.queueDecided, false) = false
+SET n.state = r.state, n.stateReason = r.reason, n.queueDecided = true, n.autoReviewed = true, n.autoReviewRunId = $runId,
+    n.autoReviewLevel = r.level, n.autoReviewConfidence = r.confidence, n.autoReviewedAt = $at
+RETURN count(n) AS n`;
+
+/** Items the auto-review decided, for the audit filter. */
+export const AUTO_REVIEWED_ITEMS = REVIEW_LABELS.map(
+  (l) => `MATCH (n:${l} {projectId: $projectId})
+WHERE coalesce(n.autoReviewed, false) = true
+OPTIONAL MATCH (p:Paper) WHERE p.paperId = n.paperId
+RETURN ${ITEM_FIELDS(l)}`,
+).join("\nUNION ALL\n");
+
+/** Graph corroboration for auto-review: evidence edges and agreeing verified claims from other papers. */
+export const CORROBORATION = `
+UNWIND $ids AS cid
+MATCH (n {id: cid})
+OPTIONAL MATCH (e:Evidence)-[:SUPPORTS]->(n)
+WITH n, cid, count(e) AS evidence
+OPTIONAL MATCH (x:Claim)-[:DEPENDS_ON]->(n) WHERE x.state IN ['agent_verified', 'human_approved']
+RETURN cid AS id, evidence, count(x) AS dependents`;
 
 /** One node's full picture: its properties, the passage, the paper, and the edges around it. */
 export const NODE_DETAIL = `
