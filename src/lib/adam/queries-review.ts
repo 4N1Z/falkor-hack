@@ -12,7 +12,8 @@ const ITEM_FIELDS = (label: string) => `
   coalesce(n.quote, '') AS quote, n.chunkId AS chunkId, coalesce(n.page, 0) AS page, coalesce(n.section, '') AS section,
   coalesce(n.slot, '') AS slot, n.conflictWith AS conflictWith, n.agreedText AS agreedText, coalesce(n.aliases, []) AS aliases,
   coalesce(n.mergedFrom, 0) AS mergedFrom, coalesce(n.speculative, false) AS speculative, n.locator AS locator,
-  coalesce(n.createdAt, 0) AS createdAt, n.paperId AS paperId, coalesce(p.title, '') AS paperTitle, p.year AS year`;
+  coalesce(n.createdAt, 0) AS createdAt, n.paperId AS paperId, coalesce(p.title, '') AS paperTitle, p.year AS year,
+  n.autoSuggestion AS autoSuggestion, coalesce(n.autoConfidence, 0) AS autoConfidence, coalesce(n.autoReason, '') AS autoReason`;
 
 /**
  * Open queue items across labels (light: no passage text; the page's passages are fetched with
@@ -46,25 +47,28 @@ SET e.status = r.edgeStatus, e.decidedBy = $userId, e.decidedAt = $at
 RETURN count(DISTINCT n) AS n`;
 
 /**
- * Auto-review (optional, a person asks for it): JEV + graph signals decide the clear cases and
- * leave the rest. Decided items are agent_verified or retracted, never human_approved: a
- * machine does not sign as a person. They stay auditable under the queue's "auto-reviewed" filter.
+ * Auto-review (optional, a person asks for it): JEV + graph signals review every open item and
+ * record a suggestion on it (approve / reject / null when uncertain). Nothing is decided here;
+ * the researcher applies the suggestions in one click, and those become their approvals.
  */
-export const AUTO_DECIDE_BATCH = `
+export const SET_SUGGESTIONS = `
 UNWIND $rows AS r
 MATCH (n {id: r.id})
 WHERE n.projectId = $projectId AND (n:Claim OR n:Evidence OR n:Assumption OR n:Condition OR n:OpenQuestion OR n:Method)
   AND coalesce(n.queueDecided, false) = false
-SET n.state = r.state, n.stateReason = r.reason, n.queueDecided = true, n.autoReviewed = true, n.autoReviewRunId = $runId,
-    n.autoReviewLevel = r.level, n.autoReviewConfidence = r.confidence, n.autoReviewedAt = $at
+SET n.autoSuggestion = r.suggestion, n.autoLevel = r.level, n.autoConfidence = r.confidence, n.autoReason = r.reason,
+    n.autoReviewRunId = $runId, n.autoReviewedAt = $at
 RETURN count(n) AS n`;
 
-/** Items the auto-review decided, for the audit filter. */
-export const AUTO_REVIEWED_ITEMS = REVIEW_LABELS.map(
+/** Apply every open suggestion of one kind as the researcher's decision (one click, one query). */
+export const APPLY_SUGGESTIONS = REVIEW_LABELS.map(
   (l) => `MATCH (n:${l} {projectId: $projectId})
-WHERE coalesce(n.autoReviewed, false) = true
-OPTIONAL MATCH (p:Paper) WHERE p.paperId = n.paperId
-RETURN ${ITEM_FIELDS(l)}`,
+WHERE ${QUEUE_WHERE} AND n.autoSuggestion = $suggestion
+SET n.state = $state, n.stateReason = $reason, n.decidedBy = $userId, n.decidedAt = $at, n.queueDecided = true, n.appliedSuggestion = true
+WITH n
+OPTIONAL MATCH (n)-[e]-() WHERE e.status = 'suggested'
+SET e.status = $edgeStatus, e.decidedBy = $userId, e.decidedAt = $at
+RETURN count(DISTINCT n) AS n`,
 ).join("\nUNION ALL\n");
 
 /** Graph corroboration for auto-review: evidence edges and agreeing verified claims from other papers. */

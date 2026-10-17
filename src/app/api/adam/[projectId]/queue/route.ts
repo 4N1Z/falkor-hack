@@ -1,7 +1,7 @@
 import { emit } from "@/lib/adam/events";
 import * as jobs from "@/lib/adam/jobs";
 import { PRIORITY } from "@/lib/adam/orchestrator";
-import { decide, decideMany, queuePage, unmergeMethod, type Decision, type QueueKind } from "@/lib/adam/review";
+import { applySuggestions, decide, decideMany, queuePage, unmergeMethod, type Decision, type QueueKind, type Suggestion } from "@/lib/adam/review";
 import { NextResponse } from "next/server";
 import { readBody, requireProject } from "../../_access";
 
@@ -10,9 +10,9 @@ export const runtime = "nodejs";
 type Params = { params: Promise<{ projectId: string }> };
 
 /**
- * GET /api/adam/[projectId]/queue?workspaceId=&kind=&paperId=&offset=&limit=&view=open|auto
- * One page of the exception queue (passages included for that page only), the totals, and the
- * auto-review job in flight if any.
+ * GET /api/adam/[projectId]/queue?workspaceId=&kind=&paperId=&suggestion=approve|reject|none&offset=&limit=
+ * One page of the exception queue (passages included for that page only), the totals,
+ * auto-review's open proposals, and the auto-review job in flight if any.
  */
 export async function GET(req: Request, { params }: Params) {
   const { projectId } = await params;
@@ -25,7 +25,7 @@ export async function GET(req: Request, { params }: Params) {
       paperId: q.get("paperId") ?? "all",
       offset: Number(q.get("offset") ?? 0),
       limit: Number(q.get("limit") ?? 40),
-      view: q.get("view") === "auto" ? "auto" : "open",
+      suggestion: (q.get("suggestion") as Suggestion | "all") ?? "all",
     }),
     jobs.byKindAndStatus(access.graph, projectId, ["auto_review"], ["queued", "running"]),
   ]);
@@ -36,7 +36,8 @@ export async function GET(req: Request, { params }: Params) {
  * POST /api/adam/[projectId]/queue
  *   { workspaceId, decisions: [{ nodeId, decision: approve|reject }] }                  bulk, one round trip
  *   { workspaceId, nodeId, decision: approve|correct|reject|send_back, text?, note? }  one item
- *   { workspaceId, autoReview: true, kinds?: QueueKind[] }                              optional JEV + graph pass
+ *   { workspaceId, autoReview: true, kinds?: QueueKind[] }                              optional JEV + graph pass that proposes decisions
+ *   { workspaceId, applySuggestions: approve|reject }                                   apply every open proposal of that kind as the caller's decision
  *   { workspaceId, unmerge: { methodId, alias } }
  */
 export async function POST(req: Request, { params }: Params) {
@@ -49,6 +50,7 @@ export async function POST(req: Request, { params }: Params) {
     note?: string;
     decisions?: { nodeId: string; decision: "approve" | "reject" }[];
     autoReview?: boolean;
+    applySuggestions?: "approve" | "reject";
     kinds?: QueueKind[];
     unmerge?: { methodId: string; alias: string };
   }>(req);
@@ -58,6 +60,10 @@ export async function POST(req: Request, { params }: Params) {
     if (body.unmerge) {
       const id = await unmergeMethod(access.graph, { projectId, methodId: body.unmerge.methodId, alias: body.unmerge.alias, userId: access.userId });
       return NextResponse.json({ unmerged: id });
+    }
+    if (body.applySuggestions === "approve" || body.applySuggestions === "reject") {
+      const n = await applySuggestions(access.graph, { projectId, userId: access.userId, suggestion: body.applySuggestions });
+      return NextResponse.json({ applied: n });
     }
     if (body.autoReview) {
       const job = await jobs.enqueue(access.graph, {

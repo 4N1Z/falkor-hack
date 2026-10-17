@@ -10,7 +10,7 @@ import * as jobs from "./jobs";
 import { PRIORITY } from "./orchestrator";
 import { nameKey } from "./resolve";
 import {
-  AUTO_REVIEWED_ITEMS,
+  APPLY_SUGGESTIONS,
   DECIDE_NODE,
   DECIDE_NODE_EDGES,
   DECIDE_NODES_BATCH,
@@ -57,7 +57,13 @@ export interface QueueItem {
   kind: QueueKind;
   /** For conflicts: the other reading of the same passage */
   partner?: { id: string; text: string; state: string; slot: string } | null;
+  /** Auto-review's proposal, if it has run: approve / reject, or null when it was unsure */
+  autoSuggestion: "approve" | "reject" | null;
+  autoConfidence: number;
+  autoReason: string;
 }
+
+export type Suggestion = "approve" | "reject" | "none";
 
 export const kindOf = (it: { state: string; reason: string; loadBearing: boolean }): QueueKind =>
   it.reason === "quote_not_found" ? "unsourced" : it.state === "conflict" ? "conflict" : it.state === "low_confidence" ? "low_confidence" : "load_bearing";
@@ -68,8 +74,8 @@ const params = <T>(p: T) => ({ params: p as never });
 type QueueRow = Omit<QueueItem, "kind" | "partner" | "chunkText" | "chunkSection" | "chunkPage">;
 
 /** All open items, deduplicated per conflict pair, sorted worst-first; no passage text. */
-async function openItems(graph: Graph, projectId: string, query = QUEUE_ITEMS): Promise<Omit<QueueItem, "chunkText" | "chunkSection" | "chunkPage">[]> {
-  const rows = (await graph.roQuery<QueueRow>(query, params({ projectId }))).data ?? [];
+async function openItems(graph: Graph, projectId: string): Promise<Omit<QueueItem, "chunkText" | "chunkSection" | "chunkPage">[]> {
+  const rows = (await graph.roQuery<QueueRow>(QUEUE_ITEMS, params({ projectId }))).data ?? [];
   const byId = new Map(rows.map((r) => [r.id, r]));
   const items = rows.map((r) => {
     const partner = r.conflictWith ? byId.get(r.conflictWith) : null;
@@ -107,27 +113,38 @@ export interface QueuePage {
   total: number;
   counts: Partial<Record<QueueKind, number>>;
   papers: { paperId: string; title: string; n: number }[];
-  autoReviewed: number;
+  /** Auto-review's open proposals: how many it would approve, reject, or could not call */
+  suggestions: { approve: number; reject: number; none: number; reviewed: number };
 }
 
 /**
  * One page of the exception queue, filtered and sorted on the server so the client only ever
- * holds what it shows. `view: "auto"` lists what the auto-review decided, for audit.
+ * holds what it shows. `suggestion` filters by auto-review's proposal.
  */
 export async function queuePage(
   graph: Graph,
   projectId: string,
-  opts: { kind?: QueueKind | "all"; paperId?: string | "all"; offset?: number; limit?: number; view?: "open" | "auto" } = {},
+  opts: { kind?: QueueKind | "all"; paperId?: string | "all"; suggestion?: Suggestion | "all"; offset?: number; limit?: number } = {},
 ): Promise<QueuePage> {
-  const [all, auto] = await Promise.all([openItems(graph, projectId), openItems(graph, projectId, AUTO_REVIEWED_ITEMS)]);
-  const source = opts.view === "auto" ? auto : all;
+  const all = await openItems(graph, projectId);
   const counts: Partial<Record<QueueKind, number>> = {};
   const paperCounts = new Map<string, { title: string; n: number }>();
+  const suggestions = { approve: 0, reject: 0, none: 0, reviewed: 0 };
   for (const it of all) {
     counts[it.kind] = (counts[it.kind] ?? 0) + 1;
     if (it.paperId) paperCounts.set(it.paperId, { title: it.paperTitle, n: (paperCounts.get(it.paperId)?.n ?? 0) + 1 });
+    if (it.autoReason) {
+      suggestions.reviewed++;
+      if (it.autoSuggestion === "approve") suggestions.approve++;
+      else if (it.autoSuggestion === "reject") suggestions.reject++;
+      else suggestions.none++;
+    }
   }
-  const filtered = source.filter((it) => (!opts.kind || opts.kind === "all" || it.kind === opts.kind) && (!opts.paperId || opts.paperId === "all" || it.paperId === opts.paperId));
+  const matchesSuggestion = (it: QueueItem) =>
+    !opts.suggestion || opts.suggestion === "all" || (opts.suggestion === "none" ? !!it.autoReason && !it.autoSuggestion : it.autoSuggestion === opts.suggestion);
+  const filtered = all.filter(
+    (it) => (!opts.kind || opts.kind === "all" || it.kind === opts.kind) && (!opts.paperId || opts.paperId === "all" || it.paperId === opts.paperId) && matchesSuggestion(it as QueueItem),
+  );
   const offset = Math.max(0, opts.offset ?? 0);
   const limit = Math.min(100, Math.max(1, opts.limit ?? 40));
   const page = await withPassages(graph, filtered.slice(offset, offset + limit));
@@ -136,8 +153,29 @@ export async function queuePage(
     total: filtered.length,
     counts,
     papers: [...paperCounts.entries()].map(([paperId, v]) => ({ paperId, title: v.title, n: v.n })).sort((a, b) => b.n - a.n),
-    autoReviewed: auto.length,
+    suggestions,
   };
+}
+
+/** The researcher applies auto-review's proposals of one kind, all at once. They become their decisions. */
+export async function applySuggestions(graph: Graph, input: { projectId: string; userId: string; suggestion: "approve" | "reject" }) {
+  const at = Date.now();
+  const rows =
+    (await graph.query<{ n: number }>(
+      APPLY_SUGGESTIONS,
+      params({
+        projectId: input.projectId,
+        suggestion: input.suggestion,
+        state: input.suggestion === "approve" ? "human_approved" : "retracted",
+        reason: input.suggestion === "approve" ? null : "rejected",
+        edgeStatus: input.suggestion === "approve" ? "accepted" : "rejected",
+        userId: input.userId,
+        at,
+      }),
+    )).data ?? [];
+  const n = rows.reduce((s, r) => s + (r.n ?? 0), 0);
+  await emit(graph, input.projectId, "suggestions_applied", { suggestion: input.suggestion, n, by: input.userId });
+  return n;
 }
 
 /** Kept for callers that want everything (the auto-review job). */
