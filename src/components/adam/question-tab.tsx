@@ -254,46 +254,29 @@ function PageView({ workspaceId, projectId, page, editable }: { workspaceId: str
     }
   };
 
-  const Block = ({ id, title, text, children }: { id: NonNullable<typeof editing>; title: string; text: string; children: React.ReactNode }) => (
-    <div className="group">
-      <div className="flex items-center gap-2">
-        <h3 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">{title}</h3>
-        {editable && editing !== id && (
-          <button className="opacity-0 group-hover:opacity-100 text-muted-foreground hover:text-foreground" onClick={() => begin(id, text)} aria-label={`Edit ${title}`}>
-            <Pencil className="size-3" />
-          </button>
-        )}
-      </div>
-      {editing === id ? (
-        <div className="mt-1 flex flex-col gap-2">
-          <textarea className={textarea} value={draft} onChange={(e) => setDraft(e.target.value)} autoFocus />
-          <div className="flex gap-2">
-            <Button size="sm" onClick={commit} disabled={saving}>
-              {saving ? <Loader2 className="size-3.5 animate-spin" /> : <Check className="size-3.5" />}
-              <span className="ml-1.5">Save</span>
-            </Button>
-            <Button size="sm" variant="ghost" onClick={() => setEditing(null)}>
-              <X className="size-3.5" />
-            </Button>
-          </div>
-        </div>
-      ) : (
-        <div className="mt-1 text-sm leading-relaxed">{children}</div>
-      )}
-    </div>
-  );
+  // Stable props for the hoisted Block component (defining it inside this render would remount the textarea on every keystroke)
+  const blockProps = (id: NonNullable<typeof editing>, text: string) => ({
+    editable,
+    editing: editing === id,
+    draft,
+    saving,
+    onBegin: () => begin(id, text),
+    onDraft: setDraft,
+    onCommit: commit,
+    onCancel: () => setEditing(null),
+  });
 
   const checkFor = (id: string) => page.checks?.subquestions.find((c) => c.id === id);
 
   return (
     <div className="flex flex-col gap-4">
-      <Block id="hunch" title="Hunch" text={page.hunch}>
+      <Block title="Hunch" {...blockProps("hunch", page.hunch)}>
         <p className="font-medium">{page.hunch}</p>
       </Block>
-      <Block id="why" title="Why it matters" text={page.why}>
+      <Block title="Why it matters" {...blockProps("why", page.why)}>
         <p className="text-muted-foreground">{page.why}</p>
       </Block>
-      <Block id="subquestions" title="Sub-questions" text={page.subquestions.map((q) => q.text).join("\n")}>
+      <Block title="Sub-questions" {...blockProps("subquestions", page.subquestions.map((q) => q.text).join("\n"))}>
         <ol className="flex flex-col gap-2">
           {page.subquestions.map((q, i) => {
             const c = checkFor(q.id);
@@ -315,7 +298,7 @@ function PageView({ workspaceId, projectId, page, editable }: { workspaceId: str
           })}
         </ol>
       </Block>
-      <Block id="vocab" title="Search vocabulary" text={page.vocabulary.terms.join(", ")}>
+      <Block title="Search vocabulary" {...blockProps("vocab", page.vocabulary.terms.join(", "))}>
         <div className="flex flex-wrap gap-1.5">
           {page.vocabulary.terms.map((t) => (
             <span key={t} className="rounded-full bg-muted px-2 py-0.5 text-xs">{t}</span>
@@ -334,7 +317,7 @@ function PageView({ workspaceId, projectId, page, editable }: { workspaceId: str
           </div>
         )}
       </Block>
-      <Block id="fence" title="Scope fence" text={[...page.scopeFence.inside.map((x) => `+ ${x}`), ...page.scopeFence.outside.map((x) => `- ${x}`)].join("\n")}>
+      <Block title="Scope fence" {...blockProps("fence", [...page.scopeFence.inside.map((x) => `+ ${x}`), ...page.scopeFence.outside.map((x) => `- ${x}`)].join("\n"))}>
         <div className="grid sm:grid-cols-2 gap-3">
           <ul className="flex flex-col gap-1">
             {page.scopeFence.inside.map((x) => (
@@ -355,6 +338,60 @@ function PageView({ workspaceId, projectId, page, editable }: { workspaceId: str
           </ul>
         ) : null}
       </Block>
+    </div>
+  );
+}
+
+/** One block of the page: read view with a pencil, or an editor. Module-level so React keeps the textarea mounted while typing. */
+function Block({
+  title,
+  editable,
+  editing,
+  draft,
+  saving,
+  onBegin,
+  onDraft,
+  onCommit,
+  onCancel,
+  children,
+}: {
+  title: string;
+  editable: boolean;
+  editing: boolean;
+  draft: string;
+  saving: boolean;
+  onBegin: () => void;
+  onDraft: (s: string) => void;
+  onCommit: () => void;
+  onCancel: () => void;
+  children: React.ReactNode;
+}) {
+  return (
+    <div className="group">
+      <div className="flex items-center gap-2">
+        <h3 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">{title}</h3>
+        {editable && !editing && (
+          <button className="opacity-0 group-hover:opacity-100 text-muted-foreground hover:text-foreground" onClick={onBegin} aria-label={`Edit ${title}`}>
+            <Pencil className="size-3" />
+          </button>
+        )}
+      </div>
+      {editing ? (
+        <div className="mt-1 flex flex-col gap-2">
+          <textarea className={textarea} value={draft} onChange={(e) => onDraft(e.target.value)} autoFocus />
+          <div className="flex gap-2">
+            <Button size="sm" onClick={onCommit} disabled={saving}>
+              {saving ? <Loader2 className="size-3.5 animate-spin" /> : <Check className="size-3.5" />}
+              <span className="ml-1.5">Save</span>
+            </Button>
+            <Button size="sm" variant="ghost" onClick={onCancel}>
+              <X className="size-3.5" />
+            </Button>
+          </div>
+        </div>
+      ) : (
+        <div className="mt-1 text-sm leading-relaxed">{children}</div>
+      )}
     </div>
   );
 }
