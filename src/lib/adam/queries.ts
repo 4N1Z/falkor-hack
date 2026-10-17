@@ -134,8 +134,9 @@ SET j.status = 'queued', j.runAfter = $runAfter, j.lockedBy = null, j.lockedAt =
 RETURN j.id AS id`;
 
 /**
- * Atomic claim: one query takes the oldest, highest-priority runnable job. Jobs only run for
- * projects that are running (pause stops the queue without cancelling), except noop jobs.
+ * Atomic claim: one query takes the oldest, highest-priority runnable job. A paused project
+ * is a human hold: its jobs wait. Any other state runs jobs, so work a person asks for by
+ * hand (write the question page, hunt a method, re-extract) runs on an idle or gated project.
  * $busyProjects are projects already at their concurrency limit.
  */
 export const CLAIM_JOB = `
@@ -143,7 +144,7 @@ MATCH (j:AdamJob {status: 'queued'})
 WHERE j.runAfter <= $now AND NOT j.projectId IN $busyProjects
 OPTIONAL MATCH (p:AdamProject {id: j.projectId})
 WITH j, p
-WHERE j.kind = 'noop' OR p.status = 'running'
+WHERE j.kind = 'noop' OR p IS NULL OR coalesce(p.status, 'idle') <> 'paused'
 WITH j ORDER BY j.priority ASC, j.createdAt ASC LIMIT 1
 SET j.status = 'running', j.lockedBy = $worker, j.lockedAt = $now, j.heartbeatAt = $now, j.attempts = coalesce(j.attempts, 0) + 1
 RETURN ${JOB_FIELDS}`;
