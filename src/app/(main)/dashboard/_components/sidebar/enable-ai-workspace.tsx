@@ -13,7 +13,7 @@ export default function EnableAIWorkspace({ myWorkspaceId }: { myWorkspaceId: st
   const visible = useWorkspaceChatVisible();
   const id = `workspace-ai-${myWorkspaceId}`;
   return (
-    <div className="my-2 flex w-full items-center justify-between gap-2 rounded-md border border-sky-100 bg-white px-2 py-2">
+    <div className="my-1.5 flex w-full items-center justify-between gap-2 rounded-md border border-sky-100 bg-white px-2 py-1.5">
       <Label htmlFor={id} className="flex items-center gap-2 text-sm text-neura-dashboardGray">
         <Sparkles size={16} className="text-primary" />
         Workspace AI chat
