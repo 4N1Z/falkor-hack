@@ -27,7 +27,7 @@ export const ClaimItem = Item.extend({
 
 export const EvidenceItem = Item.extend({
   kind: z.enum(["figure", "table", "statistic", "text"]),
-  locator: z.string().nullable().describe("'Figure 3b', 'Table 2', 'n = 12' …"),
+  locator: z.string().nullable().optional().describe("'Figure 3b', 'Table 2', 'n = 12' …"),
 });
 
 export const MethodItem = Item.extend({
