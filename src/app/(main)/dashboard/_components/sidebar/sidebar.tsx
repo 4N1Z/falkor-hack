@@ -50,56 +50,26 @@ export default async function Sidebar({ params, className }: SidebarProps) {
       getCollaborativeWorkspaces(userData.id!),
     ]);
 
-  //   // Fetch all data in parallel for better performance
-  //   const [
-  //     subscriptionResponse,
-  //     foldersResponse,
-  //     sharedWorkspaces,
-  //     privateWorkspaces,
-  //     collaborativeWorkspaces,
-  //   ] = await Promise.all([
-  //     getUserSubscriptionUser(userData.user.id),
-  //     getFolders(params.workspaceId),
-  //     getSharedWorkspaces(userData.user.id),
-  //     getPrivateWorkspaces(userData.user.id),
-  //     getCollaborativeWorkspaces(userData.user.id),
-  //   ]);
-
-  //   if (subscriptionResponse.error || foldersResponse.error) {
-  //     redirect("/dashboard");
-  //   }
-
-  // const allWorkspaces = [
-  //   ...privateWorkspaces,
-  //   ...collaborativeWorkspaces,
-  //   ...sharedWorkspaces,
-  // ];
 
   return (
     <TooltipProvider delayDuration={400} skipDelayDuration={300}>
     <aside
       className={cn(
         // A definite height (viewport minus the margins) is what lets the folder list scroll under the profile card
-        "hidden sm:flex m-2 border rounded-sm border-sky-100 sm:flex-col w-[320px] shrink-0 p-4 gap-4 bg-card-foreground font-sans h-[calc(100vh-1rem)] max-h-[calc(100vh-1rem)] overflow-hidden",
+        "hidden sm:flex m-2 border rounded-sm border-sky-100 sm:flex-col w-[320px] shrink-0 p-2.5 gap-2 bg-card-foreground font-sans h-[calc(100vh-1rem)] max-h-[calc(100vh-1rem)] overflow-hidden",
         className
       )}
     >
       <div className="flex flex-col h-full min-h-0">
         {/* Top Section - Always Visible */}
         <div className="space-y-2 flex-shrink-0">
-          {/* <WorkspaceDropdown
-              privateWorkspaces={privateWorkspaces}
-              sharedWorkspaces={sharedWorkspaces}
-              collaborativeWorkspaces={collaborativeWorkspaces}
-              defaultValue={allWorkspaces.find(
-                (workspace) => workspace.id === params.workspaceId
-              )}
-            /> */}
+
           <WorkspaceDropdown
             privateWorkspaces={privateWorkspaces}
             sharedWorkspaces={sharedWorkspaces}
             collaborativeWorkspaces={collaborativeWorkspaces}
-            defaultValue={[
+            defaultValue=
+            {[
               ...privateWorkspaces,
               ...collaborativeWorkspaces,
               ...sharedWorkspaces,
@@ -110,7 +80,7 @@ export default async function Sidebar({ params, className }: SidebarProps) {
           <EnableAIWorkspace myWorkspaceId={params.workspaceId} />
 
           {/* Research: library dialog + graph page, same card design */}
-          <div className="space-y-2">
+          <div className="space-y-1.5">
             <ResearchPaperMain myWorkspaceId={params.workspaceId} />
             <ResearchGraphCard myWorkspaceId={params.workspaceId} />
             <AdamCard myWorkspaceId={params.workspaceId} />
@@ -120,10 +90,10 @@ export default async function Sidebar({ params, className }: SidebarProps) {
         {/* <TestBtn/> */}
 
         {/* Scrollable Content Area */}
-        <div className="flex-1 min-h-0 mt-4">
+        <div className="flex-1 min-h-0 mt-2">
           <ScrollArea className="h-full [&_[data-radix-scroll-area-viewport]>div]:!block [&_[data-radix-scroll-area-viewport]]:!overflow-x-hidden">
             {/* Folders Section */}
-            <div className="space-y-4">
+            <div className="space-y-2">
               <FoldersDropdownList
                 workspaceFolders={folderData || []}
                 workspaceId={params.workspaceId}
@@ -139,7 +109,7 @@ export default async function Sidebar({ params, className }: SidebarProps) {
         </div>
 
         {/* User Profile - Fixed at Bottom */}
-        <div className="flex-shrink-0 mt-4">
+        <div className="flex-shrink-0 mt-2">
           <UserProfile
             user={userData}
             subscription={subscriptionData!}
@@ -150,6 +120,4 @@ export default async function Sidebar({ params, className }: SidebarProps) {
     </aside>
     </TooltipProvider>
   );
-
-  // redirect("/dashboard");
 }

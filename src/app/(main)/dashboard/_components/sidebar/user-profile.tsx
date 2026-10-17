@@ -44,7 +44,7 @@ export default function UserProfile({ user, subscription, foldersLength }: UserP
 
   return (
     <div className="w-full h-fit bg-white rounded-md flex flex-col justify-start items-center p-2">
-      <div className="flex w-full justify-between items-center my-2">
+      <div className="flex w-full justify-between items-center my-1">
         <div className="flex gap-2 items-center">
           <div className="w-8 h-8 rounded-lg overflow-hidden bg-muted relative">
             {user?.image ? (

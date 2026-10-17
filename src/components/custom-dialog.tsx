@@ -38,6 +38,9 @@ const CustomDialogTrigger: React.FC<CustomDialogTriggerProps> = ({
         className="h-[90dvh]
         sm:h-[440px]
         overflow-y-auto
+        flex
+        flex-col
+        justify-start
         w-full
         font-sans"
       >

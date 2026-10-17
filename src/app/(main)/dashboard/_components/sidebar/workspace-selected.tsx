@@ -71,7 +71,7 @@ export default function WorkspaceSelected({
       ${
         variant === "dropdown"
           ? "hover:bg-accent hover:text-accent-foreground my-2 "
-          : "my-2 border border-accent"
+          : "my-0 border border-accent"
       }`,
         isSelected && "bg-neura-dashboardBG"
       )}
