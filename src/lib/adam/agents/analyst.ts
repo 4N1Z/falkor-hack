@@ -59,7 +59,7 @@ const LoadBearingSchema = z.object({
 });
 const SanitySchema = z.object({
   sane: z.boolean().describe("true if this candidate is a real signal, false if it is an artefact of vocabulary overlap, extraction noise, or thin evidence"),
-  reason: z.string().describe("One sentence"),
+  reason: z.string().optional().describe("One sentence"),
 });
 
 const SYSTEM = `You are the Graph Analyst in a research-agent system whose premise is: a new result is a new combination of known steps. The literature graph is given to you as summaries of its structure. Write precisely and concretely; name papers and methods; never invent evidence that is not in the material given.`;
@@ -186,7 +186,7 @@ export async function runAnalyst(
       { nodeIds: [...h.a.methods, ...h.b.methods].slice(0, 30), paperIds: [...h.a.papers, ...h.b.papers].map((p) => p.paperId) },
       h.score,
       sanity.object.sane,
-      sanity.object.reason,
+      sanity.object.reason ?? "",
       Math.min(1, h.score / 4),
     );
     result.holes++;
@@ -212,7 +212,7 @@ export async function runAnalyst(
       { nodeIds: [c.aId, c.bId], paperIds: [] },
       1 + c.confidence,
       sanity.object.sane,
-      sanity.object.reason,
+      sanity.object.reason ?? "",
       c.confidence,
     );
     result.conflicts++;
@@ -240,7 +240,7 @@ export async function runAnalyst(
       { nodeIds: [a.id, ...a.claimIds.slice(0, 20)], paperIds: [] },
       a.dependents,
       sanity.object.sane,
-      sanity.object.reason,
+      sanity.object.reason ?? "",
       Math.min(1, a.dependents / 8),
     );
     result.loadBearing++;

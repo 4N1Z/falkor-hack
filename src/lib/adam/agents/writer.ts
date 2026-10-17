@@ -61,8 +61,8 @@ const AnswerSchema = z.object({
       status: z.enum(["answered", "open", "fatal"]).describe("answered: the attack is met; open: it needs an experiment or evidence not yet available; fatal: the attack stands and the hypothesis should be dropped"),
     }),
   ),
-  revisedKillCriteria: z.string().nullable().describe("A sharper kill criterion if an attack showed the old one was too loose; else null"),
-  revisedBoundaryFails: z.array(z.string()).nullable().describe("Added failure conditions if an attack found the boundary incomplete; else null"),
+  revisedKillCriteria: z.string().nullable().optional().describe("A sharper kill criterion if an attack showed the old one was too loose; else null"),
+  revisedBoundaryFails: z.array(z.string()).nullable().optional().describe("Added failure conditions if an attack found the boundary incomplete; else null"),
 });
 
 const WRITER_SYSTEM = `You are the Hypothesis Writer in a research-agent system whose premise is: a new result is a new combination of known steps. You write two to four COMPETING hypotheses from the material given (candidate holes, conflicts and untested assumptions; verified claims with ids; methods; assumptions; failure conditions). Rules:

@@ -26,12 +26,13 @@ const AttackSchema = z.object({
   kind: z.enum(ATTACK_KINDS),
   text: z.string().describe("The attack, concretely: what is wrong or untested and why it matters"),
   cites: z.array(z.string()).describe("Ids of claims / assumptions / methods from the material this attack rests on (required for dependency and baseline attacks)"),
-  control: z.string().nullable().describe("For rival attacks: the control that would tell the rival from the hypothesis"),
-  killCriterion: z.string().nullable().describe("A sharper kill criterion this attack implies, if any"),
+  control: z.string().nullable().optional().describe("For rival attacks: the control that would tell the rival from the hypothesis"),
+  killCriterion: z.string().nullable().optional().describe("A sharper kill criterion this attack implies, if any"),
 });
+// Models omit fields they consider irrelevant; nothing optional here may be required by the schema
 const AttacksSchema = z.object({
-  attacks: z.array(AttackSchema).min(3).max(14),
-  noNewAttacks: z.boolean().describe("true only when, after the previous rounds, you genuinely have nothing new to add"),
+  attacks: z.array(AttackSchema).min(1).max(16),
+  noNewAttacks: z.boolean().optional().describe("true only when, after the previous rounds, you genuinely have nothing new to add"),
 });
 
 const SYSTEM = `You are the Falsifier in a research-agent system. Your job is to kill hypotheses that deserve to die and to sharpen the ones that survive. You see a brief and material from the literature graph, never the writer's reasoning. Make every attack specific and actionable: name the assumption, the confound, the missing control, the unreproduced result. Do not pad: an attack that is really "I disagree" is noise. Cover the six kinds: premortem (three strongest reviewer objections), dependency (the weakest assumption and the cheapest test of it alone), rival (other explanations for each predicted result, each with the control that separates it), null_ablation (what happens with nothing, and with each component removed), baseline (which prior result it builds on and whether anyone else reproduced it; if not, replication is the first experiment), boundary (where it should stop holding; if the brief names no failure condition, say it is not falsifiable yet).`;
@@ -110,15 +111,14 @@ export async function runFalsifier(
       return { id: `attack:${hypothesisId.split(":").slice(1).join(":")}:r${round}:${i + 1}`, kind: a.kind, text: a.text, cites, control: a.control ?? "", killCriterion: a.killCriterion ?? "" };
     })
     .filter((r): r is NonNullable<typeof r> => !!r);
-  if (!out.object.noNewAttacks || rows.length) {
-    if (rows.length) {
-      await graph.query(CREATE_ATTACKS, params({ hypothesisId, projectId: pid, rows, round, runId: run.runId, at }));
-      const citeRows = rows.flatMap((r) => r.cites.map((nodeId) => ({ attackId: r.id, nodeId })));
-      if (citeRows.length) await graph.query(LINK_ATTACK_CITES, params({ rows: citeRows }));
-    }
+  const noNewAttacks = out.object.noNewAttacks === true;
+  if (rows.length) {
+    await graph.query(CREATE_ATTACKS, params({ hypothesisId, projectId: pid, rows, round, runId: run.runId, at }));
+    const citeRows = rows.flatMap((r) => r.cites.map((nodeId) => ({ attackId: r.id, nodeId })));
+    if (citeRows.length) await graph.query(LINK_ATTACK_CITES, params({ rows: citeRows }));
   }
-  const result: FalsifyResult = { hypothesisId, round, attacks: rows.length, dropped, noNewAttacks: out.object.noNewAttacks };
-  log(`round ${round}: ${rows.length} attacks (${dropped} dropped for lacking citations)${out.object.noNewAttacks ? ", nothing new" : ""}`);
+  const result: FalsifyResult = { hypothesisId, round, attacks: rows.length, dropped, noNewAttacks };
+  log(`round ${round}: ${rows.length} attacks (${dropped} dropped for lacking citations)${noNewAttacks ? ", nothing new" : ""}`);
   await run.finish("ANSWERED", [result], project.createdBy);
   return result;
 }

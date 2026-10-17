@@ -19,12 +19,12 @@ const PlanSchema = z.object({
   steps: z
     .array(
       z.object({
-        procedureId: z.string().nullable().describe("Id of the procedure from the chains, or null when the step must be invented"),
+        procedureId: z.string().nullable().optional().describe("Id of the procedure from the chains, or null when the step must be invented"),
         name: z.string(),
         purpose: z.string().describe("What this step establishes toward the kill criterion"),
         status: z.enum(["verified", "partial", "unknown", "infeasible", "missing"]),
         gap: z.boolean().describe("true when this step is where the real risk sits: missing, unknown or partial"),
-        control: z.string().nullable().describe("The control run alongside this step, if one is needed"),
+        control: z.string().nullable().optional().describe("The control run alongside this step, if one is needed"),
       }),
     )
     .min(1)
@@ -111,7 +111,7 @@ export async function runDesigner(
   const at = Date.now();
   const planId = `plan:${hypothesisId.split(":").slice(1).join(":")}`;
   const knownIds = new Set(query.chains.flatMap((c) => c.steps.map((s) => s.procedureId)));
-  const steps = plan.object.steps.map((s) => ({ ...s, procedureId: s.procedureId && knownIds.has(s.procedureId) ? s.procedureId : null }));
+  const steps = plan.object.steps.map((s) => ({ ...s, control: s.control ?? null, procedureId: s.procedureId && knownIds.has(s.procedureId) ? s.procedureId : null }));
   const costToKill = query.costToKill?.cost ?? Math.round(steps.reduce((n, s) => n + (s.status === "missing" ? 100 : s.status === "unknown" ? 50 : s.status === "partial" ? 20 : 5), 0));
   await graph.query(
     UPSERT_PLAN,

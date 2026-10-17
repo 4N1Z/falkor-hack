@@ -301,7 +301,7 @@ export async function runExtractor(
         runId: run.runId,
         textVersion: paper.textVersion,
         at,
-        rows: card.evidence.map((e) => ({ id: nodeId("evidence", e.localId), localId: e.localId, text: e.text, kind: e.kind, locator: e.locator, quote: e.quote, chunkId: e.chunkId, page: pageOf(e.chunkId), confidence: e.confidence })),
+        rows: card.evidence.map((e) => ({ id: nodeId("evidence", e.localId), localId: e.localId, text: e.text, kind: e.kind, locator: e.locator ?? null, quote: e.quote, chunkId: e.chunkId, page: pageOf(e.chunkId), confidence: e.confidence })),
       }),
     );
     nodesNew += card.evidence.length;
