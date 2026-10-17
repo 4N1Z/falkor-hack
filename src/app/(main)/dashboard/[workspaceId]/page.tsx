@@ -4,6 +4,7 @@ import { redirect } from "next/navigation";
 import RecentCreateFiles from "../_components/recent-create-files";
 import ResearchSuggestion from "../_components/research-suggestion";
 import ResearchPapers from "../_components/research-papers";
+import AdamProjects from "../_components/adam-projects";
 import { auth } from "@/auth";
 
 export default async function WordspaceIdPage(
@@ -48,6 +49,11 @@ export default async function WordspaceIdPage(
       {/* Pick up where you left off */}
       <section className="mt-10" aria-labelledby="recent-heading">
         <RecentCreateFiles workspaceId={data[0].id} />
+      </section>
+
+      {/* Adam: the research-agent system, the workspace's flagship */}
+      <section className="mt-10" aria-label="Adam research projects">
+        <AdamProjects workspaceId={params.workspaceId} />
       </section>
 
       {/* Library + suggestions, equal height side by side; stacked on smaller screens */}

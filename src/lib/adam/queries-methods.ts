@@ -93,7 +93,8 @@ export const LINK_PROCEDURE_DEPENDS = `
 MATCH (a:Procedure {id: $fromId}), (b:Procedure {id: $toId})
 WHERE a.id <> b.id
 MERGE (a)-[d:DEPENDS_ON]->(b)
-SET d.by = $by, d.runId = $runId, d.status = 'suggested', d.at = $at
+SET d.by = $by, d.runId = $runId, d.status = 'suggested', d.at = $at,
+    d.weight = 1 + coalesce(b.timeHours, 0) + coalesce(b.costUsd, 0) * 0.01
 RETURN count(d) AS n`;
 
 export const CLEAR_PROCEDURE_LINKS = `

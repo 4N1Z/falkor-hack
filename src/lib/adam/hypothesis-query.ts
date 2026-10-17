@@ -33,6 +33,7 @@ import {
   PROCEDURE_CHAINS,
   PROCEDURE_DETAILS,
   SET_HYPOTHESIS_QUERY,
+  SP_CHAINS,
   UPSERT_OPEN_QUESTION,
 } from "./queries-experiments";
 import { CREATE_ATTACKS } from "./queries-hypotheses";
@@ -200,7 +201,18 @@ export async function hypothesisQuery(
   const results = ((await graph.roQuery<{ id: string; text: string; score: number }>(NEAREST_RESULTS, params({ projectId: pid, k: 6, v: resultVec })).catch(() => ({ data: [] }))).data ?? []).filter((r) => r.score <= RESULT_DISTANCE);
   const chains: Chain[] = [];
   for (const r of results) {
-    const paths = (await graph.roQuery<{ ids: string[]; names: string[]; runnability: string[]; feasibility: string[]; hours: number[]; cost: number[]; states: string[]; hops: number }>(PROCEDURE_CHAINS, params({ resultId: r.id }))).data ?? [];
+    const paths = (await graph.roQuery<{ ids: string[]; names: string[]; runnability: string[]; feasibility: string[]; hops: number }>(PROCEDURE_CHAINS, params({ resultId: r.id }))).data ?? [];
+    // Deep chains: the enumeration is capped, so add the weighted shortest chains (algo.SPpaths)
+    // from each producing procedure to each root it reaches; the cheapest chain is then never lost
+    const deep = paths.filter((p) => p.hops >= 2);
+    if (deep.length) {
+      const pairs = new Set(deep.map((p) => `${p.ids[0]}>${p.ids[p.ids.length - 1]}`));
+      for (const pair of [...pairs].slice(0, 12)) {
+        const [lastId, firstId] = pair.split(">");
+        const sp = (await graph.roQuery<{ ids: string[]; pathWeight: number }>(SP_CHAINS, params({ lastId, firstId })).catch(() => ({ data: [] }))).data ?? [];
+        for (const s of sp) if (!paths.some((p) => p.ids.join(">") === s.ids.join(">"))) paths.push({ ids: s.ids, names: [], runnability: [], feasibility: [], hops: s.ids.length - 1 });
+      }
+    }
     const allIds = [...new Set(paths.flatMap((p) => p.ids))];
     type DetailRow = Omit<ChainStep, "status" | "instruments" | "procedureId"> & { id: string; instruments: string[] };
     const details = allIds.length ? ((await graph.roQuery<DetailRow>(PROCEDURE_DETAILS, params({ ids: allIds }))).data ?? []) : [];

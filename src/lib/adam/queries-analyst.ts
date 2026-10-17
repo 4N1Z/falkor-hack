@@ -11,6 +11,17 @@ WITH node, communityId WHERE labels(node)[0] = 'Paper'
 MATCH (:AdamProject {id: $projectId})-[t:TRIAGED]->(node)
 RETURN node.paperId AS paperId, node.title AS title, communityId, t.label AS label, coalesce(t.clusterId, '') AS clusterId`;
 
+/**
+ * Weakly connected components over the same projection (WCC). Two communities in different
+ * components have no edge between them by definition, so the per-pair link check is only
+ * needed for pairs inside one component.
+ */
+export const PROJECT_COMPONENTS = `
+CALL algo.WCC({nodeLabels: ['Paper', 'Method', 'Claim'], relationshipTypes: ['CITES', 'USED_IN', 'USES', 'EXTRACTED_FROM']}) YIELD node, componentId
+WITH node, componentId WHERE labels(node)[0] = 'Paper'
+MATCH (:AdamProject {id: $projectId})-[:TRIAGED]->(node)
+RETURN node.paperId AS paperId, componentId`;
+
 export const SET_PAPER_COMMUNITIES = `
 UNWIND $rows AS r
 MATCH (:AdamProject {id: $projectId})-[t:TRIAGED]->(p:Paper {paperId: r.paperId})

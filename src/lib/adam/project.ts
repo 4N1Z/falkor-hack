@@ -29,10 +29,11 @@ import {
   type ProjectStatus,
 } from "./types";
 
-type Row = Omit<AdamProject, "constraints" | "seeds" | "budget" | "spent"> & {
+type Row = Omit<AdamProject, "constraints" | "seeds" | "budget" | "spent" | "papers"> & {
   constraints: string;
   seeds: string;
   budget: string;
+  papers: string;
   spentPapers: number;
   spentLlmCalls: number;
 };
@@ -41,6 +42,7 @@ const toProject = (r: Row): AdamProject => ({
   ...r,
   constraints: { ...EMPTY_CONSTRAINTS, ...parseJson<Partial<Constraints>>(r.constraints, {}) },
   seeds: parseJson(r.seeds, []),
+  papers: parseJson(r.papers, []),
   budget: { ...DEFAULT_BUDGET, ...parseJson<Partial<Budget>>(r.budget, {}) },
   spent: { papers: r.spentPapers ?? 0, llmCalls: r.spentLlmCalls ?? 0 },
 });

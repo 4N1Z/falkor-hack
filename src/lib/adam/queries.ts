@@ -10,7 +10,7 @@ const PROJECT_FIELDS = `
   coalesce(p.understanding, '') AS understanding, coalesce(p.constraints, '{}') AS constraints,
   coalesce(p.seeds, '[]') AS seeds, p.phase AS phase, p.status AS status, coalesce(p.pass, 1) AS pass,
   coalesce(p.budget, '{}') AS budget, coalesce(p.spentPapers, 0) AS spentPapers, coalesce(p.spentLlmCalls, 0) AS spentLlmCalls,
-  coalesce(p.maxConcurrency, 3) AS maxConcurrency,
+  coalesce(p.maxConcurrency, 3) AS maxConcurrency, coalesce(p.papers, '[]') AS papers,
   p.gate AS gate, p.createdBy AS createdBy, p.createdAt AS createdAt, p.updatedAt AS updatedAt`;
 
 export const CREATE_PROJECT = `
@@ -27,6 +27,14 @@ export const INCREMENT_SPENT = `
 MATCH (p:AdamProject {id: $id})
 SET p.spentPapers = coalesce(p.spentPapers, 0) + $papers, p.spentLlmCalls = coalesce(p.spentLlmCalls, 0) + $llmCalls
 RETURN p.spentPapers AS spentPapers, p.spentLlmCalls AS spentLlmCalls`;
+
+/** A pass write-up was saved as a workspace file; the project keeps the list. */
+export const ADD_PROJECT_PAPER = `
+MATCH (p:AdamProject {id: $id})
+SET p.papers = coalesce(p.papers, '[]'), p.updatedAt = $at
+WITH p
+SET p.papers = left(p.papers, size(p.papers) - 1) + CASE WHEN p.papers = '[]' THEN '' ELSE ',' END + $entry + ']'
+RETURN p.papers AS papers`;
 
 /** A new pass resets the per-pass spend (the budget rule is per pass). */
 export const RESET_SPENT = `
