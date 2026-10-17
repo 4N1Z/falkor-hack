@@ -20,6 +20,11 @@ import {
   VIEW_FOCUS,
 } from "@/lib/graph/queries";
 import { searchTeamLibrary } from "@/lib/graph/team-search";
+import { hypothesisQuery } from "@/lib/adam/hypothesis-query";
+import { getProject, listProjects } from "@/lib/adam/project";
+import { METHODS_DOSSIER } from "@/lib/adam/queries-methods";
+import { PAPER_CLAIMS } from "@/lib/adam/queries-review";
+import { OPEN_QUESTIONS } from "@/lib/adam/queries-saturation";
 import { NextResponse } from "next/server";
 
 export const runtime = "nodejs";
@@ -113,6 +118,47 @@ const TOOLS: Record<string, Tool> = {
         ro(a, INFLUENTIAL_UNREAD, { sinceYear: 2019 }),
       ]);
       return { gaps, bridges, influential };
+    },
+  },
+  adam_projects: {
+    description: "Adam research projects in a workspace: phase, status, pass, and what gate (if any) is waiting on a person.",
+    properties: { workspaceId: ws },
+    required: ["workspaceId"],
+    run: async (a) => {
+      await graphFor(a);
+      return (await listProjects(str(a.workspaceId))).map((p) => ({ projectId: p.id, title: p.title, topic: p.topic.slice(0, 300), phase: p.phase, status: p.status, pass: p.pass, gate: p.gate, llmCalls: p.spent.llmCalls }));
+    },
+  },
+  paper_claims: {
+    description: "The verified claims Adam extracted from one paper, each with its page, section, conditions and the quoted passage, plus the methods each claim used.",
+    properties: { workspaceId: ws, paperId: { type: "string", description: "Paper id (OpenAlex W…)" } },
+    required: ["workspaceId", "paperId"],
+    run: (a) => ro(a, PAPER_CLAIMS, { paperId: str(a.paperId, 100) }),
+  },
+  methods_dossier: {
+    description: "Adam's methods dossier for a project: each technique the literature uses, its filled-in procedure (inputs, outputs, steps, equipment, time, cost), whether a lab could run it as written, and what is still missing.",
+    properties: { workspaceId: ws, projectId: { type: "string", description: "Project id (from adam_projects)" } },
+    required: ["workspaceId", "projectId"],
+    run: async (a) => (await ro<Json>(a, METHODS_DOSSIER, { projectId: str(a.projectId, 100) })).map((m) => ({ ...m, sources: undefined })),
+  },
+  open_questions: {
+    description: "Gaps Adam found for a project: steps no procedure exists for, things papers say nobody has tested, and untested assumptions many claims depend on.",
+    properties: { workspaceId: ws, projectId: { type: "string", description: "Project id (from adam_projects)" } },
+    required: ["workspaceId", "projectId"],
+    run: (a) => ro(a, OPEN_QUESTIONS, { projectId: str(a.projectId, 100) }),
+  },
+  hypothesis_query: {
+    description:
+      "Hypothesis as a query: state a hypothesis and get, from the graph of known steps, the evidence for and against it, the conditions under which it should hold or fail, the candidate chains of procedures that could test it (with each step's status), the gaps, rival chains, and the cheapest chain whose failure would kill it.",
+    properties: { workspaceId: ws, projectId: { type: "string", description: "Project id (from adam_projects); the latest project when omitted" }, hypothesis: { type: "string", description: "The hypothesis, a sentence or two" } },
+    required: ["workspaceId", "hypothesis"],
+    run: async (a) => {
+      const g = await graphFor(a);
+      const projects = await listProjects(str(a.workspaceId));
+      const project = (a.projectId ? await getProject(g, str(a.projectId, 100)) : projects[0]) ?? null;
+      if (!project) throw new Error("No Adam project in this workspace yet");
+      const r = await hypothesisQuery(g, str(a.workspaceId), project, { text: str(a.hypothesis, 2000) });
+      return { ...r, chains: r.chains.slice(0, 5), rivals: r.rivals.slice(0, 3) };
     },
   },
   team_memory: {

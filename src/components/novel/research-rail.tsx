@@ -1,13 +1,15 @@
 "use client";
 
 import { cn } from "@/lib/utils";
-import { BookOpen, Layers, Network, ShieldCheck, Sparkles, X } from "lucide-react";
+import { X } from "lucide-react";
 import { useCallback, useEffect, useState } from "react";
 import { CitationCheckPanel } from "./citation-check-sheet";
 import { CiteScoutPanel } from "./cite-scout-panel";
 import { EvidenceMapSheet } from "./evidence-map-sheet";
 import { NotebookPanel } from "./notebook-sheet";
+import { RailTile } from "./rail-icons";
 import { SynthesisPanel } from "./synthesis-sheet";
+import { WorkspaceChatPanel } from "./workspace-chat-panel";
 
 /**
  * The research rail: one persistent home for the agents, beside the document instead of in
@@ -18,13 +20,14 @@ import { SynthesisPanel } from "./synthesis-sheet";
  * Panels stay mounted while hidden: Cite Scout keeps watching the sentence, "/hypothesis" keeps
  * saving to the Notebook, and a finished citation check is still there when you come back.
  */
-export type RailTool = "scout" | "check" | "notebook" | "review";
+export type RailTool = "scout" | "check" | "notebook" | "review" | "chat";
 
-const TOOLS: { id: RailTool; label: string; hint: string; icon: typeof Sparkles }[] = [
-  { id: "scout", label: "Cite Scout", hint: "Citations for the sentence you're on, from everyone's library", icon: Sparkles },
-  { id: "check", label: "Check citations", hint: "Does each cited paper actually support its claim?", icon: ShieldCheck },
-  { id: "notebook", label: "Notebook", hint: "What the team believes, found and asked, and what to do next", icon: BookOpen },
-  { id: "review", label: "Draft review", hint: "A literature review grouped by citation community, as a new document", icon: Layers },
+const TOOLS: { id: RailTool; label: string; hint: string }[] = [
+  { id: "scout", label: "Cite Scout", hint: "Citations for the sentence you're on, from everyone's library" },
+  { id: "check", label: "Check citations", hint: "Does each cited paper actually support its claim?" },
+  { id: "notebook", label: "Notebook", hint: "What the team believes, found and asked, and what to do next" },
+  { id: "review", label: "Draft review", hint: "A literature review grouped by citation community, as a new document" },
+  { id: "chat", label: "Workspace chat", hint: "Ask Neura with the team; everyone in the workspace sees the thread" },
 ];
 
 const STORAGE_KEY = "neura:rail";
@@ -33,23 +36,27 @@ const PANEL_W = 340;
 const press = "transition-transform duration-150 ease-out active:scale-[0.96]";
 
 export function ResearchRail({ fileId }: { fileId: string }) {
-  const [active, setActive] = useState<RailTool | null>("scout");
-  const [mapOpen, setMapOpen] = useState(false);
-  const [counts, setCounts] = useState<{ scout: number; check: number | null; notebook: number }>({ scout: 0, check: null, notebook: 0 });
-
-  // Remember the chosen tool per browser; first visit opens Cite Scout, as before
-  useEffect(() => {
+  // Opening a document opens the rail: the last tool used in this browser, Cite Scout the first
+  // time. Closing it is for the current visit only. (The editor subtree is client-rendered after
+  // the file loads, so reading localStorage in the initializer cannot mismatch a server render.)
+  const [active, setActive] = useState<RailTool | null>(() => {
     try {
       const saved = localStorage.getItem(STORAGE_KEY);
-      if (saved === "none") setActive(null);
-      else if (saved && TOOLS.some((t) => t.id === saved)) setActive(saved as RailTool);
-    } catch {}
-  }, []);
+      return saved && TOOLS.some((t) => t.id === saved) ? (saved as RailTool) : "scout";
+    } catch {
+      return "scout";
+    }
+  });
+  const [mapOpen, setMapOpen] = useState(false);
+  const [counts, setCounts] = useState<{ scout: number; check: number | null; notebook: number; chat: number }>({ scout: 0, check: null, notebook: 0, chat: 0 });
+
   const choose = (tool: RailTool | null) => {
     setActive(tool);
-    try {
-      localStorage.setItem(STORAGE_KEY, tool ?? "none");
-    } catch {}
+    if (tool) {
+      try {
+        localStorage.setItem(STORAGE_KEY, tool);
+      } catch {}
+    }
   };
 
   // The document column reads this to keep text clear of the rail (see Editore.tsx)
@@ -64,6 +71,7 @@ export function ResearchRail({ fileId }: { fileId: string }) {
   const onScoutCount = useCallback((n: number) => setCounts((c) => (c.scout === n ? c : { ...c, scout: n })), []);
   const onProblems = useCallback((n: number | null) => setCounts((c) => (c.check === n ? c : { ...c, check: n })), []);
   const onOpenNotes = useCallback((n: number) => setCounts((c) => (c.notebook === n ? c : { ...c, notebook: n })), []);
+  const onChatUnread = useCallback((n: number) => setCounts((c) => (c.chat === n ? c : { ...c, chat: n })), []);
 
   const current = TOOLS.find((t) => t.id === active) ?? null;
 
@@ -82,12 +90,12 @@ export function ResearchRail({ fileId }: { fileId: string }) {
           )}
         >
           <header className="flex items-start justify-between gap-2 border-b px-3 py-2">
-            <div className="min-w-0">
-              <p className="flex items-center gap-1.5 text-sm font-medium">
-                {current && <current.icon className="size-3.5 text-sky-600" />}
-                {current?.label}
-              </p>
-              <p className="text-[11px] leading-4 text-muted-foreground">{current?.hint}</p>
+            <div className="flex min-w-0 items-start gap-2">
+              {current && <RailTile tool={current.id} size="sm" active className="mt-0.5" />}
+              <div className="min-w-0">
+                <p className="text-sm font-medium">{current?.label}</p>
+                <p className="text-[11px] leading-4 text-muted-foreground">{current?.hint}</p>
+              </div>
             </div>
             <button
               type="button"
@@ -112,6 +120,9 @@ export function ResearchRail({ fileId }: { fileId: string }) {
             <PanelSlot shown={active === "review"}>
               <SynthesisPanel fileId={fileId} />
             </PanelSlot>
+            <PanelSlot shown={active === "chat"}>
+              <WorkspaceChatPanel fileId={fileId} visible={active === "chat"} onUnread={onChatUnread} />
+            </PanelSlot>
           </div>
         </section>
 
@@ -123,6 +134,7 @@ export function ResearchRail({ fileId }: { fileId: string }) {
               t.id === "scout" ? (counts.scout > 0 ? { n: counts.scout, tone: "bg-sky-600" } : null)
               : t.id === "check" ? (counts.check === null ? null : counts.check > 0 ? { n: counts.check, tone: "bg-red-600" } : { n: 0, tone: "bg-emerald-600" })
               : t.id === "notebook" ? (counts.notebook > 0 ? { n: counts.notebook, tone: "bg-violet-600" } : null)
+              : t.id === "chat" ? (counts.chat > 0 ? { n: counts.chat, tone: "bg-blue-600" } : null)
               : null;
             return (
               <button
@@ -133,20 +145,19 @@ export function ResearchRail({ fileId }: { fileId: string }) {
                 aria-label={t.label}
                 title={t.label}
                 className={cn(
-                  "relative flex size-9 items-center justify-center rounded-md",
-                  on ? "bg-foreground text-background" : "text-muted-foreground hover:bg-muted hover:text-foreground",
-                  "transition-colors duration-150",
+                  "group relative flex size-9 items-center justify-center rounded-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
+                  on && "ring-2 ring-foreground/15",
                   press,
                 )}
               >
-                <t.icon className="size-4" />
+                <RailTile tool={t.id} active={on} />
                 {badge && (
                   <span
                     className={cn(
                       "absolute -right-0.5 -top-0.5 flex h-4 min-w-4 items-center justify-center rounded-full px-1 text-[10px] font-semibold tabular-nums text-white ring-2 ring-background",
                       badge.tone,
                     )}
-                    aria-label={`${badge.n} ${t.id === "check" ? "to review" : t.id === "scout" ? "suggestions" : "open notes"}`}
+                    aria-label={`${badge.n} ${t.id === "check" ? "to review" : t.id === "scout" ? "suggestions" : t.id === "chat" ? "new messages" : "open notes"}`}
                   >
                     {badge.n === 0 ? "✓" : badge.n}
                   </span>
@@ -160,9 +171,9 @@ export function ResearchRail({ fileId }: { fileId: string }) {
             onClick={() => setMapOpen(true)}
             aria-label="Evidence map"
             title="Evidence map: the draft's claims and the papers behind them"
-            className={cn("flex size-9 items-center justify-center rounded-md text-muted-foreground transition-colors duration-150 hover:bg-muted hover:text-foreground", press)}
+            className={cn("group flex size-9 items-center justify-center rounded-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring", press)}
           >
-            <Network className="size-4" />
+            <RailTile tool="map" active={mapOpen} />
           </button>
         </nav>
       </div>

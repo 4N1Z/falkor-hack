@@ -45,11 +45,11 @@ import {
 } from "@/db/actions/action-workspace";
 import { deleteFile } from "@/db/actions/get-files";
 import { File } from "@/db/database.types";
-import { Badge } from "../ui/badge";
 import EmojiPicker from "../emoji-picker";
 import BannerUpload from "./banner-upload/banner-upload-main";
 import { Button } from "../ui/button";
-import { ChevronDown, Download, FileDown, FileText, FunctionSquare, ImageIcon, XIcon } from "lucide-react";
+import { ChevronDown, ChevronRight, Download, FileDown, FileText, FunctionSquare, ImageIcon, XIcon } from "lucide-react";
+import NextLink from "next/link";
 import { toolbarButton } from "./toolbar-button";
 import Collaboration from "@tiptap/extension-collaboration";
 import CollaborationCursor from "@tiptap/extension-collaboration-cursor";
@@ -136,6 +136,8 @@ const NovelTailwindEditore = ({
   // Initialize Y.doc and provider only on client-side
   const [isCollaborationEnabled, setIsCollaborationEnabled] = useState(false);
   const saveTimerRef = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
+  // The editor's most recent JSON, so exports use what's on screen rather than what was loaded
+  const latestContent = useRef<JSONContent | null>(null);
 
   // One Y.Doc + HocuspocusProvider per file, torn down when the file changes or
   // the editor unmounts. The socket carries a short-lived token from
@@ -301,37 +303,16 @@ const NovelTailwindEditore = ({
     await updateFile({ iconId: icon }, fileId);
   };
 
-  const breadCrumbs = useMemo(() => {
-    if (!pathname || !state.workspaces || !workspaceId) return;
-
-    // Get workspace details
-    const workspaceDetails = state.workspaces.find(
-      (workspace) => workspace.id === workspaceId
-    );
-
-    const workspaceBreadCrumb = workspaceDetails
-      ? `${workspaceDetails.iconId} ${workspaceDetails.title}`
-      : "";
-
-    // Get folder details using folderId from props
-    const folderDetails = workspaceDetails?.folders.find(
-      (folder) => folder.id === folderIdProp
-    );
-
-    const folderBreadcrumb = folderDetails
-      ? `/ ${folderDetails.iconId} ${folderDetails.title}`
-      : "";
-
-    // Get file details
-    const fileDetails = folderDetails?.files.find((file) => file.id === fileId);
-
-    const fileBreadCrumb = fileDetails
-      ? `/ ${fileDetails.iconId} ${fileDetails.title}`
-      : "";
-
-    // Return full path
-    return `${workspaceBreadCrumb} ${folderBreadcrumb} ${fileBreadCrumb}`;
-  }, [pathname, state, workspaceId, folderIdProp, fileId]);
+  // Breadcrumb segments: workspace (links to the dashboard) › folder › this file
+  const crumbs = useMemo(() => {
+    if (!pathname || !state.workspaces || !workspaceId) return null;
+    const ws = state.workspaces.find((w) => w.id === workspaceId);
+    const folder = ws?.folders.find((f) => f.id === folderIdProp);
+    return {
+      workspace: ws ? { icon: ws.iconId, title: ws.title, href: `/dashboard/${workspaceId}` } : null,
+      folder: folder ? { icon: folder.iconId, title: folder.title } : null,
+    };
+  }, [pathname, state, workspaceId, folderIdProp]);
 
   useEffect(() => {
     const initializeEditor = async () => {
@@ -411,6 +392,41 @@ const NovelTailwindEditore = ({
       </div>
     );
   }
+
+  const exportable = () => (latestContent.current ?? initialContent) as JSONContent | null;
+
+  /** Download a .tex whose citations are \citep{} entries with a BibTeX section from the graph. */
+  const handleExportAsLatex = async () => {
+    const content = exportable();
+    if (!content || !workspaceId) return;
+    try {
+      const res = await fetch("/api/export/latex", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ workspaceId, fileId, title: details.title, content }),
+      });
+      if (!res.ok) throw new Error((await res.json().catch(() => ({}))).error ?? "Export failed");
+      const name = res.headers.get("Content-Disposition")?.match(/filename="([^"]+)"/)?.[1] ?? "document.tex";
+      const url = window.URL.createObjectURL(await res.blob());
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = name;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      window.URL.revokeObjectURL(url);
+      const cited = Number(res.headers.get("X-Citations") ?? 0);
+      const unresolved = Number(res.headers.get("X-Unresolved") ?? 0);
+      toast.success(`Exported ${name}`, {
+        description: cited
+          ? `${cited} citation${cited === 1 ? "" : "s"} as BibTeX from the research graph${unresolved ? `; ${unresolved} kept as links` : ""}`
+          : "No graph citations in this draft; links were kept as \\href",
+      });
+    } catch (error) {
+      console.error("Error exporting LaTeX:", error);
+      toast.error("Failed to export LaTeX");
+    }
+  };
 
   const handleExportAsPDF = async (content: JSONContent) => {
     try {
@@ -506,26 +522,42 @@ const NovelTailwindEditore = ({
             <span className="text-sm text-white">{details.inTrash}</span>
           </article>
         )}
-        <div className="flex flex-col-reverse sm:flex-row sm:justify-between justify-center sm:items-center sm:p-2 p-8">
-          <div>{breadCrumbs}</div>
-          <div className="flex items-center gap-4">
-            {/* collab */}
-            {saving ? (
-              <Badge
-                variant="secondary"
-                className="bg-orange-600 top-4 text-white right-4 z-50 "
-              >
-                Saving...
-              </Badge>
-            ) : (
-              <Badge
-                variant="secondary"
-                className="bg-green-600  top-4 text-white right-4 z-50"
-              >
-                Saved
-              </Badge>
-            )}
-          </div>
+        <div className="flex items-center justify-between gap-4 px-3 py-1.5 font-sans">
+          <nav aria-label="Breadcrumb" className="min-w-0">
+            <ol className="flex min-w-0 items-center gap-0.5 text-sm text-muted-foreground">
+              {crumbs?.workspace && (
+                <>
+                  <li className="min-w-0">
+                    <NextLink
+                      href={crumbs.workspace.href}
+                      className="inline-flex max-w-[14rem] items-center gap-1.5 rounded-md px-1.5 py-0.5 transition-colors duration-150 hover:bg-muted hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                    >
+                      <span aria-hidden>{crumbs.workspace.icon}</span>
+                      <span className="truncate">{crumbs.workspace.title}</span>
+                    </NextLink>
+                  </li>
+                  <ChevronRight aria-hidden className="size-3.5 shrink-0 opacity-50" />
+                </>
+              )}
+              {crumbs?.folder && (
+                <>
+                  <li className="inline-flex min-w-0 max-w-[12rem] items-center gap-1.5 px-1.5 py-0.5" title={crumbs.folder.title}>
+                    <span aria-hidden>{crumbs.folder.icon}</span>
+                    <span className="truncate">{crumbs.folder.title}</span>
+                  </li>
+                  <ChevronRight aria-hidden className="size-3.5 shrink-0 opacity-50" />
+                </>
+              )}
+              <li aria-current="page" className="inline-flex min-w-0 max-w-[20rem] items-center gap-1.5 px-1.5 py-0.5 font-medium text-foreground" title={details.title}>
+                <span aria-hidden>{details.iconId}</span>
+                <span className="truncate">{details.title}</span>
+              </li>
+            </ol>
+          </nav>
+          <p className="flex shrink-0 items-center gap-1.5 text-xs text-muted-foreground tabular-nums" aria-live="polite">
+            <span className={`size-1.5 rounded-full ${saving ? "bg-amber-500" : "bg-emerald-500"}`} aria-hidden />
+            {saving ? "Saving…" : "Saved"}
+          </p>
         </div>
       </div>
       {details.bannerUrl && (
@@ -594,14 +626,14 @@ const NovelTailwindEditore = ({
                 </Button>
               </DropdownMenuTrigger>
               <DropdownMenuContent align="start" className="w-[160px]">
-                <DropdownMenuItem onClick={() => handleExportAsPDF(initialContent as JSONContent)}>
+                <DropdownMenuItem onClick={() => handleExportAsPDF(exportable() ?? defaultEditorContent)}>
                   <FileDown className="mr-2 h-4 w-4" />
                   <span>PDF</span>
                 </DropdownMenuItem>
-                <DropdownMenuItem className="text-muted-foreground" disabled>
+                <DropdownMenuItem onClick={handleExportAsLatex}>
                   <FunctionSquare className="mr-2 h-4 w-4" />
                   <span>LaTeX</span>
-                  <span className="ml-auto text-[10px] uppercase tracking-wide">Soon</span>
+                  <span className="ml-auto text-[10px] uppercase tracking-wide text-muted-foreground">+ BibTeX</span>
                 </DropdownMenuItem>
                 <DropdownMenuItem className="text-muted-foreground" disabled>
                   <FileText className="mr-2 h-4 w-4" />
@@ -624,6 +656,7 @@ const NovelTailwindEditore = ({
             )
               return;
             const content = editor.getJSON();
+            latestContent.current = content;
             const contentLength = content
               ? JSON.stringify(content).length
               : 0;

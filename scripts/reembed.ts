@@ -31,6 +31,13 @@ const TARGETS = [
     write: `UNWIND $rows AS r MATCH (n:Memory {id: r.id}) SET n.embedding = vecf32(r.v)`,
     text: (r: Record<string, string | null>) => r.text ?? "",
   },
+  {
+    // Only questions carry vectors; answers are reached through the question
+    label: "ChatMessage",
+    read: `MATCH (n:ChatMessage {role: 'user'}) WHERE n.embedding IS NULL AND n.text IS NOT NULL RETURN n.id AS id, n.text AS text LIMIT ${PAGE}`,
+    write: `UNWIND $rows AS r MATCH (n:ChatMessage {id: r.id}) SET n.embedding = vecf32(r.v)`,
+    text: (r: Record<string, string | null>) => r.text ?? "",
+  },
 ];
 
 async function reembed(workspaceId: string) {

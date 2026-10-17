@@ -14,6 +14,8 @@ import {
   unique,
   pgEnum,
   index,
+  real,
+  uniqueIndex,
 } from "drizzle-orm/pg-core";
 import { sql } from "drizzle-orm";
 import { AdapterAccountType } from "next-auth/adapters";
@@ -441,5 +443,67 @@ export const papers = pgTable(
       sql`upload_url IS NULL OR upload_url ~ '^https?://'`
     ),
     doiCheck: check("doi_check", sql`doi IS NULL OR doi ~ '^10\.'`),
+  })
+);
+
+// ---------------------------------------------------------------- Workspace chat
+// Postgres is the record for the team chat; each exchange is also mirrored into the
+// workspace's FalkorDB graph (src/lib/chat/mirror.ts) so agents can recall what was asked.
+
+export const chatRoleEnum = pgEnum("chat_role", ["user", "assistant"]);
+
+export const chatThreads = pgTable(
+  "chat_threads",
+  {
+    id: uuid().defaultRandom().primaryKey().notNull(),
+    workspaceId: uuid("workspace_id")
+      .references(() => workspaces.id, { onDelete: "cascade" })
+      .notNull(),
+    title: text("title").notNull().default("Team chat"),
+    isDefault: boolean("is_default").notNull().default(false),
+    createdBy: uuid("created_by").references(() => users.id, { onDelete: "set null" }),
+    createdAt: timestamp("created_at", { withTimezone: true, mode: "string" })
+      .defaultNow()
+      .notNull(),
+    lastMessageAt: timestamp("last_message_at", { withTimezone: true, mode: "string" }),
+  },
+  (table) => ({
+    workspaceIdx: index("idx_chat_threads_workspace").on(table.workspaceId, table.lastMessageAt),
+    // One default thread per workspace; makes lazy creation race-safe (insert … on conflict do nothing)
+    oneDefault: uniqueIndex("uq_chat_threads_default")
+      .on(table.workspaceId)
+      .where(sql`${table.isDefault} = true`),
+  })
+);
+
+export const chatMessages = pgTable(
+  "chat_messages",
+  {
+    // AI SDK message ids are nanoid-style, not uuids
+    id: text("id").primaryKey().notNull(),
+    // Strictly increasing within the table; the poll cursor
+    seq: bigint("seq", { mode: "number" }).generatedAlwaysAsIdentity(),
+    threadId: uuid("thread_id")
+      .references(() => chatThreads.id, { onDelete: "cascade" })
+      .notNull(),
+    // Denormalised so access checks don't need a join
+    workspaceId: uuid("workspace_id")
+      .references(() => workspaces.id, { onDelete: "cascade" })
+      .notNull(),
+    role: chatRoleEnum("role").notNull(),
+    content: text("content").notNull(),
+    parts: jsonb("parts"),
+    toolInvocations: jsonb("tool_invocations"),
+    userId: uuid("user_id").references(() => users.id, { onDelete: "set null" }),
+    fileId: uuid("file_id").references(() => files.id, { onDelete: "set null" }),
+    route: text("route"),
+    confidence: real("confidence"),
+    runId: text("run_id"),
+    createdAt: timestamp("created_at", { withTimezone: true, mode: "string" })
+      .defaultNow()
+      .notNull(),
+  },
+  (table) => ({
+    threadSeqIdx: index("idx_chat_messages_thread_seq").on(table.threadId, table.seq),
   })
 );

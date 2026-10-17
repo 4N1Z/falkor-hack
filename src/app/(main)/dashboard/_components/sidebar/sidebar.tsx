@@ -13,6 +13,7 @@ import FoldersDropdownList from "./folders-list";
 import EnableAIWorkspace from "./enable-ai-workspace";
 import ResearchPaperMain from "./researchpaper/researchPaper-main";
 import ResearchGraphCard from "./research-graph-card";
+import AdamCard from "./adam-card";
 import UserProfile from "./user-profile";
 import { redirect } from "next/navigation";
 import { auth } from "@/auth";
@@ -78,11 +79,12 @@ export default async function Sidebar({ params, className }: SidebarProps) {
     <TooltipProvider delayDuration={400} skipDelayDuration={300}>
     <aside
       className={cn(
-        "hidden sm:flex m-2 border rounded-sm border-sky-100 sm:flex-col w-[320px] shrink-0 p-4 gap-4 bg-card-foreground font-sans h-full max-h-[97vh]",
+        // A definite height (viewport minus the margins) is what lets the folder list scroll under the profile card
+        "hidden sm:flex m-2 border rounded-sm border-sky-100 sm:flex-col w-[320px] shrink-0 p-4 gap-4 bg-card-foreground font-sans h-[calc(100vh-1rem)] max-h-[calc(100vh-1rem)] overflow-hidden",
         className
       )}
     >
-      <div className="flex flex-col h-full">
+      <div className="flex flex-col h-full min-h-0">
         {/* Top Section - Always Visible */}
         <div className="space-y-2 flex-shrink-0">
           {/* <WorkspaceDropdown
@@ -111,6 +113,7 @@ export default async function Sidebar({ params, className }: SidebarProps) {
           <div className="space-y-2">
             <ResearchPaperMain myWorkspaceId={params.workspaceId} />
             <ResearchGraphCard myWorkspaceId={params.workspaceId} />
+            <AdamCard myWorkspaceId={params.workspaceId} />
           </div>
         </div>
 
@@ -134,7 +137,6 @@ export default async function Sidebar({ params, className }: SidebarProps) {
             />
           </ScrollArea>
         </div>
-        {/* <NeuraAIBlock/> */}
 
         {/* User Profile - Fixed at Bottom */}
         <div className="flex-shrink-0 mt-4">

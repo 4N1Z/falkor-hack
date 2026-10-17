@@ -1,5 +1,7 @@
 import React from "react";
 import Sidebar from "../_components/sidebar/sidebar";
+import { SidebarShell } from "../_components/sidebar/sidebar-shell";
+import WorkspaceChatPopup from "../_components/workspace-chat-popup";
 import "./prosemirror.css";
 import { checkWorkspaceAccess } from "@/db/actions/authorization-check";
 import { redirect } from "next/navigation";
@@ -43,10 +45,15 @@ export default async function WorkspaceLayout(
       )}
 
       <div className="flex overflow-hidden">
-        <Sidebar params={params} />
+        {/* Inside a document the sidebar folds to a strip, so the page is the text plus the research rail */}
+        <SidebarShell workspaceId={params.workspaceId}>
+          <Sidebar params={params} />
+        </SidebarShell>
         <div className={`border-neutral-700 w-full relative overflow-auto flex-1`}>
           {children}
         </div>
+        {/* Team chat popup (dashboard and graph pages; documents have it in the research rail) */}
+        <WorkspaceChatPopup workspaceId={params.workspaceId} />
       </div>
     </main>
   );

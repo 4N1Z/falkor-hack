@@ -363,8 +363,9 @@ function Compose({ onSave }: { onSave: (text: string, kind?: MemoryKind) => Prom
         placeholder="Record a hypothesis, finding or question…"
         className="block w-full resize-none bg-transparent px-3 pb-1 pt-2.5 text-sm outline-none placeholder:text-muted-foreground"
       />
-      <div className="flex items-center justify-between gap-2 px-2 pb-2">
-        <div className="flex items-center gap-0.5" role="radiogroup" aria-label="Kind of note">
+      {/* Wraps instead of squeezing: on a narrow sheet the button drops to its own line, right-aligned */}
+      <div className="flex flex-wrap items-center gap-x-2 gap-y-1.5 px-2 pb-2">
+        <div className="flex min-w-0 flex-wrap items-center gap-0.5" role="radiogroup" aria-label="Kind of note">
           {(["hypothesis", "finding", "question"] as MemoryKind[]).map((k) => {
             const on = kind === k;
             return (
@@ -375,7 +376,7 @@ function Compose({ onSave }: { onSave: (text: string, kind?: MemoryKind) => Prom
                 aria-checked={on}
                 onClick={() => setKind(on ? undefined : k)}
                 className={cn(
-                  "inline-flex h-6 items-center gap-1 rounded px-1.5 text-[11px] transition-colors duration-150",
+                  "inline-flex h-6 shrink-0 items-center gap-1 whitespace-nowrap rounded px-1.5 text-[11px] transition-colors duration-150",
                   on ? "bg-foreground text-background" : "text-muted-foreground hover:bg-muted",
                   press,
                 )}
@@ -385,9 +386,9 @@ function Compose({ onSave }: { onSave: (text: string, kind?: MemoryKind) => Prom
               </button>
             );
           })}
-          {!kind && <span className="ml-1 hidden text-[11px] text-muted-foreground sm:inline">or let Neura decide</span>}
+          {!kind && <span className="ml-1 whitespace-nowrap text-[11px] text-muted-foreground">or let Neura decide</span>}
         </div>
-        <Button size="sm" onClick={submit} disabled={!ready || saving} className={cn("h-7 gap-1 px-2.5 text-xs", press)}>
+        <Button size="sm" onClick={submit} disabled={!ready || saving} className={cn("ml-auto h-7 shrink-0 gap-1 px-2.5 text-xs", press)}>
           {saving ? <Loader2 className="size-3.5 animate-spin" /> : <CornerDownLeft className="size-3.5" />}
           Remember
         </Button>
