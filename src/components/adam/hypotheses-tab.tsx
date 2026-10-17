@@ -17,7 +17,7 @@ import type { ProjectStatus } from "@/lib/adam/status";
 import { passGate, refreshAdam } from "@/lib/hooks/use-adam";
 import { cn } from "@/lib/utils";
 import { Check, ChevronDown, ChevronRight, Loader2, Pencil, RotateCw, ShieldAlert, Skull, Sparkles, Swords, X } from "lucide-react";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
 import useSWR, { mutate } from "swr";
 import { NodeSheet } from "./knowledge-tab";
@@ -196,7 +196,15 @@ function BriefCard({ brief: b, workspaceId, projectId, selectable, picked, onPic
   onChanged: () => Promise<unknown>;
   onOpenNode: (id: string) => void;
 }) {
-  const [open, setOpen] = useState<string | null>("evidence");
+  // When the kill-criteria signature is what the loop waits on, open that section, highlight it, and bring it into view
+  const [open, setOpen] = useState<string | null>(needsSignature ? "kill" : "evidence");
+  const killRef = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    if (!needsSignature) return;
+    setOpen("kill");
+    const t = setTimeout(() => killRef.current?.scrollIntoView({ behavior: "smooth", block: "center" }), 150);
+    return () => clearTimeout(t);
+  }, [needsSignature]);
   const [editing, setEditing] = useState<"statement" | "kill" | null>(null);
   const [draft, setDraft] = useState("");
   const [signText, setSignText] = useState<string | null>(null);
@@ -312,7 +320,7 @@ function BriefCard({ brief: b, workspaceId, projectId, selectable, picked, onPic
         <p><span className="text-muted-foreground">If false:</span> {b.predictionIfFalse}</p>
         {b.procedureHint && <p className="text-xs text-muted-foreground mt-1">Distinguished by: {b.procedureHint}</p>}
       </Section>
-      <Section {...sec("kill")} title="Kill criteria">
+      <Section {...sec("kill")} title="Kill criteria" highlight={needsSignature && !killSigned} badge={needsSignature && !killSigned ? "needs your signature" : undefined} anchorRef={killRef}>
         {editing === "kill" ? (
           <div className="flex flex-col gap-2">
             <textarea className="w-full rounded-md border px-3 py-2 text-sm leading-relaxed min-h-[4rem]" value={draft} onChange={(e) => setDraft(e.target.value)} autoFocus />
@@ -416,13 +424,38 @@ function EvidenceList({ items, tone, onOpen }: { items: BriefView["evidence"]; t
 }
 
 /** One collapsible section of a brief. Module-level so React keeps its editor mounted while typing. */
-function Section({ title, count, open, onToggle, children }: { title: string; count?: number | string; open: boolean; onToggle: () => void; children: React.ReactNode }) {
+function Section({
+  title,
+  count,
+  open,
+  onToggle,
+  highlight,
+  badge,
+  anchorRef,
+  children,
+}: {
+  title: string;
+  count?: number | string;
+  open: boolean;
+  onToggle: () => void;
+  /** The loop is waiting on this section: amber ring and a pulse until it is dealt with */
+  highlight?: boolean;
+  badge?: string;
+  anchorRef?: React.RefObject<HTMLDivElement | null>;
+  children: React.ReactNode;
+}) {
   return (
-    <div className="border-t">
+    <div ref={anchorRef} className={cn("border-t", highlight && "bg-amber-50/50 ring-2 ring-inset ring-amber-400/70")}>
       <button className="w-full flex items-center gap-2 px-4 py-2 text-left text-sm hover:bg-accent/40" onClick={onToggle}>
         {open ? <ChevronDown className="size-3.5 text-muted-foreground" /> : <ChevronRight className="size-3.5 text-muted-foreground" />}
-        <span className="font-medium">{title}</span>
+        <span className={cn("font-medium", highlight && "text-amber-900")}>{title}</span>
         {count !== undefined && <span className="text-xs text-muted-foreground tabular-nums">{count}</span>}
+        {badge && (
+          <span className="ml-auto inline-flex items-center gap-1.5 rounded-full bg-amber-100 px-2 py-0.5 text-[11px] font-medium text-amber-900">
+            <span className="inline-block size-1.5 rounded-full bg-amber-500 animate-pulse" />
+            {badge}
+          </span>
+        )}
       </button>
       {open && <div className="px-9 pb-3 text-sm">{children}</div>}
     </div>
