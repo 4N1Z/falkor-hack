@@ -39,7 +39,8 @@ export type JobKind =
   | "write_hypotheses"
   | "falsify"
   | "design_experiment"
-  | "saturation";
+  | "saturation"
+  | "auto_review";
 
 export type JobStatus = "queued" | "running" | "done" | "failed" | "cancelled";
 
@@ -103,6 +104,8 @@ export interface AdamJob {
   result: Record<string, unknown> | null;
   createdAt: number;
   finishedAt: number | null;
+  /** The handler's last heartbeat progress, for the UI */
+  progress: Record<string, unknown>;
 }
 
 export interface AdamEvent {

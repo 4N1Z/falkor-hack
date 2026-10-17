@@ -27,8 +27,8 @@ import { parseJson, type AdamJob, type JobKind, type JobStatus } from "./types";
 export const STALE_MS = 5 * 60 * 1000;
 const BACKOFF_MS = 30_000;
 
-type Row = Omit<AdamJob, "payload" | "result"> & { payload: string; result: string | null };
-const toJob = (r: Row): AdamJob => ({ ...r, payload: parseJson(r.payload, {}), result: r.result ? parseJson(r.result, null) : null });
+type Row = Omit<AdamJob, "payload" | "result" | "progress"> & { payload: string; result: string | null; progress: string };
+const toJob = (r: Row): AdamJob => ({ ...r, payload: parseJson(r.payload, {}), result: r.result ? parseJson(r.result, null) : null, progress: parseJson(r.progress, {}) });
 
 const params = <T>(p: T) => ({ params: p as never });
 

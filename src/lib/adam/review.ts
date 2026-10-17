@@ -9,7 +9,21 @@ import { emit } from "./events";
 import * as jobs from "./jobs";
 import { PRIORITY } from "./orchestrator";
 import { nameKey } from "./resolve";
-import { DECIDE_NODE, DECIDE_NODE_EDGES, METHOD_MENTIONS, NODE_DETAIL, NODE_EDGES, QUEUE_ITEMS, RETRACT_CONFLICT_PARTNER, SET_NODE_EMBEDDING, UNMERGE_METHOD } from "./queries-review";
+import {
+  AUTO_REVIEWED_ITEMS,
+  DECIDE_NODE,
+  DECIDE_NODE_EDGES,
+  DECIDE_NODES_BATCH,
+  METHOD_MENTIONS,
+  NODE_DETAIL,
+  NODE_EDGES,
+  PAPER_ABSTRACTS,
+  QUEUE_ITEMS,
+  QUEUE_PASSAGES,
+  RETRACT_CONFLICT_PARTNER,
+  SET_NODE_EMBEDDING,
+  UNMERGE_METHOD,
+} from "./queries-review";
 
 export type QueueKind = "conflict" | "unsourced" | "low_confidence" | "load_bearing";
 
@@ -51,16 +65,18 @@ export const kindOf = (it: { state: string; reason: string; loadBearing: boolean
 const KIND_ORDER: QueueKind[] = ["conflict", "unsourced", "load_bearing", "low_confidence"];
 const params = <T>(p: T) => ({ params: p as never });
 
-export async function queueItems(graph: Graph, projectId: string): Promise<QueueItem[]> {
-  const rows = (await graph.roQuery<Omit<QueueItem, "kind" | "partner">>(QUEUE_ITEMS, params({ projectId }))).data ?? [];
+type QueueRow = Omit<QueueItem, "kind" | "partner" | "chunkText" | "chunkSection" | "chunkPage">;
+
+/** All open items, deduplicated per conflict pair, sorted worst-first; no passage text. */
+async function openItems(graph: Graph, projectId: string, query = QUEUE_ITEMS): Promise<Omit<QueueItem, "chunkText" | "chunkSection" | "chunkPage">[]> {
+  const rows = (await graph.roQuery<QueueRow>(query, params({ projectId }))).data ?? [];
   const byId = new Map(rows.map((r) => [r.id, r]));
-  const items: QueueItem[] = rows.map((r) => {
+  const items = rows.map((r) => {
     const partner = r.conflictWith ? byId.get(r.conflictWith) : null;
     return { ...r, kind: kindOf(r), partner: partner ? { id: partner.id, text: partner.text, state: partner.state, slot: partner.slot } : null };
   });
-  // One card per conflict pair: show slot a's item, carrying slot b as the partner
   const seen = new Set<string>();
-  const out: QueueItem[] = [];
+  const out: typeof items = [];
   for (const it of items.sort((a, b) => KIND_ORDER.indexOf(a.kind) - KIND_ORDER.indexOf(b.kind) || b.dependents - a.dependents || a.createdAt - b.createdAt)) {
     if (seen.has(it.id)) continue;
     if (it.kind === "conflict" && it.partner) seen.add(it.partner.id);
@@ -68,6 +84,84 @@ export async function queueItems(graph: Graph, projectId: string): Promise<Queue
     out.push(it);
   }
   return out;
+}
+
+/** Attach the quoted passage (or the paper's abstract) to a page of items. */
+async function withPassages<T extends { chunkId: string | null; paperId: string | null }>(graph: Graph, items: T[]): Promise<(T & { chunkText: string; chunkSection: string; chunkPage: number })[]> {
+  const chunkIds = [...new Set(items.map((i) => i.chunkId).filter((x): x is string => !!x))];
+  const paperIds = [...new Set(items.filter((i) => !i.chunkId && i.paperId).map((i) => i.paperId!))];
+  const [chunks, abstracts] = await Promise.all([
+    chunkIds.length ? graph.roQuery<{ id: string; text: string; section: string; page: number }>(QUEUE_PASSAGES, params({ ids: chunkIds })).then((r) => r.data ?? []) : Promise.resolve([]),
+    paperIds.length ? graph.roQuery<{ id: string; abstract: string }>(PAPER_ABSTRACTS, params({ ids: paperIds })).then((r) => r.data ?? []) : Promise.resolve([]),
+  ]);
+  const chunkOf = new Map(chunks.map((c) => [c.id, c]));
+  const abstractOf = new Map(abstracts.map((a) => [a.id, a.abstract]));
+  return items.map((i) => {
+    const ch = i.chunkId ? chunkOf.get(i.chunkId) : undefined;
+    return { ...i, chunkText: ch?.text ?? (i.paperId ? abstractOf.get(i.paperId) ?? "" : ""), chunkSection: ch?.section ?? "", chunkPage: ch?.page ?? 0 };
+  });
+}
+
+export interface QueuePage {
+  items: QueueItem[];
+  total: number;
+  counts: Partial<Record<QueueKind, number>>;
+  papers: { paperId: string; title: string; n: number }[];
+  autoReviewed: number;
+}
+
+/**
+ * One page of the exception queue, filtered and sorted on the server so the client only ever
+ * holds what it shows. `view: "auto"` lists what the auto-review decided, for audit.
+ */
+export async function queuePage(
+  graph: Graph,
+  projectId: string,
+  opts: { kind?: QueueKind | "all"; paperId?: string | "all"; offset?: number; limit?: number; view?: "open" | "auto" } = {},
+): Promise<QueuePage> {
+  const [all, auto] = await Promise.all([openItems(graph, projectId), openItems(graph, projectId, AUTO_REVIEWED_ITEMS)]);
+  const source = opts.view === "auto" ? auto : all;
+  const counts: Partial<Record<QueueKind, number>> = {};
+  const paperCounts = new Map<string, { title: string; n: number }>();
+  for (const it of all) {
+    counts[it.kind] = (counts[it.kind] ?? 0) + 1;
+    if (it.paperId) paperCounts.set(it.paperId, { title: it.paperTitle, n: (paperCounts.get(it.paperId)?.n ?? 0) + 1 });
+  }
+  const filtered = source.filter((it) => (!opts.kind || opts.kind === "all" || it.kind === opts.kind) && (!opts.paperId || opts.paperId === "all" || it.paperId === opts.paperId));
+  const offset = Math.max(0, opts.offset ?? 0);
+  const limit = Math.min(100, Math.max(1, opts.limit ?? 40));
+  const page = await withPassages(graph, filtered.slice(offset, offset + limit));
+  return {
+    items: page as QueueItem[],
+    total: filtered.length,
+    counts,
+    papers: [...paperCounts.entries()].map(([paperId, v]) => ({ paperId, title: v.title, n: v.n })).sort((a, b) => b.n - a.n),
+    autoReviewed: auto.length,
+  };
+}
+
+/** Kept for callers that want everything (the auto-review job). */
+export async function queueItems(graph: Graph, projectId: string): Promise<QueueItem[]> {
+  return withPassages(graph, await openItems(graph, projectId)) as Promise<QueueItem[]>;
+}
+
+/** Bulk approve / reject in one round trip (corrections and send-backs go through `decide`). */
+export async function decideMany(graph: Graph, input: { projectId: string; userId: string; rows: { nodeId: string; decision: "approve" | "reject" }[] }) {
+  if (!input.rows.length) return 0;
+  const at = Date.now();
+  const rows = input.rows.map((r) => ({
+    id: r.nodeId,
+    state: r.decision === "approve" ? "human_approved" : "retracted",
+    reason: r.decision === "approve" ? null : "rejected",
+    edgeStatus: r.decision === "approve" ? "accepted" : "rejected",
+  }));
+  let n = 0;
+  for (let i = 0; i < rows.length; i += 100) {
+    const r = await graph.query<{ n: number }>(DECIDE_NODES_BATCH, params({ projectId: input.projectId, userId: input.userId, at, rows: rows.slice(i, i + 100) }));
+    n += r.data?.[0]?.n ?? 0;
+  }
+  await emit(graph, input.projectId, "queue_decided_batch", { approved: rows.filter((r) => r.state === "human_approved").length, rejected: rows.filter((r) => r.state === "retracted").length, by: input.userId });
+  return n;
 }
 
 export type Decision = "approve" | "correct" | "reject" | "send_back";

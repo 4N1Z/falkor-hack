@@ -172,4 +172,5 @@ export const PRIORITY: Partial<Record<JobKind, number>> = {
   falsify: 76,
   design_experiment: 80,
   saturation: 90,
+  auto_review: 35,
 };
