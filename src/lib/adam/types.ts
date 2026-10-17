@@ -80,6 +80,8 @@ export interface AdamProject {
   maxConcurrency: number;
   /** Which gate the project is waiting on, when status is blocked_on_gate */
   gate: Gate | null;
+  /** Pass write-ups saved as workspace files */
+  papers: { pass: number; fileId: string; title: string; at: number }[];
   createdBy: string;
   createdAt: number;
   updatedAt: number;

@@ -25,6 +25,7 @@ import {
   PAPER_METHODS,
   PAPER_VECTORS,
   PROJECT_COMMUNITIES,
+  PROJECT_COMPONENTS,
   SET_PAPER_COMMUNITIES,
   UPSERT_CANDIDATE,
   VERIFIED_CLAIMS_PER_PAPER,
@@ -114,11 +115,13 @@ export async function runAnalyst(
     async () => (await graph.roQuery<{ paperId: string; title: string; communityId: number; label: string; clusterId: string }>(PROJECT_COMMUNITIES, params({ projectId: pid }))).data ?? [],
     { source: "graph", cypher: "PROJECT_COMMUNITIES (algo.labelPropagation)" },
   );
-  const [methodsRows, vectorRows, claimRows] = await Promise.all([
+  const [methodsRows, vectorRows, claimRows, componentRows] = await Promise.all([
     graph.roQuery<{ paperId: string; methods: string[]; names: string[] }>(PAPER_METHODS, params({ projectId: pid })).then((r) => r.data ?? []),
     graph.roQuery<{ paperId: string; embedding: number[] }>(PAPER_VECTORS, params({ projectId: pid })).then((r) => r.data ?? []),
     graph.roQuery<{ paperId: string; claims: number }>(VERIFIED_CLAIMS_PER_PAPER, params({ projectId: pid })).then((r) => r.data ?? []),
+    run.step("graph.components", async () => (await graph.roQuery<{ paperId: string; componentId: number }>(PROJECT_COMPONENTS, params({ projectId: pid }))).data ?? [], { source: "graph", cypher: "PROJECT_COMPONENTS (algo.WCC)" }),
   ]);
+  const componentOf = new Map(componentRows.map((r) => [r.paperId, r.componentId]));
   const methodsOf = new Map(methodsRows.map((r) => [r.paperId, r]));
   const vectorOf = new Map(vectorRows.map((r) => [r.paperId, r.embedding]));
   const claimsOf = new Map(claimRows.map((r) => [r.paperId, r.claims]));
@@ -166,8 +169,14 @@ export async function runAnalyst(
       const shared = [...a.methodNames].filter((m) => b.methodNames.has(m));
       const cos = a.centroid && b.centroid ? cosine(a.centroid, b.centroid) : 0;
       if (shared.length < HOLE_MIN_SHARED_METHODS && cos < HOLE_MIN_CENTROID_COS) continue;
-      const links = (await graph.roQuery<{ cites: number; claimLinks: number }>(LINKS_BETWEEN, params({ projectId: pid, a: a.papers.map((p) => p.paperId), b: b.papers.map((p) => p.paperId) }))).data?.[0];
-      if ((links?.cites ?? 0) + (links?.claimLinks ?? 0) > 0) continue;
+      // WCC shortcut: clusters in different weak components share no edge, so only same-component pairs need the link count
+      const compsA = new Set(a.papers.map((p) => componentOf.get(p.paperId)));
+      const compsB = new Set(b.papers.map((p) => componentOf.get(p.paperId)));
+      const mayTouch = [...compsA].some((c) => compsB.has(c));
+      if (mayTouch) {
+        const links = (await graph.roQuery<{ cites: number; claimLinks: number }>(LINKS_BETWEEN, params({ projectId: pid, a: a.papers.map((p) => p.paperId), b: b.papers.map((p) => p.paperId) }))).data?.[0];
+        if ((links?.cites ?? 0) + (links?.claimLinks ?? 0) > 0) continue;
+      }
       holes.push({ a, b, shared, cos, score: shared.length + cos });
     }
   }

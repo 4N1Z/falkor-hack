@@ -26,6 +26,16 @@ RETURN [n IN nodes(p) | n.id] AS ids,
        length(p) AS hops
 LIMIT 50`;
 
+/**
+ * Weighted shortest chains (algo.SPpaths) from the producing procedure back to a root, by the
+ * DEPENDS_ON edge weight (set by the Methods Hunter from the prerequisite's hours). Used when
+ * the plain enumeration above is deep enough to be truncated, so the cheapest chain is never lost.
+ */
+export const SP_CHAINS = `
+MATCH (last:Procedure {id: $lastId}), (first:Procedure {id: $firstId})
+CALL algo.SPpaths({sourceNode: last, targetNode: first, relTypes: ['DEPENDS_ON'], relDirection: 'outgoing', weightProp: 'weight', maxLen: 8, pathCount: 3}) YIELD path, pathWeight
+RETURN [n IN nodes(path) | n.id] AS ids, pathWeight`;
+
 export const PROCEDURE_DETAILS = `
 MATCH (pr:Procedure)
 WHERE pr.id IN $ids

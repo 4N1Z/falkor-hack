@@ -6,7 +6,7 @@ import type { ClusterStat } from "@/lib/adam/saturation";
 import type { ProjectStatus } from "@/lib/adam/status";
 import { refreshAdam } from "@/lib/hooks/use-adam";
 import { cn } from "@/lib/utils";
-import { Loader2, RotateCw } from "lucide-react";
+import { FileText, Loader2, RotateCw } from "lucide-react";
 import { useState } from "react";
 import { toast } from "sonner";
 import useSWR, { mutate } from "swr";
@@ -43,6 +43,21 @@ export function SaturationTab({ workspaceId, status }: { workspaceId: string; st
     }
   };
 
+  const writeUp = async () => {
+    setBusy("paper");
+    try {
+      const r = await fetch(`/api/adam/${projectId}/paper`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ workspaceId }) });
+      const b = await r.json();
+      if (!r.ok) throw new Error(b.error ?? "Couldn't write the paper");
+      toast.success("Write-up saved", { description: `${b.title} is in the Adam folder, ${b.sections} sections, ${b.references} references.` });
+      await refreshAdam(workspaceId, projectId);
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "Couldn't write the paper");
+    } finally {
+      setBusy(null);
+    }
+  };
+
   if (error) return <p className="text-sm text-red-700">{error.message}</p>;
 
   return (
@@ -60,11 +75,30 @@ export function SaturationTab({ workspaceId, status }: { workspaceId: string; st
           <Button size="sm" variant="outline" disabled={busy !== null} onClick={() => post({ resweep: true }, "resweep", "Re-sweep queued: papers that cited the core recently")}>
             Re-sweep recent citations
           </Button>
+          <Button size="sm" variant="outline" disabled={busy !== null} onClick={writeUp} title="Assemble this pass into a document in the workspace's Adam folder: introduction, related work, methods, hypotheses, plans, discussion, references">
+            {busy === "paper" ? <Loader2 className="size-3.5 animate-spin" /> : <FileText className="size-3.5" />}
+            <span className="ml-1.5">Write up pass {status.project.pass}</span>
+          </Button>
           <Button size="sm" disabled={busy !== null || status.project.status === "running"} onClick={() => post({ nextPass: true }, "next", `Pass ${status.project.pass + 1} started: back to the question with sharper sub-questions`)}>
             Start pass {status.project.pass + 1}
           </Button>
         </div>
       </header>
+
+      {status.project.papers.length > 0 && (
+        <section className="rounded-lg border bg-white px-4 py-3 text-sm">
+          <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground mb-1.5">Write-ups</p>
+          <ul className="flex flex-col gap-1">
+            {status.project.papers.map((pp) => (
+              <li key={pp.fileId} className="flex items-center gap-2">
+                <FileText className="size-3.5 text-muted-foreground" />
+                <a href={`/dashboard/${workspaceId}/${pp.fileId}`} className="hover:underline decoration-dotted">{pp.title}</a>
+                <span className="text-xs text-muted-foreground">{new Date(pp.at).toLocaleDateString()}</span>
+              </li>
+            ))}
+          </ul>
+        </section>
+      )}
 
       {!data ? (
         <div className="flex items-center gap-2 text-sm text-muted-foreground py-10 justify-center"><Loader2 className="size-4 animate-spin" /> Loading…</div>
