@@ -13,7 +13,6 @@ import {
   AlertDialogTrigger,
 } from "@/components/ui/alert-dialog";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
 import type { ProjectStatus } from "@/lib/adam/status";
 import { passGate, refreshAdam } from "@/lib/hooks/use-adam";
 import { cn } from "@/lib/utils";
@@ -200,7 +199,8 @@ function BriefCard({ brief: b, workspaceId, projectId, selectable, picked, onPic
   const [open, setOpen] = useState<string | null>("evidence");
   const [editing, setEditing] = useState<"statement" | "kill" | null>(null);
   const [draft, setDraft] = useState("");
-  const [retyped, setRetyped] = useState("");
+  const [signText, setSignText] = useState<string | null>(null);
+  const [committed, setCommitted] = useState(false);
   const [busy, setBusy] = useState<string | null>(null);
   const s = STATUS[b.status];
   const forE = b.evidence.filter((e) => e.type === "EVIDENCE_FOR");
@@ -225,9 +225,11 @@ function BriefCard({ brief: b, workspaceId, projectId, selectable, picked, onPic
   const sign = async () => {
     setBusy("sign");
     try {
-      await passGate(workspaceId, projectId, "kill", { hypothesisId: b.id, killCriteria: b.killCriteria });
+      const text = (signText ?? b.killCriteria).trim();
+      await passGate(workspaceId, projectId, "kill", { hypothesisId: b.id, killCriteria: text });
       toast.success("Kill criteria signed", { description: "Recorded before any data is collected." });
-      setRetyped("");
+      setSignText(null);
+      setCommitted(false);
       await onChanged();
     } catch (e) {
       toast.error(e instanceof Error ? e.message : "Couldn't sign");
@@ -249,19 +251,11 @@ function BriefCard({ brief: b, workspaceId, projectId, selectable, picked, onPic
     }
   };
 
-  const Section = ({ id, title, count, children }: { id: string; title: string; count?: number | string; children: React.ReactNode }) => (
-    <div className="border-t">
-      <button className="w-full flex items-center gap-2 px-4 py-2 text-left text-sm hover:bg-accent/40" onClick={() => setOpen(open === id ? null : id)}>
-        {open === id ? <ChevronDown className="size-3.5 text-muted-foreground" /> : <ChevronRight className="size-3.5 text-muted-foreground" />}
-        <span className="font-medium">{title}</span>
-        {count !== undefined && <span className="text-xs text-muted-foreground tabular-nums">{count}</span>}
-      </button>
-      {open === id && <div className="px-9 pb-3 text-sm">{children}</div>}
-    </div>
-  );
+  // Stable props for the hoisted Section (a component defined inside this render would remount its textarea on every keystroke)
+  const sec = (id: string) => ({ open: open === id, onToggle: () => setOpen(open === id ? null : id) });
 
   const killSigned = !!b.killSignedAt;
-  const signMatch = retyped.trim().length > 10 && retyped.trim().toLowerCase().replace(/\s+/g, " ") === b.killCriteria.trim().toLowerCase().replace(/\s+/g, " ");
+  const signDraft = signText ?? b.killCriteria;
 
   return (
     <article className={cn("rounded-lg border bg-white", b.status === "killed" && "opacity-70", picked && "ring-2 ring-primary/30")}>
@@ -297,13 +291,13 @@ function BriefCard({ brief: b, workspaceId, projectId, selectable, picked, onPic
         </div>
       </header>
 
-      <Section id="boundary" title="Boundary" count={`${b.boundaryHolds.length} holds · ${b.boundaryFails.length} fails`}>
+      <Section {...sec("boundary")} title="Boundary" count={`${b.boundaryHolds.length} holds · ${b.boundaryFails.length} fails`}>
         <div className="grid sm:grid-cols-2 gap-3">
           <ul className="flex flex-col gap-1">{b.boundaryHolds.map((x) => <li key={x} className="flex gap-1.5"><Check className="size-3.5 mt-0.5 text-emerald-600 shrink-0" /><span>{x}</span></li>)}</ul>
           <ul className="flex flex-col gap-1 text-muted-foreground">{b.boundaryFails.length ? b.boundaryFails.map((x) => <li key={x} className="flex gap-1.5"><X className="size-3.5 mt-0.5 shrink-0" /><span>{x}</span></li>) : <li className="text-amber-800">No failure condition named: not falsifiable yet.</li>}</ul>
         </div>
       </Section>
-      <Section id="evidence" title="Evidence" count={`${forE.length} for · ${against.length} against`}>
+      <Section {...sec("evidence")} title="Evidence" count={`${forE.length} for · ${against.length} against`}>
         <EvidenceList items={forE} tone="for" onOpen={onOpenNode} />
         {against.length ? <EvidenceList items={against} tone="against" onOpen={onOpenNode} /> : <p className="text-xs text-amber-800 mt-2">No evidence against was cited. An empty row here is a warning sign.</p>}
         {b.supports.length > 0 && (
@@ -313,12 +307,12 @@ function BriefCard({ brief: b, workspaceId, projectId, selectable, picked, onPic
           </p>
         )}
       </Section>
-      <Section id="prediction" title="Prediction">
+      <Section {...sec("prediction")} title="Prediction">
         <p><span className="text-muted-foreground">If true:</span> {b.predictionIfTrue}</p>
         <p><span className="text-muted-foreground">If false:</span> {b.predictionIfFalse}</p>
         {b.procedureHint && <p className="text-xs text-muted-foreground mt-1">Distinguished by: {b.procedureHint}</p>}
       </Section>
-      <Section id="kill" title="Kill criteria">
+      <Section {...sec("kill")} title="Kill criteria">
         {editing === "kill" ? (
           <div className="flex flex-col gap-2">
             <textarea className="w-full rounded-md border px-3 py-2 text-sm leading-relaxed min-h-[4rem]" value={draft} onChange={(e) => setDraft(e.target.value)} autoFocus />
@@ -337,26 +331,36 @@ function BriefCard({ brief: b, workspaceId, projectId, selectable, picked, onPic
         )}
         {needsSignature && !killSigned && (
           <div className="mt-3 rounded-md border border-amber-200 bg-amber-50/60 p-3 flex flex-col gap-2">
-            <p className="text-xs text-amber-900">Retype the kill criterion to sign it. This commits you, before any data is collected, to dropping the hypothesis if this result appears.</p>
-            <Input value={retyped} onChange={(e) => setRetyped(e.target.value)} placeholder="Retype the kill criterion…" />
-            <Button size="sm" disabled={!signMatch || busy !== null} onClick={sign} className="self-start">
+            <p className="text-xs text-amber-900">
+              This is gate 3, the pre-registration. Trim the criterion to the one result that would make you drop the hypothesis (one or two sentences is right; the rest belongs in the boundary or the plan&apos;s controls), then sign it.
+            </p>
+            <textarea
+              className="w-full rounded-md border bg-white px-3 py-2 text-sm leading-relaxed min-h-[5rem] focus:outline-none focus:ring-2 focus:ring-primary/30"
+              value={signDraft}
+              onChange={(e) => setSignText(e.target.value)}
+            />
+            <label className="flex items-start gap-2 text-xs text-amber-900 cursor-pointer">
+              <input type="checkbox" className="mt-0.5" checked={committed} onChange={(e) => setCommitted(e.target.checked)} />
+              <span>I commit, before any data is collected, to dropping this hypothesis if this result appears.</span>
+            </label>
+            <Button size="sm" disabled={!committed || signDraft.trim().length < 10 || busy !== null} onClick={sign} className="self-start">
               {busy === "sign" ? <Loader2 className="size-3.5 animate-spin" /> : <Check className="size-3.5" />}
               <span className="ml-1.5">Sign kill criteria</span>
             </Button>
           </div>
         )}
       </Section>
-      <Section id="chains" title="Candidate chains and minimum viable experiment">
+      <Section {...sec("chains")} title="Candidate chains and minimum viable experiment">
         {b.minimumExperiment ? <p>{b.minimumExperiment}</p> : <p className="text-xs text-muted-foreground">Filled by the hypothesis-as-query in the Experiments tab once this brief survives the attacks.</p>}
       </Section>
-      <Section id="rivals" title="Rival explanations" count={rivals.length}>
+      <Section {...sec("rivals")} title="Rival explanations" count={rivals.length}>
         {rivals.length ? (
           <ul className="flex flex-col gap-2">{rivals.map((a) => <li key={a.id}><p>{a.text}</p>{a.control && <p className="text-xs text-muted-foreground">Control: {a.control}</p>}</li>)}</ul>
         ) : (
           <p className="text-xs text-muted-foreground">None yet. The Falsifier lists them when the brief is attacked.</p>
         )}
       </Section>
-      <Section id="attacks" title="Attack log" count={b.attacks.length}>
+      <Section {...sec("attacks")} title="Attack log" count={b.attacks.length}>
         {b.attacks.length === 0 ? (
           <p className="text-xs text-muted-foreground">Not attacked yet.</p>
         ) : (
@@ -408,5 +412,19 @@ function EvidenceList({ items, tone, onOpen }: { items: BriefView["evidence"]; t
         </li>
       ))}
     </ul>
+  );
+}
+
+/** One collapsible section of a brief. Module-level so React keeps its editor mounted while typing. */
+function Section({ title, count, open, onToggle, children }: { title: string; count?: number | string; open: boolean; onToggle: () => void; children: React.ReactNode }) {
+  return (
+    <div className="border-t">
+      <button className="w-full flex items-center gap-2 px-4 py-2 text-left text-sm hover:bg-accent/40" onClick={onToggle}>
+        {open ? <ChevronDown className="size-3.5 text-muted-foreground" /> : <ChevronRight className="size-3.5 text-muted-foreground" />}
+        <span className="font-medium">{title}</span>
+        {count !== undefined && <span className="text-xs text-muted-foreground tabular-nums">{count}</span>}
+      </button>
+      {open && <div className="px-9 pb-3 text-sm">{children}</div>}
+    </div>
   );
 }

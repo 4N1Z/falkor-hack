@@ -48,7 +48,7 @@ const BriefSchema = z.object({
   predictionIfTrue: z.string().describe("If true, we will observe X under conditions C"),
   predictionIfFalse: z.string().describe("If false, we will observe Y"),
   procedureHint: z.string().describe("The method or procedure in the graph that could distinguish X from Y"),
-  killCriteria: z.string().describe("The exact result that makes us drop it, written before any data is collected"),
+  killCriteria: z.string().describe("The exact result that makes us drop it, written before any data is collected: one or two sentences naming a single observable result, not a list of conditions"),
 });
 
 const BriefsSchema = z.object({ briefs: z.array(BriefSchema).min(2).max(4) });
@@ -61,9 +61,16 @@ const AnswerSchema = z.object({
       status: z.enum(["answered", "open", "fatal"]).describe("answered: the attack is met; open: it needs an experiment or evidence not yet available; fatal: the attack stands and the hypothesis should be dropped"),
     }),
   ),
-  revisedKillCriteria: z.string().nullable().optional().describe("A sharper kill criterion if an attack showed the old one was too loose; else null"),
+  revisedKillCriteria: z
+    .string()
+    .nullable()
+    .optional()
+    .describe("A sharper kill criterion if an attack showed the old one was too loose; else null. One or two sentences naming the single result that drops the hypothesis. Never a list of conditions: those go to revisedBoundaryFails"),
   revisedBoundaryFails: z.array(z.string()).nullable().optional().describe("Added failure conditions if an attack found the boundary incomplete; else null"),
 });
+
+/** A kill criterion is one result, not a checklist; a revision longer than this is a list and is kept out. */
+const KILL_CRITERIA_MAX = 500;
 
 const WRITER_SYSTEM = `You are the Hypothesis Writer in a research-agent system whose premise is: a new result is a new combination of known steps. You write two to four COMPETING hypotheses from the material given (candidate holes, conflicts and untested assumptions; verified claims with ids; methods; assumptions; failure conditions). Rules:
 - Every evidence id you cite must be in the lists provided. Do not invent ids or evidence.
@@ -221,9 +228,10 @@ export async function answerAttacks(graph: Graph, workspaceId: string, project: 
   const valid = out.object.answers.filter((a) => attacks.some((x) => x.id === a.attackId));
   const at = Date.now();
   await graph.query(ANSWER_ATTACKS, params({ rows: valid.map((a) => ({ id: a.attackId, answer: a.answer, status: a.status })), at, runId: run.runId }));
-  const revised = !!(out.object.revisedKillCriteria || out.object.revisedBoundaryFails?.length);
+  const revisedKill = out.object.revisedKillCriteria && out.object.revisedKillCriteria.trim().length <= KILL_CRITERIA_MAX ? out.object.revisedKillCriteria.trim() : null;
+  const revised = !!(revisedKill || out.object.revisedBoundaryFails?.length);
   if (revised) {
-    await graph.query(SET_BRIEF_STATUS, params({ id: hypothesisId, status: "attacked", rounds: null, at, killCriteria: out.object.revisedKillCriteria ?? null, boundaryFails: out.object.revisedBoundaryFails?.length ? [...new Set([...brief.boundaryFails, ...out.object.revisedBoundaryFails])] : null }));
+    await graph.query(SET_BRIEF_STATUS, params({ id: hypothesisId, status: "attacked", rounds: null, at, killCriteria: revisedKill, boundaryFails: out.object.revisedBoundaryFails?.length ? [...new Set([...brief.boundaryFails, ...out.object.revisedBoundaryFails])] : null }));
   }
   const result: AnswerResult = {
     answered: valid.filter((a) => a.status === "answered").length,
