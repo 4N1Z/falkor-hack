@@ -24,7 +24,8 @@ import useSWR, { mutate } from "swr";
 const PAGE = 40;
 const FLUSH_MS = 350;
 
-type QueueResponse = QueuePage & { autoReview: { status: string; progress: { total?: number; done?: number; approved?: number; rejected?: number } } | null };
+type QueueResponse = QueuePage & { autoReview: { status: string; progress: { total?: number; done?: number; approve?: number; reject?: number; unsure?: number } } | null };
+type SuggestionFilter = "all" | "approve" | "reject" | "none";
 
 const fetcher = async (url: string) => {
   const r = await fetch(url);
@@ -46,8 +47,17 @@ const REASON: Record<string, string> = {
   weaker_version: "The passage states a weaker version",
   abstract_only: "Only the abstract was available",
   extractors_disagree: "The two readings of this passage differ",
-  "auto_review:exact": "Auto-review: the passage states exactly this",
-  "auto_review:not_in_source": "Auto-review: the passage does not state this",
+};
+
+const AUTO_REASON: Record<string, string> = {
+  "auto_review:exact": "the passage states exactly this",
+  "auto_review:with_caveats": "the passage states this with caveats",
+  "auto_review:not_in_source": "the passage does not state this",
+  "auto_review:weaker_version": "the passage states only a weaker version",
+  "auto_review:unsure": "could not tell",
+  "auto_review:uncorroborated": "nothing else in the graph backs this load-bearing item",
+  "auto_review:conflict_needs_you": "a person picks between the two readings",
+  "auto_review:unsourced_needs_you": "unsourced items are never approved automatically",
 };
 
 type Pending = { nodeId: string; decision: "approve" | "reject" };
@@ -62,9 +72,9 @@ export function QueueTab({ workspaceId, status }: { workspaceId: string; status:
   const projectId = status.project.id;
   const [kind, setKind] = useState<QueueKind | "all">("all");
   const [paper, setPaper] = useState<string>("all");
-  const [view, setView] = useState<"open" | "auto">("open");
+  const [suggestion, setSuggestion] = useState<SuggestionFilter>("all");
   const [offset, setOffset] = useState(0);
-  const key = `/api/adam/${projectId}/queue?workspaceId=${workspaceId}&kind=${kind}&paperId=${paper}&offset=${offset}&limit=${PAGE}&view=${view}`;
+  const key = `/api/adam/${projectId}/queue?workspaceId=${workspaceId}&kind=${kind}&paperId=${paper}&suggestion=${suggestion}&offset=${offset}&limit=${PAGE}`;
   const { data, error, isValidating } = useSWR(key, fetcher, { keepPreviousData: true, refreshInterval: (d) => (d?.autoReview ? 2500 : status.project.status === "running" ? 8000 : 0) });
 
   // Optimistic state: items decided locally vanish immediately and stay hidden until the server agrees
@@ -85,7 +95,7 @@ export function QueueTab({ workspaceId, status }: { workspaceId: string; status:
   useEffect(() => {
     setOffset(0);
     setSelected(new Set());
-  }, [kind, paper, view]);
+  }, [kind, paper, suggestion]);
 
   const refresh = useCallback(async () => {
     await Promise.all([mutate(key), refreshAdam(workspaceId, projectId)]);
@@ -171,10 +181,27 @@ export function QueueTab({ workspaceId, status }: { workspaceId: string; status:
     try {
       const r = await fetch(`/api/adam/${projectId}/queue`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ workspaceId, autoReview: true, kinds: kind === "all" ? [] : [kind] }) });
       if (!r.ok) throw new Error((await r.json()).error ?? "Couldn't start auto-review");
-      toast("Auto-review started", { description: "Clear cases are decided; everything uncertain stays here for you." });
+      toast("Auto-review started", { description: "It reviews every item and proposes what to approve and reject; you apply the proposal in one click." });
       await mutate(key);
     } catch (e) {
       toast.error(e instanceof Error ? e.message : "Couldn't start auto-review");
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  /** One click applies every open proposal of one kind as the researcher's decision. */
+  const applyAll = async (which: "approve" | "reject") => {
+    setBusy(true);
+    try {
+      const r = await fetch(`/api/adam/${projectId}/queue`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ workspaceId, applySuggestions: which }) });
+      const b = await r.json();
+      if (!r.ok) throw new Error(b.error ?? "Couldn't apply");
+      toast.success(`${b.applied} item${b.applied === 1 ? "" : "s"} ${which === "approve" ? "approved" : "rejected"}`);
+      setSelected(new Set());
+      await refresh();
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "Couldn't apply");
     } finally {
       setBusy(false);
     }
@@ -221,47 +248,54 @@ export function QueueTab({ workspaceId, status }: { workspaceId: string; status:
   return (
     <div className="flex flex-col gap-3">
       <header className="flex flex-wrap items-center gap-2 text-sm">
-        <Chip active={view === "open" && kind === "all"} onClick={() => { setView("open"); setKind("all"); }}>
+        <Chip active={kind === "all"} onClick={() => setKind("all")}>
           Open <span className="text-muted-foreground tabular-nums">{openTotal}</span>
         </Chip>
         {(Object.keys(KIND) as QueueKind[]).map((k) => (
-          <Chip key={k} active={view === "open" && kind === k} onClick={() => { setView("open"); setKind(k); }} title={KIND[k].help}>
+          <Chip key={k} active={kind === k} onClick={() => setKind(k)} title={KIND[k].help}>
             {KIND[k].label} <span className="text-muted-foreground tabular-nums">{data.counts[k] ?? 0}</span>
           </Chip>
         ))}
-        <Chip active={view === "auto"} onClick={() => { setView("auto"); setKind("all"); }} title="What the auto-review decided; approve or reject to overrule">
-          Auto-reviewed <span className="text-muted-foreground tabular-nums">{data.autoReviewed}</span>
-        </Chip>
+        {data.suggestions.reviewed > 0 && (
+          <span className="flex items-center gap-1 border-l pl-2 ml-1">
+            <Chip active={suggestion === "approve"} onClick={() => setSuggestion(suggestion === "approve" ? "all" : "approve")} title="Items auto-review proposes to approve">
+              <Sparkles className="inline size-3 mr-0.5 text-emerald-600" />to approve <span className="text-muted-foreground tabular-nums">{data.suggestions.approve}</span>
+            </Chip>
+            <Chip active={suggestion === "reject"} onClick={() => setSuggestion(suggestion === "reject" ? "all" : "reject")} title="Items auto-review proposes to reject">
+              to reject <span className="text-muted-foreground tabular-nums">{data.suggestions.reject}</span>
+            </Chip>
+            <Chip active={suggestion === "none"} onClick={() => setSuggestion(suggestion === "none" ? "all" : "none")} title="Items auto-review could not call">
+              unsure <span className="text-muted-foreground tabular-nums">{data.suggestions.none + (openTotal - data.suggestions.reviewed)}</span>
+            </Chip>
+          </span>
+        )}
         <select value={paper} onChange={(e) => setPaper(e.target.value)} className="ml-auto rounded-md border bg-white px-2 py-1 text-xs max-w-[22rem]">
           <option value="all">All papers</option>
           {data.papers.map((p) => (
             <option key={p.paperId} value={p.paperId}>{p.title.slice(0, 70)} ({p.n})</option>
           ))}
         </select>
-        {view === "open" && (
-          <AlertDialog>
-            <AlertDialogTrigger asChild>
-              <Button size="sm" variant="outline" disabled={busy || !!data.autoReview || openTotal === 0}>
-                {data.autoReview ? <Loader2 className="size-3.5 animate-spin" /> : <Sparkles className="size-3.5" />}
-                <span className="ml-1.5">Auto-review{kind !== "all" ? ` ${KIND[kind].label.toLowerCase()}` : ""}</span>
-              </Button>
-            </AlertDialogTrigger>
-            <AlertDialogContent>
-              <AlertDialogHeader>
-                <AlertDialogTitle>Let Neura decide the clear cases?</AlertDialogTitle>
-                <AlertDialogDescription>
-                  Each flagged item is judged once more against its passage with a stricter typed question, and the graph is read for corroboration (evidence, dependent verified claims).
-                  Only items the passage states exactly are approved, only items it does not state at all are rejected; everything in between stays here for you.
-                  Unsourced items and conflicts are never decided automatically. Decisions are marked as auto-reviewed, not as yours, and you can overrule any of them from the Auto-reviewed filter.
-                </AlertDialogDescription>
-              </AlertDialogHeader>
-              <AlertDialogFooter>
-                <AlertDialogCancel>Not now</AlertDialogCancel>
-                <AlertDialogAction onClick={autoReview}>Run auto-review</AlertDialogAction>
-              </AlertDialogFooter>
-            </AlertDialogContent>
-          </AlertDialog>
-        )}
+        <AlertDialog>
+          <AlertDialogTrigger asChild>
+            <Button size="sm" variant="outline" disabled={busy || !!data.autoReview || openTotal === 0}>
+              {data.autoReview ? <Loader2 className="size-3.5 animate-spin" /> : <Sparkles className="size-3.5" />}
+              <span className="ml-1.5">Auto-review{kind !== "all" ? ` ${KIND[kind].label.toLowerCase()}` : ""}</span>
+            </Button>
+          </AlertDialogTrigger>
+          <AlertDialogContent>
+            <AlertDialogHeader>
+              <AlertDialogTitle>Let Neura review the queue and propose decisions?</AlertDialogTitle>
+              <AlertDialogDescription>
+                Every open item{kind !== "all" ? ` of kind "${KIND[kind].label}"` : ""} is judged against its passage with a typed question, and the graph is read for corroboration (evidence, dependent verified claims).
+                Nothing is decided by it: you get a proposal, approve these and reject those, and apply it in one click. Items it cannot call, conflicts, and unsourced items stay for you.
+              </AlertDialogDescription>
+            </AlertDialogHeader>
+            <AlertDialogFooter>
+              <AlertDialogCancel>Not now</AlertDialogCancel>
+              <AlertDialogAction onClick={autoReview}>Run auto-review</AlertDialogAction>
+            </AlertDialogFooter>
+          </AlertDialogContent>
+        </AlertDialog>
       </header>
 
       {data.autoReview && (
@@ -269,8 +303,27 @@ export function QueueTab({ workspaceId, status }: { workspaceId: string; status:
           <Loader2 className="size-3.5 animate-spin" />
           Auto-review {data.autoReview.status}
           {typeof data.autoReview.progress.done === "number" && typeof data.autoReview.progress.total === "number" && (
-            <span className="tabular-nums">· {data.autoReview.progress.done} of {data.autoReview.progress.total} judged · {data.autoReview.progress.approved ?? 0} approved · {data.autoReview.progress.rejected ?? 0} rejected</span>
+            <span className="tabular-nums">· {data.autoReview.progress.done} of {data.autoReview.progress.total} reviewed · would approve {data.autoReview.progress.approve ?? 0} · reject {data.autoReview.progress.reject ?? 0} · unsure {data.autoReview.progress.unsure ?? 0}</span>
           )}
+        </div>
+      )}
+
+      {!data.autoReview && (data.suggestions.approve > 0 || data.suggestions.reject > 0) && (
+        <div className="rounded-md border border-emerald-200 bg-emerald-50/60 px-3 py-2 text-sm text-emerald-900 flex flex-wrap items-center gap-3">
+          <span className="flex items-center gap-1.5"><Sparkles className="size-3.5" /> Neura suggests approving <b className="tabular-nums">{data.suggestions.approve}</b> and rejecting <b className="tabular-nums">{data.suggestions.reject}</b>{data.suggestions.none > 0 ? <> · <span className="tabular-nums">{data.suggestions.none}</span> it could not call</> : null}.</span>
+          <span className="ml-auto flex items-center gap-2">
+            {data.suggestions.approve > 0 && (
+              <Button size="sm" className="h-7 text-xs" disabled={busy} onClick={() => applyAll("approve")}>
+                <Check className="size-3" /><span className="ml-1">Approve all {data.suggestions.approve}</span>
+              </Button>
+            )}
+            {data.suggestions.reject > 0 && (
+              <Button size="sm" variant="outline" className="h-7 text-xs" disabled={busy} onClick={() => applyAll("reject")}>
+                <X className="size-3" /><span className="ml-1">Reject all {data.suggestions.reject}</span>
+              </Button>
+            )}
+            <button className="text-xs underline decoration-dotted" onClick={() => setSuggestion("approve")}>review the proposal first</button>
+          </span>
         </div>
       )}
 
@@ -298,7 +351,7 @@ export function QueueTab({ workspaceId, status }: { workspaceId: string; status:
 
       {items.length === 0 ? (
         <div className="rounded-lg border border-dashed bg-white p-10 text-center text-sm text-muted-foreground">
-          {openTotal === 0 && view === "open"
+          {openTotal === 0
             ? "Nothing to review. Everything the agents wrote is either verified against its source or still being checked."
             : total > 0 ? "This page is done; load the next one." : "Nothing matches these filters."}
           {total > 0 && (
@@ -332,7 +385,6 @@ export function QueueTab({ workspaceId, status }: { workspaceId: string; status:
                 onCorrect={(text) => act(it, "correct", { text })}
                 onSendBack={(n) => act(it, "send_back", { note: n })}
                 onUnmerge={(alias) => unmerge(it, alias)}
-                auditing={view === "auto"}
               />
             </li>
           ))}
@@ -373,7 +425,7 @@ function Marked({ text, quote }: { text: string; quote: string }) {
   );
 }
 
-function QueueCard({ item: it, active, selected, onSelect, busy, correcting, draft, note, onDraft, onNote, onStartCorrect, onCancelCorrect, onApprove, onReject, onKeepPartner, onCorrect, onSendBack, onUnmerge, auditing }: {
+function QueueCard({ item: it, active, selected, onSelect, busy, correcting, draft, note, onDraft, onNote, onStartCorrect, onCancelCorrect, onApprove, onReject, onKeepPartner, onCorrect, onSendBack, onUnmerge }: {
   item: QueueItem;
   active: boolean;
   selected: boolean;
@@ -392,7 +444,6 @@ function QueueCard({ item: it, active, selected, onSelect, busy, correcting, dra
   onCorrect: (text: string) => void;
   onSendBack: (note: string) => void;
   onUnmerge: (alias: string) => void;
-  auditing: boolean;
 }) {
   const k = KIND[it.kind];
   return (
@@ -401,12 +452,14 @@ function QueueCard({ item: it, active, selected, onSelect, busy, correcting, dra
         <div className="p-4 flex flex-col gap-2 min-w-0">
           <div className="flex flex-wrap items-center gap-2 text-xs">
             <input type="checkbox" className="size-3.5" checked={selected} onChange={(e) => onSelect(e.target.checked)} onClick={(e) => e.stopPropagation()} aria-label="Select" />
-            {auditing ? (
-              <span className={cn("inline-flex items-center gap-1 rounded-full px-2 py-0.5 ring-1 ring-inset", it.state === "retracted" ? "bg-rose-50 text-rose-700 ring-rose-600/20" : "bg-emerald-50 text-emerald-700 ring-emerald-600/20")}>
-                <Sparkles className="size-3" /> auto {it.state === "retracted" ? "rejected" : "approved"}
+            <span className={cn("inline-flex items-center gap-1 rounded-full px-2 py-0.5 ring-1 ring-inset", k.tone)}>{k.icon} {k.label}</span>
+            {it.autoReason && (
+              <span
+                className={cn("inline-flex items-center gap-1 rounded-full px-2 py-0.5 ring-1 ring-inset", it.autoSuggestion === "approve" ? "bg-emerald-50 text-emerald-700 ring-emerald-600/20" : it.autoSuggestion === "reject" ? "bg-rose-50 text-rose-700 ring-rose-600/20" : "bg-slate-50 text-slate-500 ring-slate-300/40")}
+                title={`Auto-review: ${AUTO_REASON[it.autoReason] ?? it.autoReason}${it.autoConfidence ? ` (${Math.round(it.autoConfidence * 100)}%)` : ""}`}
+              >
+                <Sparkles className="size-3" /> {it.autoSuggestion === "approve" ? "suggests approve" : it.autoSuggestion === "reject" ? "suggests reject" : "unsure"}
               </span>
-            ) : (
-              <span className={cn("inline-flex items-center gap-1 rounded-full px-2 py-0.5 ring-1 ring-inset", k.tone)}>{k.icon} {k.label}</span>
             )}
             <span className="rounded-full bg-muted px-2 py-0.5">{it.label}</span>
             {it.speculative && <span className="rounded-full bg-violet-50 text-violet-700 px-2 py-0.5">speculative</span>}
@@ -466,7 +519,7 @@ function QueueCard({ item: it, active, selected, onSelect, busy, correcting, dra
             <Button size="sm" disabled={busy} onClick={(e) => { e.stopPropagation(); onApprove(); }}><Check className="size-3.5" /><span className="ml-1.5">Approve</span></Button>
             <Button size="sm" variant="outline" disabled={busy} onClick={(e) => { e.stopPropagation(); onStartCorrect(); }}>Correct</Button>
             <Button size="sm" variant="outline" disabled={busy} onClick={(e) => { e.stopPropagation(); onReject(); }}><X className="size-3.5" /><span className="ml-1.5">Reject</span></Button>
-            {it.paperId && !auditing && (
+            {it.paperId && (
               <div className="ml-auto flex items-center gap-1">
                 <input value={note} onChange={(e) => onNote(e.target.value)} placeholder="Note for the Extractor…" className="rounded-md border px-2 py-1 text-xs w-56" onClick={(e) => e.stopPropagation()} />
                 <Button size="sm" variant="ghost" disabled={busy || note.trim().length < 3} onClick={(e) => { e.stopPropagation(); onSendBack(note); }} title="Re-extract this paper with your note">

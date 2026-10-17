@@ -1,20 +1,19 @@
-// Auto-review — an optional pass a person asks for when the exception queue is long. It is
-// not the Verifier again: it asks a stricter question of each flagged item with the passage
-// beside it (JEV, typed), and reads the graph for corroboration (evidence edges, verified
-// claims that depend on it). Only the clear cases are decided:
-//   approve  the passage states exactly this (top rubric level, confident), and nothing in
-//            the graph argues otherwise
-//   reject   the passage does not state this at all (bottom level, confident)
-//   leave    everything else, which is what the queue is for
-// Decided items become agent_verified or retracted, never human_approved: a machine does not
-// sign as a person. They are marked autoReviewed and stay auditable under the queue's filter.
-// Unsourced items (quote not in the paper) are never auto-approved: no claim without a source.
+// Auto-review — an optional pass a person asks for when the exception queue is long. It
+// reviews every open item and comes back with a proposal, so the researcher can approve or
+// reject hundreds at once instead of one by one. It does not decide anything itself: each
+// item gets a suggestion (approve / reject / none when unsure), the queue shows the totals,
+// and one click applies them as the researcher's decisions.
+//   approve  a stricter typed judgement says the passage states this (exactly, or with
+//            caveats), and for load-bearing items the graph corroborates it
+//   reject   the passage does not state it, or states only a weaker version, confidently
+//   none     unsure; and always for unsourced items (no claim without a source) and
+//            conflicts (a person picks between two readings)
 
 import type { Graph } from "falkordb";
 import { startRun } from "../../agents/base";
 import { scoreMany } from "../../jev";
 import { emit } from "../events";
-import { AUTO_DECIDE_BATCH, CORROBORATION } from "../queries-review";
+import { CORROBORATION, SET_SUGGESTIONS } from "../queries-review";
 import { queueItems, type QueueItem } from "../review";
 import type { AdamProject } from "../types";
 
@@ -25,16 +24,15 @@ const RUBRIC = [
   "The passage states exactly this, including its numbers and conditions",
 ] as const;
 
-/** Decide only when the typed judgement is at an extreme and confident. */
-const MIN_CONFIDENCE = 0.6;
+const MIN_CONFIDENCE = 0.45;
 const BATCH = 25;
 
 export interface AutoReviewResult {
-  considered: number;
-  approved: number;
-  rejected: number;
-  left: number;
-  skippedUnsourced: number;
+  reviewed: number;
+  approve: number;
+  reject: number;
+  unsure: number;
+  skipped: number;
 }
 
 const params = <T>(p: T) => ({ params: p as never });
@@ -48,28 +46,23 @@ export async function runAutoReview(
   const run = await startRun("adam-verifier", workspaceId, { projectId: project.id, action: "auto-review", kinds: opts.kinds ?? "all" });
   const beat = opts.heartbeat ?? (async () => {});
   const log = opts.log ?? (() => {});
-  const result: AutoReviewResult = { considered: 0, approved: 0, rejected: 0, left: 0, skippedUnsourced: 0 };
-
-  const all = await queueItems(graph, project.id);
-  const items = all.filter((it) => (!opts.kinds?.length || opts.kinds.includes(it.kind)) && it.kind !== "conflict");
-  // No claim without a source: an item whose quote is not in the paper is a person's call
-  const sourced = items.filter((it) => {
-    if (it.kind === "unsourced" || !it.chunkText) {
-      result.skippedUnsourced++;
-      return false;
-    }
-    return true;
-  });
-  result.considered = sourced.length;
-  await beat({ step: "start", total: sourced.length, done: 0 });
-
+  const result: AutoReviewResult = { reviewed: 0, approve: 0, reject: 0, unsure: 0, skipped: 0 };
   const at = Date.now();
-  for (let i = 0; i < sourced.length; i += BATCH) {
-    const batch = sourced.slice(i, i + BATCH);
+
+  const all = (await queueItems(graph, project.id)).filter((it) => !opts.kinds?.length || opts.kinds.includes(it.kind));
+  // A person picks between two readings, and an unsourced item cannot be approved by anyone but a person
+  const judgeable = all.filter((it) => it.kind !== "conflict" && it.kind !== "unsourced" && !!it.chunkText);
+  const skippedRows = all.filter((it) => !judgeable.includes(it)).map((it) => ({ id: it.id, suggestion: null, level: null, confidence: 0, reason: it.kind === "conflict" ? "auto_review:conflict_needs_you" : "auto_review:unsourced_needs_you" }));
+  result.skipped = skippedRows.length;
+  if (skippedRows.length) await graph.query(SET_SUGGESTIONS, params({ projectId: project.id, rows: skippedRows, runId: run.runId, at }));
+  await beat({ step: "start", total: judgeable.length, done: 0 });
+
+  for (let i = 0; i < judgeable.length; i += BATCH) {
+    const batch = judgeable.slice(i, i + BATCH);
     const [judged, corroboration] = await Promise.all([
       run.step(`judge.${i / BATCH + 1}`, () =>
         scoreMany(
-          `Auditing flagged extractions for the project "${project.title}". Judge each statement only against the passage given with it. Be strict: only the top level when the passage states exactly this.`,
+          `Reviewing flagged extractions for the project "${project.title}". Judge each statement only against the passage given with it.`,
           batch.map((it) => ({ id: it.id, text: `Statement (${it.label}): ${it.text}\n\nPassage (p.${it.chunkPage || it.page}, ${it.chunkSection || it.section}):\n${it.chunkText.slice(0, 2200)}` })),
           "Does the passage state the statement?",
           RUBRIC,
@@ -78,29 +71,31 @@ export async function runAutoReview(
       ),
       graph.roQuery<{ id: string; evidence: number; dependents: number }>(CORROBORATION, params({ ids: batch.map((it) => it.id) })).then((r) => new Map((r.data ?? []).map((x) => [x.id, x]))),
     ]);
-    const rows: { id: string; state: string; reason: string; level: number; confidence: number }[] = [];
-    for (const it of batch) {
+    const rows = batch.map((it) => {
       const j = judged.result.get(it.id);
-      if (!j) {
-        result.left++;
-        continue;
+      result.reviewed++;
+      if (!j || j.confidence < MIN_CONFIDENCE) {
+        result.unsure++;
+        return { id: it.id, suggestion: null, level: j?.level ?? null, confidence: j?.confidence ?? 0, reason: "auto_review:unsure" };
       }
       const c = corroboration.get(it.id);
-      // Load-bearing items need the graph to agree too: at least one evidence edge or a dependent verified claim
       const corroborated = it.kind !== "load_bearing" || (c?.evidence ?? 0) > 0 || (c?.dependents ?? 0) > 0;
-      if (j.level === RUBRIC.length - 1 && j.confidence >= MIN_CONFIDENCE && corroborated) {
-        rows.push({ id: it.id, state: "agent_verified", reason: "auto_review:exact", level: j.level, confidence: j.confidence });
-        result.approved++;
-      } else if (j.level === 0 && j.confidence >= MIN_CONFIDENCE) {
-        rows.push({ id: it.id, state: "retracted", reason: "auto_review:not_in_source", level: j.level, confidence: j.confidence });
-        result.rejected++;
-      } else result.left++;
-    }
-    if (rows.length) await graph.query(AUTO_DECIDE_BATCH, params({ projectId: project.id, rows, runId: run.runId, at }));
-    await beat({ step: "judge", total: sourced.length, done: Math.min(sourced.length, i + batch.length), approved: result.approved, rejected: result.rejected });
+      if (j.level >= 2 && corroborated) {
+        result.approve++;
+        return { id: it.id, suggestion: "approve", level: j.level, confidence: j.confidence, reason: j.level === 3 ? "auto_review:exact" : "auto_review:with_caveats" };
+      }
+      if (j.level <= 1) {
+        result.reject++;
+        return { id: it.id, suggestion: "reject", level: j.level, confidence: j.confidence, reason: j.level === 0 ? "auto_review:not_in_source" : "auto_review:weaker_version" };
+      }
+      result.unsure++;
+      return { id: it.id, suggestion: null, level: j.level, confidence: j.confidence, reason: "auto_review:uncorroborated" };
+    });
+    await graph.query(SET_SUGGESTIONS, params({ projectId: project.id, rows, runId: run.runId, at }));
+    await beat({ step: "judge", total: judgeable.length, done: Math.min(judgeable.length, i + batch.length), approve: result.approve, reject: result.reject, unsure: result.unsure });
   }
 
-  log(`auto-review: ${result.approved} approved, ${result.rejected} rejected, ${result.left} left for a person, ${result.skippedUnsourced} unsourced skipped`);
+  log(`auto-review: suggests approving ${result.approve}, rejecting ${result.reject}; unsure ${result.unsure}; ${result.skipped} left to a person`);
   await emit(graph, project.id, "auto_review_done", { ...result });
   await run.finish("ANSWERED", [result], project.createdBy);
   return result;
