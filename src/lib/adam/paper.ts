@@ -35,6 +35,21 @@ const h = (level: number, t: string): Node => ({ type: "heading", attrs: { level
 const p = (...nodes: (Node | string)[]): Node => ({ type: "paragraph", content: nodes.map((n) => (typeof n === "string" ? text(n) : n)) });
 const bullets = (items: Node[][]): Node => ({ type: "bulletList", content: items.map((c) => ({ type: "listItem", content: [{ type: "paragraph", content: c }] })) });
 
+/** ProseMirror rejects empty text nodes and empty paragraphs; the editor crashes on them. Strip them before saving. */
+function clean(nodes: Node[]): Node[] {
+  const out: Node[] = [];
+  for (const n of nodes) {
+    if (n.type === "text") {
+      if (n.text) out.push(n);
+      continue;
+    }
+    const content = n.content ? clean(n.content) : undefined;
+    if ((n.type === "paragraph" || n.type === "listItem" || n.type === "bulletList" || n.type === "orderedList") && (!content || content.length === 0)) continue;
+    out.push(content ? { ...n, content } : n);
+  }
+  return out;
+}
+
 const ProseSchema = z.object({
   abstract: z.string().describe("Four to six sentences: the question, what was read, what the graph shows, the hypotheses and what would kill them"),
   introduction: z.string().describe("Two paragraphs: the hunch and why it matters, then the sub-questions as a research programme. Plain prose, no citations"),
@@ -224,7 +239,7 @@ export async function writePassPaper(graph: Graph, workspaceId: string, project:
     async () => {
       let [folder] = await db.select({ id: folders.id }).from(folders).where(and(eq(folders.workspaceId, workspaceId), eq(folders.title, "Adam")));
       if (!folder) [folder] = await db.insert(folders).values({ title: "Adam", iconId: "🧪", workspaceId, inTrash: "" }).returning({ id: folders.id });
-      await db.insert(files).values({ id: fileId, title: title.slice(0, 120), iconId: "🧪", data: JSON.stringify({ type: "doc", content: c }), workspaceId, folderId: folder.id, inTrash: "" });
+      await db.insert(files).values({ id: fileId, title: title.slice(0, 120), iconId: "🧪", data: JSON.stringify({ type: "doc", content: clean(c) }), workspaceId, folderId: folder.id, inTrash: "" });
       return folder.id;
     },
     { source: "graph" },
