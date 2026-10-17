@@ -33,17 +33,19 @@ RUN pnpm build && \
     rm -rf .next/cache && \
     find . -name "*.map" -delete
 
-# WebSocket (Hocuspocus) stage — collaboration server for the Tiptap/Yjs editor.
-# Needs node_modules and tsx, which the Next standalone runner does not ship,
-# so it keeps the deps layer instead of the build output.
-FROM base AS ws
+# Shared stage for the long-running workers (hocuspocus, adam). Both need
+# node_modules and tsx, which the Next standalone runner does not ship, so this
+# keeps the deps layer instead of the build output. One image serves both; the
+# compose service picks the entrypoint via `command`.
+FROM base AS worker
 WORKDIR /app
 ENV NODE_ENV=production
 COPY --from=deps /app/node_modules ./node_modules
 COPY package.json tsconfig.json ./
 COPY scripts ./scripts
-# serve.mts imports the token helper directly; copy just that file rather than all of src
-COPY src/lib/collab-token.ts ./src/lib/collab-token.ts
+# serve.mts imports src/lib/collab-token; adam-worker.ts imports src/lib/adam
+# and src/lib/graph, so the whole source tree comes along.
+COPY src ./src
 USER node
 EXPOSE 1414
 CMD ["./node_modules/.bin/tsx", "scripts/serve.mts"]

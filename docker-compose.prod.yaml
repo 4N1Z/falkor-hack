@@ -53,7 +53,8 @@ services:
     restart: unless-stopped
     build:
       context: .
-      target: ws
+      target: worker
+    command: ["./node_modules/.bin/tsx", "scripts/serve.mts"]
     environment:
       - NODE_ENV=production
       - HOCUSPOCUS_PORT=1414
@@ -79,9 +80,42 @@ services:
       - "traefik.http.routers.neuraquery-ws.middlewares=ws-strip"
       - "traefik.http.middlewares.ws-strip.stripprefix.prefixes=/ws"
 
+  # Drains (:AdamJob) nodes from the workspace graphs. Shares the worker image
+  # with hocuspocus; only the command differs. No ports - it is a pure consumer.
+  adam-worker:
+    restart: unless-stopped
+    build:
+      context: .
+      target: worker
+    command: ["./node_modules/.bin/tsx", "scripts/adam-worker.ts", "--slots=2"]
+    environment:
+      - NODE_ENV=production
+      - FALKORDB_URL=falkor://falkordb:6379
+    env_file:
+      - .env
+    depends_on:
+      falkordb:
+        condition: service_healthy
+    mem_limit: 512m
+    memswap_limit: 1g
+    logging:
+      driver: json-file
+      options: { max-size: "10m", max-file: "3" }
+    networks:
+      - app-network
+
   falkordb:
     image: falkordb/falkordb:latest
     restart: unless-stopped
+    # The image entrypoint (run.sh) ignores CMD and always execs
+    # `redis-server ${REDIS_ARGS} ... --loadmodule falkordb.so`, so extra redis
+    # flags must go through REDIS_ARGS - a `command:` override would be dropped.
+    # AOF on: the ADAM job queue lives in this database, and RDB snapshots alone
+    # would lose up to an hour of queued jobs on an unclean stop (e.g. OOM kill).
+    # BROWSER=0 disables the bundled web UI; nothing publishes its port anyway.
+    environment:
+      - REDIS_ARGS=--appendonly yes
+      - BROWSER=0
     volumes:
       - falkordb_data:/var/lib/falkordb/data
     mem_limit: 512m
