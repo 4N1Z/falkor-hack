@@ -228,3 +228,38 @@ ORDER BY score ASC`;
 export const CLAIM_VECTOR = `
 MATCH (c:Claim {id: $id})
 RETURN c.embedding AS embedding, c.paperId AS paperId`;
+
+// ---------------------------------------------------------------- Hypothesis map
+
+/** Everything one hop from a brief: evidence, assumptions, methods, candidates, chain procedures, predicted result. */
+export const HYPOTHESIS_NEIGHBOURS = `
+MATCH (h:Hypothesis {id: $id})-[r]->(n)
+WHERE NOT n:AdamProject
+RETURN type(r) AS type, labels(n)[0] AS label, n.id AS id, coalesce(n.text, n.name, n.summary, '') AS text,
+       coalesce(n.state, '') AS state, coalesce(n.stateReason, '') AS stateReason, n.paperId AS paperId, n.decidedBy AS decidedBy, coalesce(n.kind, '') AS kind`;
+
+export const HYPOTHESIS_ATTACK_NODES = `
+MATCH (a:Attack)-[:ON]->(h:Hypothesis {id: $id})
+OPTIONAL MATCH (a)-[:CITES]->(c)
+RETURN a.id AS id, a.kind AS kind, a.status AS status, a.text AS text, coalesce(a.round, 1) AS round,
+       [x IN collect(coalesce(c.id, '')) WHERE x <> ''] AS cites`;
+
+/** The papers behind a set of claims, with the sub-question cluster each paper was triaged into. */
+export const CLAIMS_PAPERS_CLUSTERS = `
+MATCH (c:Claim)-[:EXTRACTED_FROM]->(p:Paper)
+WHERE c.id IN $ids
+OPTIONAL MATCH (:AdamProject {id: $projectId})-[t:TRIAGED]->(p)
+RETURN c.id AS claimId, p.paperId AS paperId, p.title AS title, coalesce(p.year, 0) AS year, coalesce(t.clusterId, '') AS clusterId, coalesce(t.label, '') AS triage`;
+
+/** What the evidence claims use, depend on and contradict (one hop out from each). */
+export const CLAIMS_CONTEXT = `
+MATCH (c:Claim)-[r:USES|DEPENDS_ON|CONTRADICTS]->(n)
+WHERE c.id IN $ids AND n.state <> 'retracted'
+RETURN c.id AS source, type(r) AS type, labels(n)[0] AS label, n.id AS id, coalesce(n.text, n.name, '') AS text,
+       coalesce(n.state, '') AS state, coalesce(n.stateReason, '') AS stateReason, n.decidedBy AS decidedBy, n.paperId AS paperId`;
+
+export const HYPOTHESIS_PLAN_STEPS = `
+MATCH (e:ExperimentPlan)-[:TESTS]->(h:Hypothesis {id: $id})
+OPTIONAL MATCH (e)-[s:STEP]->(pr:Procedure)
+RETURN e.id AS planId, coalesce(e.approvedAt, 0) AS approvedAt, pr.id AS procedureId, coalesce(pr.name, '') AS name,
+       coalesce(s.order, 0) AS ord, coalesce(s.status, '') AS status, coalesce(s.gap, false) AS gap`;

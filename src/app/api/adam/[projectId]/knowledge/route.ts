@@ -1,5 +1,6 @@
 import { KNOWLEDGE_GRAPH_LINKS, KNOWLEDGE_GRAPH_NODES, KNOWLEDGE_NODES } from "@/lib/adam/queries-review";
 import { nodeDetail } from "@/lib/adam/review";
+import { hypothesisMap } from "@/lib/adam/hypothesis-map";
 import { NextResponse } from "next/server";
 import { requireProject } from "../../_access";
 
@@ -50,6 +51,11 @@ export async function GET(req: Request, { params }: { params: Promise<{ projectI
     const detail = await nodeDetail(access.graph, projectId, id);
     if (!detail) return NextResponse.json({ error: "node not found" }, { status: 404 });
     return NextResponse.json(detail);
+  }
+  if (view === "hypothesis") {
+    const id = url.searchParams.get("id");
+    if (!id) return NextResponse.json({ error: "id is required" }, { status: 400 });
+    return NextResponse.json(await hypothesisMap(access.graph, projectId, id));
   }
   if (view === "graph") {
     const [nodes, links] = await Promise.all([
