@@ -25,8 +25,10 @@ The graph is not a store beside the agent: it is Adam's memory, its job queue an
 > **Submission** · WeMakeDevs × FalkorDB Graph Hacks (Oct 15–18, 2026)
 
 > **Tracks:** 01 Agents That Act on Connected Data (primary) · 02 Agent Memory and Coordination
-> **Live:** _add URL_ · **Demo video:** _add URL_ · **Repo:** this one
-> **Tooling disclosure:** Claude Code was used as a coding assistant throughout. The graph model, the Cypher templates, the agent design and the architecture were designed, reviewed and verified by the team; see [GRAPH_QUERIES.md](GRAPH_QUERIES.md) for every query the product depends on.
+> **Live:** _add URL_ ·
+> **Demo video:** _add URL_ · 
+. **Repo:** this one
+> **Tooling disclosure:** Claude Code was used as a coding assistant. The graph model, the Cypher templates, the agent design and the architecture were designed, reviewed and verified by the team; see [GRAPH_QUERIES.md](GRAPH_QUERIES.md) for every query the product depends on.
 
 ## The editor runs on the same graph
 
@@ -178,13 +180,17 @@ The exact Cypher is in [`src/lib/graph/queries.ts`](src/lib/graph/queries.ts) an
 
 Every template, with where it is used, is in [`GRAPH_QUERIES.md`](GRAPH_QUERIES.md).
 
-### Two rules every agent follows
+### Three rules every agent follows
 
-1. **Provenance.**
+1. **No model writes Cypher.**
+   - Every statement the product runs is one of ~300 fixed, parameterised templates (`src/lib/graph/queries.ts`, `src/lib/adam/queries*.ts`), each a named constant. There is no text-to-Cypher step anywhere.
+   - An agent is a program that runs those templates in a fixed order and calls a model at fixed points for one thing: a JSON object that fits a schema (an extraction card, a triage label, a brief). The model's output lands in query *parameters* (`$rows`, `$text`, `$quote`), never in query text.
+   - This is what makes the other two rules possible: every write `MERGE`s on a deterministic id, so a re-run replaces instead of duplicating; every query carries `projectId` and runs inside the workspace's own graph, so a model cannot reach another tenant's data or delete anything it was not meant to; and every query that ran is nameable in the trace.
+2. **Provenance.**
    - Every result carries the graph path or passage behind it.
    - Every run is stored as an `AgentRun` with its step trace (tool, Cypher template, rows, ms) and the node IDs it used.
    - The Research graph page renders any run as a provenance tree.
-2. **Proposals, not facts.**
+3. **Proposals, not facts.**
    - Agent-written edges and nodes start with `status: 'suggested'` and `by: 'agent:<name>'`. They are promoted only when a person accepts them.
    - Grounding queries read accepted, ingested or user-created data, so agent guesses never pollute the knowledge base.
 
@@ -296,16 +302,15 @@ claude mcp add --transport http neura http://localhost:3000/api/mcp --header "Au
 
 **Built during the hackathon:**
 - Everything under `src/lib/graph`, `src/lib/agents` and `src/lib/citations.ts`.
-- The agent, graph-view and MCP routes.
+- The agents and graph-view.
 - The research library rebuild: OpenAlex search and import, full-text indexing, and index health.
 - Every editor integration listed above.
 - The Research graph page and the seed and report scripts.
 - **Adam** : the research-agent system, its job queue in the graph, the worker, the hypothesis-as-query path search, the five-step UI, observations and verdicts. See [GRAPH_QUERIES.md](GRAPH_QUERIES.md).
-- Upgrade to Next 16.
-- Fixes to the editor plumbing it depended on:
-  - slash commands and Tab indentation;
-  - collaborator presence;
-  - draft-wiping and cross-document autosave bugs.
+- Editor plumbing the graph agents depend on, fixed and extended:
+  - **Slash commands** rebuilt: `/Search Papers` pre-fills a team-library search with the sentence being written (the entry point to Cite Scout), and `/Hypothesis` saves the sentence as a `Memory` node in the graph (Historian). Tab indentation fixed alongside.
+  - **Autosave** fixed: every save mirrors the document into the graph as `(User)-[:EDITS]->(Document)-[:CONTAINS]->(Sentence)-[:CITES]->(Paper)` (`src/lib/graph/sync-document.ts`), so the draft-wiping and cross-document autosave bugs were corrupting the graph mirror, not just the file.
+  - **Collaborator presence** (Yjs/Hocuspocus) fixed. This one is editor-side only; it does not touch the graph.
 
 ### FalkorDB notes from building this
 

@@ -1,16 +1,28 @@
 # The Cypher queries and graph algorithms Neura Query depends on
 
 FalkorDB is the only store the agents reason over. The product has two graphs' worth of work on one
-database: the **research graph** every workspace already keeps (papers, authors, concepts, chunks,
-draft sentences), and **Adam**, the research-agent system built during the hackathon, which runs
+database: 
+- the **Research graph** every workspace already keeps (papers, authors, concepts, chunks,
+draft sentences), and 
+- **Adam**, the research-agent system built during the hackathon, which runs
 entirely inside that same graph: its question pages, extracted claims and methods, procedures,
-hypotheses, attacks, experiment plans, observations, **and its own job queue** are all nodes. Take
-FalkorDB away and there is no product left, not even an orchestrator.
+hypotheses, attacks, experiment plans, observations, **and its own job queue** are all nodes.
 
 One graph per workspace, named `ws:<workspaceId>`, so tenants never share a key space. Every template
 below lives in `src/lib/graph/queries.ts` (research graph) or `src/lib/adam/queries*.ts` (Adam), each
-exported as a named constant and run with parameters; agents never write free-form Cypher. The graph
-model itself is in [README.md › Graph model](README.md#graph-model).
+exported as a named constant and run with parameters. The graph model itself is in
+[README.md › Graph model](README.md#graph-model).
+
+**No model writes Cypher.** There is no text-to-Cypher step in the product. An agent is a program that
+runs these templates in a fixed order and calls a language model at fixed points for one thing: a JSON
+object that fits a schema (an extraction card, a triage label, a hypothesis brief). The model's output
+goes into query parameters (`$rows`, `$text`, `$quote`), never into query text. Where an agent branches,
+it branches on data (how many passages a paper has, whether a quote was found in the source), not on a
+model's instruction. The one query string built at runtime, `QUEUE_OPEN_COUNT`, is a `UNION ALL` over a
+hard-coded list of node labels, assembled once at module load. The consequences: every write `MERGE`s on
+a deterministic id, so re-running a job replaces instead of duplicating; every query carries `projectId`
+inside the workspace's own graph, so a model cannot reach another tenant's data or run a `DELETE` it was
+not given; and every query that ran is named in the `AgentRun` trace.
 
 | | Count |
 |---|---|
