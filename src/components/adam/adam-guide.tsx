@@ -7,7 +7,7 @@ import { CircleHelp } from "lucide-react";
 import { useEffect, useState } from "react";
 
 /**
- * The spec sheet for using Adam: purpose, inputs, the phases with what each needs from you,
+ * The how-to-use sheet for Adam: purpose, inputs, the phases with what each needs from you,
  * the three gates, outputs, runtime requirements and cost, and what each stop means. Shown in
  * full before the first project and behind a "How it works" button afterwards (opened once
  * automatically on a first visit).
@@ -55,12 +55,6 @@ const STATUS = [
   { state: "Jobs", meaning: "Queued and running work. Nothing moving for minutes means no worker, or a worker without an OpenAlex key; failures are in Activity with their reason." },
 ];
 
-const RUNTIME = [
-  { item: "Worker", value: "pnpm adam (included in pnpm dev:all), Node 22 or newer. Without a worker nothing runs." },
-  { item: "Keys", value: "DEEPSEEK_API_KEY, COHERE_API_KEY, OPENALEX_API_KEY (keyless OpenAlex is ~100 requests a day; a sweep needs ~250). Optional: TYPESAFE_API_KEY, DEEPSEEK_HEAVY_MODEL." },
-  { item: "One pass, measured", value: "≈ 380 DeepSeek calls, ≈ 400 Cohere embeddings, ≈ 250 OpenAlex requests, ≈ 6,000 FalkorDB queries; 30–60 minutes wall clock on ~250 papers" },
-  { item: "Storage", value: "Everything, including the job queue, lives in the workspace's FalkorDB graph; the write-up is a document in Postgres" },
-];
 
 function Table({ head, rows, widths }: { head: string[]; rows: (string | number)[][]; widths?: string[] }) {
   return (
@@ -97,7 +91,7 @@ export function AdamGuideContent({ compact }: { compact?: boolean }) {
     <div className={cn("flex flex-col gap-7", compact ? "text-sm" : "text-[15px]")}>
       <Section n="1" title="Purpose">
         <p className="text-muted-foreground leading-relaxed">
-          Adam reads a field&apos;s literature and builds a graph of known steps: claims with the passage they came from, the methods and procedures behind them, the assumptions they rest on, and where papers disagree. Agents read and check; you make three decisions and review only what they could not settle. The output is a set of hypotheses, each with the experiment chain that would test it and the result that would kill it. You then run the experiment, record what you observed, and the verdict goes back into the graph.
+          Adam reads a field&apos;s literature and builds a graph of known steps : claims with the passage they came from, the methods and procedures behind them, the assumptions they rest on, and where papers disagree. Agents read and check; you make three decisions and review only what they could not settle. The output is a set of hypotheses, each with the experiment chain that would test it and the result that would kill it. You then run the experiment, record what you observed, and the verdict goes back into the graph.
         </p>
         <p className="text-muted-foreground leading-relaxed">
           <span className="font-medium text-foreground">Two views.</span> The default is five steps: Ask, Read, Pick, Experiment, Write, with one thing to do at each. <span className="font-medium text-foreground">Advanced</span> (the switch in the header) shows every tab below: sweep rings, the extraction queue, the methods dossier, the full briefs with their attack logs and maps, saturation and activity. The loop underneath is the same.
@@ -138,24 +132,21 @@ export function AdamGuideContent({ compact }: { compact?: boolean }) {
         <Table head={["Shows", "Meaning"]} rows={STATUS.map((s) => [s.state, s.meaning])} widths={["w-36", ""]} />
       </Section>
 
-      <Section n="8" title="Runtime and cost">
-        <Table head={["Item", "Value"]} rows={RUNTIME.map((r) => [r.item, r.value])} widths={["w-40", ""]} />
-      </Section>
 
-      <Section n="9" title="A first run, in order (simple view)">
+      <Section n="8" title="A first run, in order">
         <ol className="text-muted-foreground leading-relaxed list-decimal pl-5 flex flex-col gap-1">
-          <li><span className="font-medium text-foreground">Ask:</span> say what you want to find out, what you believe, and what your lab can do. <span className="font-medium text-foreground">Scope it</span>, read the questions Adam wrote, edit any, then <span className="font-medium text-foreground">Looks right, start reading</span>.</li>
-          <li><span className="font-medium text-foreground">Read:</span> nothing to do. Four automatic stages run; Adam reviews its own uncertain items and leaves the rest under &ldquo;Things Adam wasn&apos;t sure about&rdquo;, which never blocks anything.</li>
-          <li><span className="font-medium text-foreground">Pick:</span> choose the hypotheses worth your time and let Adam try to break them. For each survivor, confirm in one sentence what would make you drop it.</li>
-          <li><span className="font-medium text-foreground">Experiment:</span> approve the plan, run it, tick the steps, write what you observed, then answer: did the kill result appear? That decides the hypothesis and stores your observations as results.</li>
-          <li><span className="font-medium text-foreground">Write:</span> one button writes the pass up for collaborators; one starts the next pass from what is still open.</li>
+          <li><span className="font-medium text-foreground">Ask :</span> say what you want to find out, what you believe, and what your lab can do. <span className="font-medium text-foreground">Scope it</span>, read the questions Adam wrote, edit any, then <span className="font-medium text-foreground">Looks right, start reading</span>.</li>
+          <li><span className="font-medium text-foreground">Read :</span> nothing to do. Four automatic stages run; Adam reviews its own uncertain items and leaves the rest under &ldquo;Things Adam wasn&apos;t sure about&rdquo;, which never blocks anything.</li>
+          <li><span className="font-medium text-foreground">Pick :</span> choose the hypotheses worth your time and let Adam try to break them. For each survivor, confirm in one sentence what would make you drop it.</li>
+          <li><span className="font-medium text-foreground">Experiment :</span> approve the plan, run it, tick the steps, write what you observed, then answer: did the kill result appear? That decides the hypothesis and stores your observations as results.</li>
+          <li><span className="font-medium text-foreground">Write :</span> one button writes the pass up for collaborators; one starts the next pass from what is still open.</li>
         </ol>
       </Section>
     </div>
   );
 }
 
-/** Header button that opens the spec sheet in a side panel; opens itself once on a first visit. */
+/** Header button that opens the onboarding sheet in a side panel; opens itself once on a first visit. */
 export function AdamGuideButton({ autoOpen }: { autoOpen?: boolean }) {
   const [open, setOpen] = useState(false);
   useEffect(() => {
@@ -182,7 +173,7 @@ export function AdamGuideButton({ autoOpen }: { autoOpen?: boolean }) {
       </SheetTrigger>
       <SheetContent className="w-full sm:max-w-3xl overflow-y-auto">
         <SheetHeader>
-          <SheetTitle>Adam · spec sheet</SheetTitle>
+          <SheetTitle>How to use Adam</SheetTitle>
           <SheetDescription>What it does, what it needs from you, what it produces, and what each stop means.</SheetDescription>
         </SheetHeader>
         <div className="mt-4 pb-8">
