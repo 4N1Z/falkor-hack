@@ -61,6 +61,11 @@ async function carryoverText(graph: Graph, projectId: string): Promise<string> {
   const c = await carryover(graph, projectId);
   return [
     c.briefs.length ? `Briefs so far:\n${c.briefs.map((b) => `- pass ${b.pass} · ${b.status}: ${b.statement}`).join("\n")}` : "",
+    c.verdicts.length
+      ? `What the lab found (the researcher ran the experiment; treat these as the firmest facts you have):\n${c.verdicts
+          .map((v) => `- ${v.verdict === "killed" ? "DROPPED, the kill result appeared" : "STANDS so far, the kill result did not appear"}: ${v.statement}${v.note ? `\n  Verdict note: ${v.note}` : ""}${v.observations.length ? `\n  Observations:\n${v.observations.map((o) => `    ${o}`).join("\n")}` : ""}`)
+          .join("\n")}\nA dropped hypothesis must not be re-proposed with the same mechanism; ask instead why it failed. A standing one should be pushed to where it ought to break.`
+      : "",
     c.openAttacks.length ? `Attacks still open or fatal:\n${c.openAttacks.map((a) => `- (${a.kind}, ${a.status}) ${a.text} [on: ${a.hypothesis.slice(0, 80)}]`).join("\n")}` : "",
     c.openQuestions.length ? `Gaps the path search found:\n${c.openQuestions.map((q) => `- (${q.kind}) ${q.text}`).join("\n")}` : "",
     c.saturated.length ? `Clusters already saturated (reading more there adds nothing): ${c.saturated.join("; ")}. Point the new sub-questions elsewhere.` : "",

@@ -29,8 +29,11 @@ export default function AdamProjects({ workspaceId }: { workspaceId: string }) {
             <span className="rounded-sm bg-black p-1.5 text-amber-300"><FlaskConical size={14} strokeWidth={2.25} /></span>
             Adam
           </h2>
-          <p className="mt-1 text-sm text-muted-foreground">
-            A graph of known steps from the literature, every one traced to a page in a source, and the chain of steps that would test a hypothesis. You decide the question, which hypotheses are worth the lab&apos;s time, and what result would kill each one.
+          <p className="mt-2 text-[15px] font-medium leading-snug tracking-[-0.01em] text-foreground">
+            &ldquo;A new result is a new combination of known steps.&rdquo;
+          </p>
+          <p className="mt-1.5 text-sm text-muted-foreground">
+            So Adam builds a graph of known steps from the literature, every one traced to a page in a source, and finds the chain of steps that would test a hypothesis. You decide the question, which hypotheses are worth the lab&apos;s time, and what result would kill each one.
           </p>
         </div>
         <Link href={href} className="inline-flex shrink-0 items-center gap-1 rounded-md bg-foreground px-3 py-1.5 text-sm font-medium text-background transition-transform duration-150 ease-out active:scale-[0.97]">

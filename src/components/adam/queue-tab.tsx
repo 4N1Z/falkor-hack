@@ -475,8 +475,8 @@ function QueueCard({ item: it, active, selected, onSelect, busy, correcting, dra
           {it.partner && (
             <div className="rounded-md border border-rose-100 bg-rose-50/50 p-2 text-sm flex flex-col gap-2">
               <p className="text-[11px] uppercase tracking-wide text-rose-700">Two readings of the same passage</p>
-              <ConflictReading label={`Reading ${it.slot.toUpperCase() || "A"}`} text={it.text} quote={it.quote} paperTitle={it.paperTitle} year={it.year} page={it.chunkPage || it.page} section={it.chunkSection || it.section} confidence={it.confidence} current />
-              <ConflictReading label={`Reading ${it.partner.slot.toUpperCase() || "B"}`} text={it.partner.text} quote={it.partner.quote} paperTitle={it.partner.paperTitle} year={it.partner.year} page={it.partner.page} section={it.partner.section} confidence={it.partner.confidence} />
+              <ConflictReading label={`Reading ${it.slot.toUpperCase() || "A"}`} text={it.text} quote={it.quote} paperId={it.paperId} paperTitle={it.paperTitle} year={it.year} page={it.chunkPage || it.page} section={it.chunkSection || it.section} confidence={it.confidence} current />
+              <ConflictReading label={`Reading ${it.partner.slot.toUpperCase() || "B"}`} text={it.partner.text} quote={it.partner.quote} paperId={it.partner.paperId} paperTitle={it.partner.paperTitle} year={it.partner.year} page={it.partner.page} section={it.partner.section} confidence={it.partner.confidence} />
               <div className="flex flex-wrap gap-2">
                 <Button size="sm" variant="outline" className="h-7 text-xs" disabled={busy} onClick={(e) => { e.stopPropagation(); onApprove(); }}>Keep reading {it.slot.toUpperCase() || "A"}</Button>
                 <Button size="sm" variant="outline" className="h-7 text-xs" disabled={busy} onClick={(e) => { e.stopPropagation(); onKeepPartner(); }}>Keep reading {it.partner.slot.toUpperCase() || "B"}</Button>
@@ -540,15 +540,21 @@ function QueueCard({ item: it, active, selected, onSelect, busy, correcting, dra
 }
 
 /** One side of a conflict: the reading, the source it came from, and the quote it rests on. */
-function ConflictReading({ label, text, quote, paperTitle, year, page, section, confidence, current }: { label: string; text: string; quote: string; paperTitle: string; year: number | null; page: number; section: string; confidence: number; current?: boolean }) {
+function ConflictReading({ label, text, quote, paperId, paperTitle, year, page, section, confidence, current }: { label: string; text: string; quote: string; paperId: string | null; paperTitle: string; year: number | null; page: number; section: string; confidence: number; current?: boolean }) {
+  const paperHref = paperId ? `/dashboard/graph?paperId=${paperId}` : null;
   return (
     <div className={cn("rounded border bg-white p-2", current ? "border-rose-200" : "border-slate-200")}>
       <p className="text-[11px] text-muted-foreground flex flex-wrap items-center gap-x-2">
         <span className={cn("font-medium", current ? "text-rose-700" : "text-slate-700")}>{label}</span>
-        <span className="truncate max-w-[22rem]" title={paperTitle}>{paperTitle || "No paper"}</span>
+        {paperHref ? (
+          <a href={paperHref} className="truncate max-w-[22rem] underline decoration-dotted hover:text-foreground" title={`${paperTitle}: open in the research graph`} onClick={(e) => e.stopPropagation()}>{paperTitle || paperId}</a>
+        ) : (
+          <span className="truncate max-w-[22rem]" title={paperTitle}>{paperTitle || "No paper"}</span>
+        )}
         {year && <span>({year})</span>}
         {page > 0 && <span>· p.{page}</span>}
         {section && <span>· {section}</span>}
+        {paperHref && <a href={paperHref} className="hover:text-foreground" title="Open in the research graph" onClick={(e) => e.stopPropagation()}><ExternalLink className="size-3" /></a>}
         <span className="ml-auto tabular-nums">confidence {Math.round(confidence * 100)}%</span>
       </p>
       <p className="leading-relaxed mt-1">{text}</p>

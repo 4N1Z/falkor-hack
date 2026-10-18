@@ -6,10 +6,11 @@ import { Input } from "@/components/ui/input";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { createAdamProject, useAdamProjects, useAdamStatus } from "@/lib/hooks/use-adam";
 import { cn } from "@/lib/utils";
-import { Loader2, Plus } from "lucide-react";
+import { Loader2, Plus, SlidersHorizontal } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
 import { ActivityTab } from "./activity-tab";
+import { AdamGuideButton, AdamGuideContent } from "./adam-guide";
 import { AdamStatusBar } from "./adam-status-bar";
 import { QuestionTab } from "./question-tab";
 import { SweepTab } from "./sweep-tab";
@@ -19,6 +20,7 @@ import { MethodsTab } from "./methods-tab";
 import { HypothesesTab } from "./hypotheses-tab";
 import { ExperimentsTab } from "./experiments-tab";
 import { SaturationTab } from "./saturation-tab";
+import { SimpleWorkbench } from "./simple/simple-workbench";
 
 type Tab = "question" | "sweep" | "queue" | "knowledge" | "methods" | "hypotheses" | "experiments" | "saturation" | "activity";
 
@@ -44,6 +46,27 @@ export default function AdamWorkbench({ workspaceId }: { workspaceId: string }) 
   const projectId = selected ?? projects?.[0]?.id ?? null;
   const { status, error } = useAdamStatus(workspaceId, projectId);
   const [tab, setTab] = useState<Tab>("question");
+  // Simple by default; the advanced view (every tab) is remembered per browser once chosen
+  const [advanced, setAdvanced] = useState(false);
+  useEffect(() => {
+    // Read after hydration (the server always renders the simple view), deferred so it is not a synchronous set inside the effect
+    const t = setTimeout(() => {
+      try {
+        if (localStorage.getItem("adam-view") === "advanced") setAdvanced(true);
+      } catch {
+        // storage blocked: stay simple
+      }
+    }, 0);
+    return () => clearTimeout(t);
+  }, []);
+  const switchView = (next: boolean) => {
+    setAdvanced(next);
+    try {
+      localStorage.setItem("adam-view", next ? "advanced" : "simple");
+    } catch {
+      // ignore
+    }
+  };
 
   // Keep a stable selection when the list refreshes
   useEffect(() => {
@@ -80,6 +103,13 @@ export default function AdamWorkbench({ workspaceId }: { workspaceId: string }) 
         </div>
         <div className="ml-auto flex items-center gap-2">
           {picker}
+          {projects && projects.length > 0 && <AdamGuideButton autoOpen />}
+          {projects && projects.length > 0 && (
+            <Button size="sm" variant="ghost" className="text-muted-foreground" onClick={() => switchView(!advanced)} title={advanced ? "Back to the five-step view" : "Every tab: sweep rings, extraction queue, methods dossier, saturation, activity"}>
+              <SlidersHorizontal className="size-3.5" />
+              <span className="ml-1.5">{advanced ? "Simple view" : "Advanced"}</span>
+            </Button>
+          )}
           <NewProjectDialog workspaceId={workspaceId} onCreated={(id) => setSelected(id)} />
         </div>
       </header>
@@ -96,6 +126,8 @@ export default function AdamWorkbench({ workspaceId }: { workspaceId: string }) 
         <div className="flex items-center gap-2 text-sm text-muted-foreground py-16 justify-center">
           <Loader2 className="size-4 animate-spin" /> Loading project…
         </div>
+      ) : !advanced ? (
+        <SimpleWorkbench workspaceId={workspaceId} status={status} />
       ) : (
         <>
           <AdamStatusBar workspaceId={workspaceId} status={status} />
@@ -155,13 +187,18 @@ export default function AdamWorkbench({ workspaceId }: { workspaceId: string }) 
 
 function EmptyState({ workspaceId, onCreated }: { workspaceId: string; onCreated: (id: string) => void }) {
   return (
-    <div className="rounded-lg border border-dashed bg-white p-10 flex flex-col items-center gap-3 text-center">
-      <h2 className="text-base font-medium">Start a research project</h2>
-      <p className="text-sm text-muted-foreground max-w-md">
-        Give Adam a topic, what you already believe, and what your lab can do. It turns the literature into a graph of known steps,
-        shows you only what needs your judgment, and answers a hypothesis with the chain that could test it.
-      </p>
-      <NewProjectDialog workspaceId={workspaceId} onCreated={onCreated} primary />
+    <div className="flex flex-col gap-6">
+      <div className="rounded-lg border border-dashed bg-white p-10 flex flex-col items-center gap-3 text-center">
+        <h2 className="text-base font-medium">Start a research project</h2>
+        <p className="text-sm text-muted-foreground max-w-md">
+          Give Adam a topic, what you already believe, and what your lab can do. It turns the literature into a graph of known steps,
+          shows you only what needs your judgment, and answers a hypothesis with the chain that could test it.
+        </p>
+        <NewProjectDialog workspaceId={workspaceId} onCreated={onCreated} primary />
+      </div>
+      <div className="mx-auto w-full max-w-3xl">
+        <AdamGuideContent />
+      </div>
     </div>
   );
 }

@@ -37,6 +37,7 @@ const STATUS: Record<BriefView["status"], { label: string; tone: string }> = {
   attacked: { label: "Under attack", tone: "bg-amber-50 text-amber-800" },
   killed: { label: "Killed", tone: "bg-rose-50 text-rose-700" },
   survived: { label: "Survived", tone: "bg-emerald-50 text-emerald-700" },
+  confirmed: { label: "Confirmed by experiment", tone: "bg-emerald-100 text-emerald-800" },
 };
 
 const ATTACK_LABEL: Record<string, string> = {

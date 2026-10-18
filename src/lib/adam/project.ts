@@ -94,13 +94,14 @@ export async function getProject(graph: Graph, id: string): Promise<AdamProject 
 export async function updateProject(
   graph: Graph,
   id: string,
-  patch: Partial<Pick<AdamProject, "title" | "topic" | "understanding" | "constraints" | "seeds" | "budget" | "maxConcurrency">>,
+  patch: Partial<Pick<AdamProject, "title" | "topic" | "understanding" | "constraints" | "seeds" | "budget" | "maxConcurrency" | "autoReview">>,
 ): Promise<AdamProject | null> {
   const row = (
     await graph.query<Row>(
       UPDATE_PROJECT,
       params({
         id,
+        autoReview: typeof patch.autoReview === "boolean" ? patch.autoReview : null,
         title: patch.title?.trim().slice(0, 200) ?? null,
         topic: patch.topic?.trim().slice(0, 4000) ?? null,
         understanding: patch.understanding?.trim().slice(0, 8000) ?? null,

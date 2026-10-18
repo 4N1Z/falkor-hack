@@ -1,34 +1,32 @@
 "use client";
 
-import type { PlanView } from "@/app/api/adam/[projectId]/experiments/route";
-import {
-  AlertDialog,
-  AlertDialogAction,
-  AlertDialogCancel,
-  AlertDialogContent,
-  AlertDialogDescription,
-  AlertDialogFooter,
-  AlertDialogHeader,
-  AlertDialogTitle,
-  AlertDialogTrigger,
-} from "@/components/ui/alert-dialog";
+import type { ObservationView, PlanView } from "@/app/api/adam/[projectId]/experiments/route";
+import type { BriefView } from "@/app/api/adam/[projectId]/hypotheses/route";
 import { Button } from "@/components/ui/button";
 import type { Chain, HypothesisQueryResult } from "@/lib/adam/hypothesis-query";
 import type { ProjectStatus } from "@/lib/adam/status";
-import { passGate, refreshAdam } from "@/lib/hooks/use-adam";
+import { refreshAdam } from "@/lib/hooks/use-adam";
 import { cn } from "@/lib/utils";
-import { AlertTriangle, Check, GitBranch, Loader2, RotateCw, Search } from "lucide-react";
+import { GitBranch, Loader2, Search } from "lucide-react";
 import { useState } from "react";
 import { toast } from "sonner";
 import useSWR, { mutate } from "swr";
 import { NodeSheet } from "./knowledge-tab";
+import { PlanRunner } from "./simple/plan-runner";
 
 const key = (workspaceId: string, projectId: string) => `/api/adam/${projectId}/experiments?workspaceId=${workspaceId}`;
+const briefsKey = (workspaceId: string, projectId: string) => `/api/adam/${projectId}/hypotheses?workspaceId=${workspaceId}`;
+const briefsFetcher = async (url: string) => {
+  const r = await fetch(url);
+  const b = await r.json();
+  if (!r.ok) throw new Error(b.error ?? "Couldn't load the briefs");
+  return b as { briefs: BriefView[] };
+};
 const fetcher = async (url: string) => {
   const r = await fetch(url);
   const b = await r.json();
   if (!r.ok) throw new Error(b.error ?? "Couldn't load the plans");
-  return b as { plans: PlanView[] };
+  return b as { plans: PlanView[]; observations: ObservationView[] };
 };
 
 const STEP_TONE: Record<string, string> = {
@@ -43,11 +41,11 @@ const STEP_TONE: Record<string, string> = {
 export function ExperimentsTab({ workspaceId, status }: { workspaceId: string; status: ProjectStatus }) {
   const projectId = status.project.id;
   const { data, error } = useSWR(key(workspaceId, projectId), fetcher, { refreshInterval: status.project.status === "running" ? 6000 : 0, keepPreviousData: true });
+  const { data: briefs } = useSWR(briefsKey(workspaceId, projectId), briefsFetcher, { keepPreviousData: true });
   const [text, setText] = useState("");
   const [querying, setQuerying] = useState(false);
   const [result, setResult] = useState<HypothesisQueryResult | null>(null);
   const [selected, setSelected] = useState<string | null>(null);
-  const [busy, setBusy] = useState<string | null>(null);
   const gatePlan = status.project.status === "blocked_on_gate" && status.project.gate === "plan";
 
   const ask = async () => {
@@ -62,33 +60,6 @@ export function ExperimentsTab({ workspaceId, status }: { workspaceId: string; s
       toast.error(e instanceof Error ? e.message : "Query failed");
     } finally {
       setQuerying(false);
-    }
-  };
-
-  const approve = async (p: PlanView) => {
-    setBusy(p.id);
-    try {
-      await passGate(workspaceId, projectId, "plan", { planId: p.id });
-      toast.success("Plan approved", { description: "Handed to the lab; results come back as new nodes." });
-      await mutate(key(workspaceId, projectId));
-    } catch (e) {
-      toast.error(e instanceof Error ? e.message : "Couldn't approve");
-    } finally {
-      setBusy(null);
-    }
-  };
-
-  const redesign = async (p: PlanView) => {
-    setBusy(`re:${p.id}`);
-    try {
-      const r = await fetch(`/api/adam/${projectId}/experiments`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ workspaceId, redesign: p.hypothesisId }) });
-      if (!r.ok) throw new Error((await r.json()).error ?? "Couldn't queue");
-      toast("Experiment Designer queued");
-      await refreshAdam(workspaceId, projectId);
-    } catch (e) {
-      toast.error(e instanceof Error ? e.message : "Couldn't queue");
-    } finally {
-      setBusy(null);
     }
   };
 
@@ -128,78 +99,17 @@ export function ExperimentsTab({ workspaceId, status }: { workspaceId: string; s
           <div className="rounded-lg border border-dashed bg-white p-10 text-center text-sm text-muted-foreground">No plans yet. The Designer writes one for each surviving brief whose kill criteria you signed.</div>
         ) : (
           data.plans.map((p) => (
-            <article key={p.id} className="rounded-lg border bg-white">
-              <header className="px-4 py-3 flex items-start gap-3">
-                <div className="min-w-0 flex-1">
-                  <div className="flex flex-wrap items-center gap-2 text-xs mb-1">
-                    <span className={cn("rounded-full px-2 py-0.5", p.designPasses ? "bg-emerald-50 text-emerald-700" : "bg-amber-50 text-amber-800")}>{p.designPasses ? "design check passed" : "design check flagged issues"}</span>
-                    <span className="text-muted-foreground">cost to kill {Math.round(p.costToKill)}</span>
-                    <span className="text-muted-foreground">v{p.version}</span>
-                    {p.approvedAt && <span className="text-emerald-700 flex items-center gap-1"><Check className="size-3" /> approved</span>}
-                  </div>
-                  <p className="font-medium leading-snug">{p.statement}</p>
-                </div>
-                <div className="flex items-center gap-2 shrink-0">
-                  <Button size="sm" variant="outline" disabled={busy !== null} onClick={() => redesign(p)}>
-                    {busy === `re:${p.id}` ? <Loader2 className="size-3.5 animate-spin" /> : <RotateCw className="size-3.5" />}
-                    <span className="ml-1.5">Redesign</span>
-                  </Button>
-                  {!p.approvedAt && (
-                    <AlertDialog>
-                      <AlertDialogTrigger asChild>
-                        <Button size="sm" disabled={busy !== null}>
-                          <Check className="size-3.5" />
-                          <span className="ml-1.5">Approve plan</span>
-                        </Button>
-                      </AlertDialogTrigger>
-                      <AlertDialogContent>
-                        <AlertDialogHeader>
-                          <AlertDialogTitle>Hand this plan to the lab?</AlertDialogTitle>
-                          <AlertDialogDescription>
-                            The plan is pre-registered against the signed kill criterion: {p.killTest || "see the plan"}. Results feed back into the graph as new nodes on the next pass.
-                          </AlertDialogDescription>
-                        </AlertDialogHeader>
-                        <AlertDialogFooter>
-                          <AlertDialogCancel>Not yet</AlertDialogCancel>
-                          <AlertDialogAction onClick={() => approve(p)}>Approve</AlertDialogAction>
-                        </AlertDialogFooter>
-                      </AlertDialogContent>
-                    </AlertDialog>
-                  )}
-                </div>
-              </header>
-              <div className="px-4 pb-4 flex flex-col gap-3 text-sm">
-                <ol className="flex flex-col gap-1.5">
-                  {p.steps.map((s, i) => (
-                    <li key={i} className="flex items-start gap-2">
-                      <span className="text-muted-foreground tabular-nums w-5 shrink-0">{i + 1}.</span>
-                      <span className={cn("rounded-full px-2 py-0.5 text-[11px] ring-1 ring-inset shrink-0 mt-0.5", STEP_TONE[s.status])}>{s.status}</span>
-                      <div className="min-w-0">
-                        <p>
-                          {s.procedureId ? <button className="font-medium hover:underline decoration-dotted text-left" onClick={() => setSelected(s.procedureId)}>{s.name}</button> : <span className="font-medium">{s.name}</span>}
-                          {s.gap && <span className="ml-2 text-xs text-rose-700 inline-flex items-center gap-1"><AlertTriangle className="size-3" /> gap: this is where the risk sits</span>}
-                        </p>
-                        <p className="text-xs text-muted-foreground">{s.purpose}{s.control ? ` · control: ${s.control}` : ""}</p>
-                      </div>
-                    </li>
-                  ))}
-                </ol>
-                {p.controls.length > 0 && (
-                  <div className="text-xs">
-                    <p className="text-muted-foreground mb-0.5">Controls for rival explanations</p>
-                    <ul className="list-disc pl-4">{p.controls.map((c, i) => <li key={i}><span className="text-muted-foreground">{c.rival}:</span> {c.control}</li>)}</ul>
-                  </div>
-                )}
-                {p.rationale && <p className="text-xs"><span className="text-muted-foreground">Order:</span> {p.rationale}</p>}
-                {p.killTest && <p className="text-xs"><span className="text-muted-foreground">Maps to the kill criterion:</span> {p.killTest}</p>}
-                {!p.designPasses && (p.designCheck.issues?.length ?? 0) > 0 && (
-                  <div className="rounded-md bg-amber-50 p-2 text-xs text-amber-900">
-                    <p className="font-medium mb-1">Design check</p>
-                    <ul className="list-disc pl-4">{p.designCheck.issues!.map((x, i) => <li key={i}>{x}</li>)}</ul>
-                  </div>
-                )}
-              </div>
-            </article>
+            <PlanRunner
+              key={p.id}
+              workspaceId={workspaceId}
+              projectId={projectId}
+              plan={p}
+              brief={briefs?.briefs.find((b) => b.id === p.hypothesisId) ?? null}
+              observations={data.observations.filter((o) => o.planId === p.id)}
+              otherOpen={data.plans.filter((x) => x.id !== p.id && !["killed", "confirmed"].includes(briefs?.briefs.find((b) => b.id === x.hypothesisId)?.status ?? x.hypothesisStatus)).length}
+              onChanged={async () => { await mutate(key(workspaceId, projectId)); await mutate(briefsKey(workspaceId, projectId)); await refreshAdam(workspaceId, projectId); }}
+              onOpenProcedure={setSelected}
+            />
           ))
         )}
       </section>

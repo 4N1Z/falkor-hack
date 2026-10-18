@@ -10,7 +10,7 @@ const PROJECT_FIELDS = `
   coalesce(p.understanding, '') AS understanding, coalesce(p.constraints, '{}') AS constraints,
   coalesce(p.seeds, '[]') AS seeds, p.phase AS phase, p.status AS status, coalesce(p.pass, 1) AS pass,
   coalesce(p.budget, '{}') AS budget, coalesce(p.spentPapers, 0) AS spentPapers, coalesce(p.spentLlmCalls, 0) AS spentLlmCalls,
-  coalesce(p.maxConcurrency, 3) AS maxConcurrency, coalesce(p.papers, '[]') AS papers,
+  coalesce(p.maxConcurrency, 3) AS maxConcurrency, coalesce(p.papers, '[]') AS papers, coalesce(p.autoReview, true) AS autoReview,
   p.gate AS gate, p.createdBy AS createdBy, p.createdAt AS createdAt, p.updatedAt AS updatedAt`;
 
 export const CREATE_PROJECT = `
@@ -94,7 +94,7 @@ MATCH (p:AdamProject {id: $id})
 SET p.title = coalesce($title, p.title), p.topic = coalesce($topic, p.topic),
     p.understanding = coalesce($understanding, p.understanding), p.constraints = coalesce($constraints, p.constraints),
     p.seeds = coalesce($seeds, p.seeds), p.budget = coalesce($budget, p.budget),
-    p.maxConcurrency = coalesce($maxConcurrency, p.maxConcurrency), p.updatedAt = $at
+    p.maxConcurrency = coalesce($maxConcurrency, p.maxConcurrency), p.autoReview = coalesce($autoReview, p.autoReview), p.updatedAt = $at
 RETURN ${PROJECT_FIELDS}`;
 
 export const SET_PROJECT_STATE = `

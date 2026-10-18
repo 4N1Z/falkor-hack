@@ -82,6 +82,8 @@ export interface AdamProject {
   gate: Gate | null;
   /** Pass write-ups saved as workspace files */
   papers: { pass: number; fileId: string; title: string; at: number }[];
+  /** Apply the auto-reviewer's clear approve / reject calls as soon as extraction finishes (default on); the rest waits for a person */
+  autoReview: boolean;
   createdBy: string;
   createdAt: number;
   updatedAt: number;
