@@ -5,6 +5,7 @@
 // per-label distance threshold → create. Every merge is logged with its distance so the
 // thresholds can be tuned on the benchmark, and the queue offers an unmerge.
 
+import { ADAM_QUERY_TIMEOUT_MS } from "./types";
 import type { Graph } from "falkordb";
 import { embedTexts } from "../graph/embeddings";
 import { ADD_ASSUMPTION_ALIAS, ADD_METHOD_ALIAS, CREATE_ASSUMPTION, CREATE_METHOD, METHOD_BY_KEY, NEAREST_ASSUMPTIONS, NEAREST_METHODS } from "./queries-extract";
@@ -41,7 +42,7 @@ export interface MergeLog {
   distance: number;
 }
 
-const params = <T>(p: T) => ({ params: p as never });
+const params = <T>(p: T) => ({ params: p as never, TIMEOUT: ADAM_QUERY_TIMEOUT_MS });
 
 export interface MethodInput {
   projectId: string;

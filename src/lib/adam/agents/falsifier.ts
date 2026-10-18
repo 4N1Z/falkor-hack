@@ -12,6 +12,7 @@
 //   6. boundary          where it should stop holding; no failure condition = not falsifiable
 // Attacks that must rest on the graph (dependency, baseline) cite node ids or are dropped.
 
+import { ADAM_QUERY_TIMEOUT_MS } from "../types";
 import type { Graph } from "falkordb";
 import { z } from "zod";
 import { startRun } from "../../agents/base";
@@ -37,7 +38,7 @@ const AttacksSchema = z.object({
 
 const SYSTEM = `You are the Falsifier in a research-agent system. Your job is to kill hypotheses that deserve to die and to sharpen the ones that survive. You see a brief and material from the literature graph, never the writer's reasoning. Make every attack specific and actionable: name the assumption, the confound, the missing control, the unreproduced result. Do not pad: an attack that is really "I disagree" is noise. Cover the six kinds: premortem (three strongest reviewer objections), dependency (the weakest assumption and the cheapest test of it alone), rival (other explanations for each predicted result, each with the control that separates it), null_ablation (what happens with nothing, and with each component removed), baseline (which prior result it builds on and whether anyone else reproduced it; if not, replication is the first experiment), boundary (where it should stop holding; if the brief names no failure condition, say it is not falsifiable yet).`;
 
-const params = <T>(p: T) => ({ params: p as never });
+const params = <T>(p: T) => ({ params: p as never, TIMEOUT: ADAM_QUERY_TIMEOUT_MS });
 
 export interface FalsifyResult {
   hypothesisId: string;

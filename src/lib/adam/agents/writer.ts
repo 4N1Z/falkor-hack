@@ -7,6 +7,7 @@
 // also answers the Falsifier's attacks in writing; an attack it cannot answer stays open, and
 // one it concedes is fatal.
 
+import { ADAM_QUERY_TIMEOUT_MS } from "../types";
 import type { Graph } from "falkordb";
 import { z } from "zod";
 import { startRun } from "../../agents/base";
@@ -96,7 +97,7 @@ interface ClaimRow {
   assumptionIds: string[];
 }
 
-const params = <T>(p: T) => ({ params: p as never });
+const params = <T>(p: T) => ({ params: p as never, TIMEOUT: ADAM_QUERY_TIMEOUT_MS });
 
 export interface WriterResult {
   briefs: { id: string; statement: string; ready: boolean }[];

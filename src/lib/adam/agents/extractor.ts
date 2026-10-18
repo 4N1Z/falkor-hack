@@ -6,6 +6,7 @@
 // Dual extraction: for core and contradicting papers a second instance (slot b) works the
 // same paper with a different order, temperature and wording; the Verifier compares them.
 
+import { ADAM_QUERY_TIMEOUT_MS } from "../types";
 import type { Graph } from "falkordb";
 import { startRun } from "../../agents/base";
 import type { Section } from "../../graph/document-index";
@@ -134,7 +135,7 @@ export async function runExtractor(
   const run = await startRun("adam-extractor", workspaceId, { projectId: project.id, paperId, slot });
   const beat = opts.heartbeat ?? (async () => {});
   const log = opts.log ?? (() => {});
-  const params = <T>(p: T) => ({ params: p as never });
+  const params = <T>(p: T) => ({ params: p as never, TIMEOUT: ADAM_QUERY_TIMEOUT_MS });
 
   const paper = (await graph.roQuery<{ paperId: string; title: string; abstract: string | null; year: number | null; chunks: number; textVersion: number; accessStatus: string }>(
     PAPER_FOR_EXTRACTION,

@@ -244,3 +244,6 @@ RETURN pr.id AS source, x.id AS target, 'PRODUCES' AS type, '' AS status
 UNION ALL
 MATCH (pr:Procedure {projectId: $projectId})-[:DEPENDS_ON]->(q:Procedure)
 RETURN pr.id AS source, q.id AS target, 'DEPENDS_ON' AS type, '' AS status`;
+
+/** The status bar's "to review" count: the same labels and the same test as the queue itself, so they can't disagree. */
+export const QUEUE_OPEN_COUNT = REVIEW_LABELS.map((l) => `MATCH (n:${l} {projectId: $projectId}) WHERE ${QUEUE_WHERE} RETURN count(n) AS n`).join("\nUNION ALL\n");

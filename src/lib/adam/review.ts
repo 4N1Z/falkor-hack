@@ -3,6 +3,7 @@
 // low confidence, load-bearing items, anything unsourced) with the quoted passage beside the
 // output and one-click decisions. A person's decision outranks every agent write.
 
+import { ADAM_QUERY_TIMEOUT_MS } from "./types";
 import type { Graph } from "falkordb";
 import { embedTexts } from "../graph/embeddings";
 import { emit } from "./events";
@@ -69,7 +70,7 @@ export const kindOf = (it: { state: string; reason: string; loadBearing: boolean
   it.reason === "quote_not_found" ? "unsourced" : it.state === "conflict" ? "conflict" : it.state === "low_confidence" ? "low_confidence" : "load_bearing";
 
 const KIND_ORDER: QueueKind[] = ["conflict", "unsourced", "load_bearing", "low_confidence"];
-const params = <T>(p: T) => ({ params: p as never });
+const params = <T>(p: T) => ({ params: p as never, TIMEOUT: ADAM_QUERY_TIMEOUT_MS });
 
 type QueueRow = Omit<QueueItem, "kind" | "partner" | "chunkText" | "chunkSection" | "chunkPage">;
 

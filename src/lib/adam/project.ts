@@ -2,6 +2,7 @@
 // The project node is the anchor every adam node points at via projectId, and it carries the
 // loop's state (phase, status, pass, budget) the orchestrator reads on every tick.
 
+import { ADAM_QUERY_TIMEOUT_MS } from "./types";
 import { randomUUID } from "crypto";
 import type { Graph } from "falkordb";
 import { getWorkspaceGraph } from "../graph/client";
@@ -47,7 +48,7 @@ const toProject = (r: Row): AdamProject => ({
   spent: { papers: r.spentPapers ?? 0, llmCalls: r.spentLlmCalls ?? 0 },
 });
 
-const params = <T>(p: T) => ({ params: p as never });
+const params = <T>(p: T) => ({ params: p as never, TIMEOUT: ADAM_QUERY_TIMEOUT_MS });
 
 export async function createProject(input: {
   workspaceId: string;

@@ -13,6 +13,7 @@
 //   6. cost to kill: the cheapest chain whose failure would falsify the hypothesis
 // Everything returned carries graph ids, so the UI can click from a step to its sources.
 
+import { ADAM_QUERY_TIMEOUT_MS } from "./types";
 import type { Graph } from "falkordb";
 import { z } from "zod";
 import { startRun } from "../agents/base";
@@ -121,7 +122,7 @@ export interface HypothesisQueryResult {
   runId: string;
 }
 
-const params = <T>(p: T) => ({ params: p as never });
+const params = <T>(p: T) => ({ params: p as never, TIMEOUT: ADAM_QUERY_TIMEOUT_MS });
 
 const stepStatus = (p: { runnability: string; feasibility: string; instruments: { available: boolean; kind: string }[] }): StepStatus => {
   const needsUnavailable = p.instruments.some((i) => !i.available && (i.kind === "equipment" || i.kind === "reagent"));

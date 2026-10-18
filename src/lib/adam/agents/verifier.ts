@@ -10,6 +10,7 @@
 //      conflicts for the human queue.
 //   6. cross-paper contradictions and load-bearing marks, which feed the Analyst and the queue.
 
+import { ADAM_QUERY_TIMEOUT_MS } from "../types";
 import type { Graph } from "falkordb";
 import { startRun } from "../../agents/base";
 import { embedTexts } from "../../graph/embeddings";
@@ -151,7 +152,7 @@ export async function runVerifier(
   const run = await startRun("adam-verifier", workspaceId, { projectId: project.id, paperId });
   const beat = opts.heartbeat ?? (async () => {});
   const log = opts.log ?? (() => {});
-  const params = <T>(p: T) => ({ params: p as never });
+  const params = <T>(p: T) => ({ params: p as never, TIMEOUT: ADAM_QUERY_TIMEOUT_MS });
   const at = Date.now();
 
   const paper = (await graph.roQuery<{ title: string; abstract: string | null; chunks: number }>(PAPER_FOR_EXTRACTION, params({ paperId }))).data?.[0];

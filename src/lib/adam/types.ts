@@ -128,3 +128,10 @@ export const parseJson = <T>(s: string | null | undefined, fallback: T): T => {
     return fallback;
   }
 };
+
+/**
+ * Per-query timeout every adam Cypher call passes to FalkorDB. The server's own read-query
+ * timeout can be as low as 1 s (the `TIMEOUT` config), which the Analyst's community detection
+ * and the vector scans exceed on a modest host; an explicit timeout overrides it per query.
+ */
+export const ADAM_QUERY_TIMEOUT_MS = Number(process.env.ADAM_QUERY_TIMEOUT_MS ?? 120_000);

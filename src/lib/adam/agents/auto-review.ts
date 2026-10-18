@@ -9,6 +9,7 @@
 //   none     unsure; and always for unsourced items (no claim without a source) and
 //            conflicts (a person picks between two readings)
 
+import { ADAM_QUERY_TIMEOUT_MS } from "../types";
 import type { Graph } from "falkordb";
 import { startRun } from "../../agents/base";
 import { scoreMany } from "../../jev";
@@ -35,7 +36,7 @@ export interface AutoReviewResult {
   skipped: number;
 }
 
-const params = <T>(p: T) => ({ params: p as never });
+const params = <T>(p: T) => ({ params: p as never, TIMEOUT: ADAM_QUERY_TIMEOUT_MS });
 
 export async function runAutoReview(
   graph: Graph,

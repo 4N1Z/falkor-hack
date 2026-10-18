@@ -238,14 +238,6 @@ MATCH (:AdamProject {id: $projectId})-[t:TRIAGED]->(p:Paper)
 RETURN coalesce(t.label, 'unlabelled') AS label, coalesce(t.ring, 'seed') AS ring,
        sum(CASE WHEN coalesce(p.chunkSchema, 0) >= 2 THEN 1 ELSE 0 END) AS fullText, count(p) AS n`;
 
-/** Open exception-queue items: what the researcher still has to look at. */
-export const QUEUE_OPEN_COUNT = ["Claim", "Evidence", "Method", "Assumption", "Procedure"]
-  .map(
-    (l) =>
-      `MATCH (n:${l} {projectId: $projectId}) WHERE (n.state IN ['conflict', 'low_confidence'] OR coalesce(n.loadBearing, false) = true OR coalesce(n.stateReason, '') = 'quote_not_found') AND coalesce(n.queueDecided, false) = false RETURN count(n) AS n`,
-  )
-  .join("\nUNION ALL\n");
-
 // ---------------------------------------------------------------- Sweep (Searcher, triage, coverage)
 
 /**

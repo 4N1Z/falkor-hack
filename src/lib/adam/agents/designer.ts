@@ -6,6 +6,7 @@
 // kill criterion and not something adjacent, and are the controls sufficient? The researcher
 // approves the plan (gate), and it is handed to the lab; results feed back as new nodes.
 
+import { ADAM_QUERY_TIMEOUT_MS } from "../types";
 import type { Graph } from "falkordb";
 import { z } from "zod";
 import { startRun } from "../../agents/base";
@@ -43,7 +44,7 @@ const CheckSchema = z.object({
 const DESIGNER_SYSTEM = `You are the Experiment Designer in a research-agent system whose premise is: a new result is a new combination of known steps. You do not invent experiments from imagination: you assemble a plan from the candidate chains the graph returned, ordered so the cheapest step that could kill the hypothesis comes first. Where a chain has no procedure (a gap), say so: that is where the real work and the real risk sit. Every rival explanation needs a control that separates it from the hypothesis.`;
 const CHECKER_SYSTEM = `You are the design checker. You see a kill criterion, rival explanations and an experiment plan, nothing else. Two questions: does each experiment test the kill criterion itself, not something adjacent to it? Are the controls sufficient to separate the rival explanations? A plan whose positive result is also predicted by the null fails.`;
 
-const params = <T>(p: T) => ({ params: p as never });
+const params = <T>(p: T) => ({ params: p as never, TIMEOUT: ADAM_QUERY_TIMEOUT_MS });
 
 export interface DesignResult {
   planId: string;
