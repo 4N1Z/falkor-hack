@@ -8,6 +8,7 @@ import type { Graph } from "falkordb";
 import { emit } from "./events";
 import * as jobs from "./jobs";
 import { PRIORITY, startProject } from "./orchestrator";
+import { OBSERVATIONS, VERDICTS } from "./queries-experiments";
 import { CORE_OPENALEX_IDS, NEXT_PASS, OPEN_ATTACKS, OPEN_QUESTIONS, PASS_SUMMARY, SET_LAST_SWEEP } from "./queries-saturation";
 import { clusterStats } from "./saturation";
 
@@ -18,17 +19,25 @@ export interface Carryover {
   openQuestions: { kind: string; text: string; chainsNeeding: number }[];
   briefs: { pass: number; status: string; statement: string }[];
   saturated: string[];
+  /** What the lab found: the researcher's verdicts and the observations behind them (the hardest facts the next pass has) */
+  verdicts: { id: string; statement: string; verdict: string; note: string; observations: string[] }[];
 }
 
-/** What the Scoper reads on pass N+1: the open attacks, the gaps, the fate of each brief, which clusters are saturated. */
+/** What the Scoper reads on pass N+1: the open attacks, the gaps, the fate of each brief, the lab's verdicts, which clusters are saturated. */
 export async function carryover(graph: Graph, projectId: string): Promise<Carryover> {
-  const [openAttacks, openQuestions, briefs, stats] = await Promise.all([
+  const [openAttacks, openQuestions, briefs, stats, verdictRows, observations] = await Promise.all([
     graph.roQuery<Carryover["openAttacks"][number]>(OPEN_ATTACKS, params({ projectId })).then((r) => r.data ?? []),
     graph.roQuery<Carryover["openQuestions"][number]>(OPEN_QUESTIONS, params({ projectId })).then((r) => r.data ?? []),
     graph.roQuery<Carryover["briefs"][number]>(PASS_SUMMARY, params({ projectId })).then((r) => r.data ?? []),
     clusterStats(graph, projectId),
+    graph.roQuery<{ id: string; statement: string; verdict: string; note: string }>(VERDICTS, params({ projectId })).then((r) => r.data ?? []),
+    graph.roQuery<{ hypothesisId: string; order: number; text: string; done: boolean }>(OBSERVATIONS, params({ projectId })).then((r) => r.data ?? []),
   ]);
-  return { openAttacks, openQuestions, briefs, saturated: stats.filter((s) => s.saturated).map((s) => s.label) };
+  const verdicts = verdictRows.map((v) => ({
+    ...v,
+    observations: observations.filter((o) => o.hypothesisId === v.id && o.text.trim()).sort((a, b) => a.order - b.order).map((o) => `${o.order}. ${o.text.trim()}`),
+  }));
+  return { openAttacks, openQuestions, briefs, saturated: stats.filter((s) => s.saturated).map((s) => s.label), verdicts };
 }
 
 /** Start the next pass: back to the question, budget reset, orchestrator running. */

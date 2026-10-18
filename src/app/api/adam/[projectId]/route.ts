@@ -28,6 +28,7 @@ export async function PATCH(req: Request, { params }: Params) {
     seeds: body.seeds as never,
     budget: body.budget as never,
     maxConcurrency: typeof body.maxConcurrency === "number" ? Math.max(1, Math.min(8, body.maxConcurrency)) : undefined,
+    autoReview: typeof body.autoReview === "boolean" ? body.autoReview : undefined,
   });
   return NextResponse.json({ project });
 }

@@ -24,7 +24,7 @@ export interface BriefView {
   procedureHint: string;
   killCriteria: string;
   ready: boolean;
-  status: "draft" | "selected" | "attacked" | "killed" | "survived";
+  status: "draft" | "selected" | "attacked" | "killed" | "survived" | "confirmed";
   state: string;
   stateReason: string;
   confidence: number;

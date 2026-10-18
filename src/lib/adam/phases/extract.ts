@@ -69,6 +69,11 @@ export const extractStep: PhaseStep = async ({ graph, project }) => {
   if (pending > 0) return { enqueued };
   // The saturation bar is recomputed after each extraction batch
   await jobs.enqueue(graph, { projectId: project.id, kind: "saturation", subject: `pass-${project.pass}`, payload: { pass: project.pass }, priority: PRIORITY.saturation, dedupeKey: `saturation:${project.id}:pass${project.pass}:${readable.length}`, maxAttempts: 2 });
+  // Agents decide what they can: the auto-reviewer judges the exception queue against the passages
+  // and applies its clear calls; conflicts, unsourced items and the unsure remainder wait for a person
+  if (project.autoReview !== false) {
+    await jobs.enqueue(graph, { projectId: project.id, kind: "auto_review", subject: `pass-${project.pass}`, payload: { pass: project.pass, apply: true }, priority: PRIORITY.auto_review, dedupeKey: `auto_review:${project.id}:pass${project.pass}:auto:${readable.length}`, maxAttempts: 2 });
+  }
   const notes = failed ? [`${failed} extraction or verification job(s) failed; continuing with the verified cards`] : [];
   return { enqueued, advance: true, notes };
 };

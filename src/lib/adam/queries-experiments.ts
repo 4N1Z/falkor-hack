@@ -166,3 +166,43 @@ MATCH (e:ExperimentPlan {id: $id})
 WHERE e.projectId = $projectId
 SET e.approvedBy = $userId, e.approvedAt = $at, e.state = 'human_approved'
 RETURN e.id AS id, e.hypothesisId AS hypothesisId`;
+
+// ---------------------------------------------------------------- Running the experiment: observations and the verdict
+
+/** One observation per plan step, written by the researcher; editing overwrites, nothing is lost from the graph's history of edits (updatedAt). */
+export const UPSERT_OBSERVATION = `
+MATCH (e:ExperimentPlan {id: $planId})
+WHERE e.projectId = $projectId
+MERGE (o:Observation {id: $id})
+ON CREATE SET o.createdAt = $at, o.projectId = $projectId, o.planId = $planId, o.hypothesisId = e.hypothesisId, o.order = $order
+SET o.text = $text, o.done = $done, o.observedAt = $at, o.by = $userId, o.updatedAt = $at, o.state = 'human_approved'
+MERGE (o)-[:OF]->(e)
+RETURN o.id AS id`;
+
+export const OBSERVATIONS = `
+MATCH (o:Observation {projectId: $projectId})
+RETURN o.id AS id, o.planId AS planId, o.hypothesisId AS hypothesisId, o.order AS order, coalesce(o.text, '') AS text,
+       coalesce(o.done, false) AS done, o.observedAt AS observedAt, o.by AS by
+ORDER BY o.planId, o.order`;
+
+/**
+ * The researcher's verdict after running the plan: did the kill result appear? The hypothesis is
+ * killed or confirmed (so far), and the verdict becomes a Result node with the person as its
+ * source, so the next pass and the write-up can cite it like any other result.
+ */
+export const RECORD_VERDICT = `
+MATCH (h:Hypothesis {id: $hypothesisId})
+WHERE h.projectId = $projectId
+SET h.status = $status, h.stateReason = 'observed', h.verdict = $verdict, h.verdictNote = $note, h.verdictBy = $userId, h.verdictAt = $at, h.updatedAt = $at
+MERGE (r:Result {id: 'result:verdict:' + h.id})
+ON CREATE SET r.createdAt = $at
+SET r.projectId = $projectId, r.text = $resultText, r.state = 'human_approved', r.source = 'observation', r.decidedBy = $userId, r.decidedAt = $at,
+    r.hypothesisId = h.id, r.updatedAt = $at
+MERGE (h)-[:OBSERVED {at: $at}]->(r)
+RETURN h.id AS id, h.status AS status`;
+
+/** The researcher's verdicts on this pass's hypotheses, for the write-up. */
+export const VERDICTS = `
+MATCH (h:Hypothesis {projectId: $projectId})
+WHERE h.verdict IS NOT NULL
+RETURN h.id AS id, h.statement AS statement, h.verdict AS verdict, coalesce(h.verdictNote, '') AS note, h.verdictAt AS at, h.verdictBy AS by`;

@@ -69,6 +69,8 @@ const RANGE_INDEXES: Array<[label: string, prop: string]> = [
   ["Hypothesis", "projectId"],
   ["Attack", "id"],
   ["ExperimentPlan", "id"],
+  ["Observation", "id"],
+  ["Observation", "projectId"],
   ["AdamJob", "id"],
   ["AdamJob", "status"],
   ["AdamJob", "projectId"],

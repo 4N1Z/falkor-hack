@@ -18,7 +18,7 @@ import { citationHref, citationLabel } from "../citations";
 import { emit } from "./events";
 import { structured } from "./llm";
 import { CANDIDATES } from "./queries-analyst";
-import { PLANS } from "./queries-experiments";
+import { OBSERVATIONS, PLANS, VERDICTS } from "./queries-experiments";
 import { ATTACKS_FOR, BRIEF_EVIDENCE, BRIEFS, WRITER_CLAIMS } from "./queries-hypotheses";
 import { METHODS_DOSSIER } from "./queries-methods";
 import { ADD_PROJECT_PAPER, TRIAGED_PAPERS } from "./queries";
@@ -210,7 +210,30 @@ export async function writePassPaper(graph: Graph, workspaceId: string, project:
   }
 
   c.push(h(2, "6. Results"));
-  c.push(p("No laboratory results have been fed back into the graph for this pass. When the approved plans are run, their outcomes return as Result nodes and this section fills on the next pass."));
+  const [observations, verdicts] = await Promise.all([
+    graph.roQuery<{ planId: string; hypothesisId: string; order: number; text: string; done: boolean; observedAt: number | null }>(OBSERVATIONS, params({ projectId: pid })).then((r) => r.data ?? []),
+    graph.roQuery<{ id: string; verdict: string; note: string; at: number | null }>(VERDICTS, params({ projectId: pid })).then((r) => r.data ?? []),
+  ]);
+  const observed = planRows.filter((pl) => observations.some((o) => o.planId === pl.id && (o.text || o.done)));
+  if (!observed.length && !verdicts.some((v) => thisPass.some((b) => b.id === v.id))) {
+    c.push(p("No laboratory results have been recorded for this pass. When the approved plan is run, the observations and the verdict recorded in the Experiment step appear here, with the researcher as their source."));
+  }
+  for (const pl of observed) {
+    const b = thisPass.find((x) => x.id === pl.hypothesisId)!;
+    const steps = parseJson<{ name: string }[]>(pl.steps, []);
+    c.push(h(3, `Observations for: ${b.statement}`));
+    c.push({
+      type: "orderedList",
+      content: observations
+        .filter((o) => o.planId === pl.id && (o.text || o.done))
+        .sort((x, y) => x.order - y.order)
+        .map((o) => ({ type: "listItem", content: [p(text(`${steps[o.order - 1]?.name ?? `Step ${o.order}`}${o.done ? " (done)" : ""}: `, [{ type: "bold" }]), o.text || "no notes", text(o.observedAt ? ` [${new Date(o.observedAt).toLocaleDateString()}]` : "", [{ type: "italic" }]))] })),
+    });
+  }
+  for (const v of verdicts.filter((x) => thisPass.some((b) => b.id === x.id))) {
+    const b = thisPass.find((x) => x.id === v.id)!;
+    c.push(p(text(v.verdict === "killed" ? "Verdict: dropped. " : "Verdict: stands, so far. ", [{ type: "bold" }]), `${v.verdict === "killed" ? "The kill result appeared" : "The kill result did not appear"} when the plan for “${b.statement}” was run${v.note ? `: ${v.note}` : "."}`, text(v.at ? ` Recorded ${new Date(v.at).toLocaleDateString()} by the researcher.` : "", [{ type: "italic" }])));
+  }
 
   c.push(h(2, "7. Discussion, limitations and controls"));
   c.push(...paras(prose.object.discussion));
