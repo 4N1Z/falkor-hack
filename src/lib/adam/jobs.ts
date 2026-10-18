@@ -3,6 +3,7 @@
 // slots can share a graph without a lock server. Every job has a dedupeKey, so the
 // orchestrator can ask for the same work on every tick and only the first ask counts.
 
+import { ADAM_QUERY_TIMEOUT_MS } from "./types";
 import { randomUUID } from "crypto";
 import type { Graph } from "falkordb";
 import { getWorkspaceGraph } from "../graph/client";
@@ -30,7 +31,7 @@ const BACKOFF_MS = 30_000;
 type Row = Omit<AdamJob, "payload" | "result" | "progress"> & { payload: string; result: string | null; progress: string };
 const toJob = (r: Row): AdamJob => ({ ...r, payload: parseJson(r.payload, {}), result: r.result ? parseJson(r.result, null) : null, progress: parseJson(r.progress, {}) });
 
-const params = <T>(p: T) => ({ params: p as never });
+const params = <T>(p: T) => ({ params: p as never, TIMEOUT: ADAM_QUERY_TIMEOUT_MS });
 
 export interface EnqueueInput {
   projectId: string;

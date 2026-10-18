@@ -3,6 +3,7 @@
 // fence. Written by the Scoper, checked by the scope checker, approved by the researcher
 // (gate 1). Stored as (:QuestionPage)-[:OF]->(:AdamProject), one per pass.
 
+import { ADAM_QUERY_TIMEOUT_MS } from "./types";
 import { randomUUID } from "crypto";
 import type { Graph } from "falkordb";
 import { APPROVE_QUESTION_PAGE, EDIT_QUESTION_PAGE, GET_QUESTION_PAGE, UPSERT_QUESTION_PAGE } from "./queries";
@@ -68,7 +69,7 @@ const toPage = (r: Row): QuestionPage => ({
   checks: parseJson<ScopeChecks | null>(r.checks === "{}" ? null : r.checks, null),
 });
 
-const params = <T>(p: T) => ({ params: p as never });
+const params = <T>(p: T) => ({ params: p as never, TIMEOUT: ADAM_QUERY_TIMEOUT_MS });
 
 export async function getQuestionPage(graph: Graph, projectId: string): Promise<QuestionPage | null> {
   const row = (await graph.roQuery<Row>(GET_QUESTION_PAGE, params({ projectId }))).data?.[0];

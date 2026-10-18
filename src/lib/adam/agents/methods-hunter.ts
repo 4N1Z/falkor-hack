@@ -8,6 +8,7 @@
 // a competent lab follow this as written, and what is still missing? Feasibility is judged
 // against the researcher's constraints, which decide which chains the lab can actually run.
 
+import { ADAM_QUERY_TIMEOUT_MS } from "../types";
 import type { Graph } from "falkordb";
 import { z } from "zod";
 import { startRun } from "../../agents/base";
@@ -77,7 +78,7 @@ export interface HuntResult {
   prerequisitesLinked: number;
 }
 
-const params = <T>(p: T) => ({ params: p as never });
+const params = <T>(p: T) => ({ params: p as never, TIMEOUT: ADAM_QUERY_TIMEOUT_MS });
 
 export async function runMethodsHunter(
   graph: Graph,

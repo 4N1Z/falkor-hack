@@ -11,6 +11,7 @@
 // by the saturation bar). Core, contradicting and method papers become library papers and are
 // read in full by the Librarian; background papers are metadata-only nodes.
 
+import { ADAM_QUERY_TIMEOUT_MS } from "../types";
 import { eq, and, inArray } from "drizzle-orm";
 import type { Graph } from "falkordb";
 import db from "@/db";
@@ -118,7 +119,7 @@ const fromGraph = (r: GraphRow, ring: Ring): Candidate => ({
   clusterHint: r.clusterId || null,
 });
 
-const params = <T>(p: T) => ({ params: p as never });
+const params = <T>(p: T) => ({ params: p as never, TIMEOUT: ADAM_QUERY_TIMEOUT_MS });
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
 // ---------------------------------------------------------------- gathering

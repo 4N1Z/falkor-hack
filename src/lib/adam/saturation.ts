@@ -6,6 +6,7 @@
 // measures whether the system has stopped learning from the literature, not whether the
 // literature is right: the Falsifier is for that.
 
+import { ADAM_QUERY_TIMEOUT_MS } from "./types";
 import type { Graph } from "falkordb";
 import { BRIEF_CLUSTERS, CLUSTER_STATS, PAPER_NODE_SERIES, SET_BRIEF_THIN, UPSERT_CLUSTER_STAT } from "./queries-saturation";
 import type { QuestionPage } from "./question-page";
@@ -32,7 +33,7 @@ export interface ClusterStat {
   pass: number;
 }
 
-const params = <T>(p: T) => ({ params: p as never });
+const params = <T>(p: T) => ({ params: p as never, TIMEOUT: ADAM_QUERY_TIMEOUT_MS });
 
 export async function computeSaturation(graph: Graph, projectId: string, pass: number, page: QuestionPage | null): Promise<ClusterStat[]> {
   const rows = (await graph.roQuery<{ clusterId: string; community: string; paperId: string; title: string; extractedAt: number; nodesNew: number; nodesReused: number; label: string }>(PAPER_NODE_SERIES, params({ projectId }))).data ?? [];

@@ -10,6 +10,7 @@
 // subgraph: an edge needs more than vocabulary overlap, and a hole needs both clusters
 // verified. Candidates that fail are kept with sane:false so the researcher can see why.
 
+import { ADAM_QUERY_TIMEOUT_MS } from "../types";
 import type { Graph } from "falkordb";
 import { z } from "zod";
 import { startRun } from "../../agents/base";
@@ -87,7 +88,7 @@ const cosine = (a: number[], b: number[]) => {
   return dot / (Math.sqrt(na) * Math.sqrt(nb) || 1);
 };
 
-const params = <T>(p: T) => ({ params: p as never });
+const params = <T>(p: T) => ({ params: p as never, TIMEOUT: ADAM_QUERY_TIMEOUT_MS });
 
 export interface AnalystResult {
   communities: number;

@@ -4,6 +4,7 @@
 // candidate the brief was derived from, and the procedures of its chains and plan. Every node
 // carries its verification state and who decided it, so the map also shows the review done.
 
+import { ADAM_QUERY_TIMEOUT_MS } from "./types";
 import type { Graph } from "falkordb";
 import { CLAIMS_CONTEXT, CLAIMS_PAPERS_CLUSTERS, GET_BRIEF, HYPOTHESIS_ATTACK_NODES, HYPOTHESIS_NEIGHBOURS, HYPOTHESIS_PLAN_STEPS } from "./queries-hypotheses";
 import { getQuestionPage } from "./question-page";
@@ -36,7 +37,7 @@ export interface HypothesisMap {
   reviews: { approved: number; rejected: number; corrected: number; verified: number; unchecked: number };
 }
 
-const params = <T>(p: T) => ({ params: p as never });
+const params = <T>(p: T) => ({ params: p as never, TIMEOUT: ADAM_QUERY_TIMEOUT_MS });
 
 export async function hypothesisMap(graph: Graph, projectId: string, hypothesisId: string): Promise<HypothesisMap> {
   const brief = (await graph.roQuery<{ id: string; statement: string; status: string }>(GET_BRIEF, params({ id: hypothesisId }))).data?.[0];

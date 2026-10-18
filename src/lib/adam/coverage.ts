@@ -2,6 +2,7 @@
 // what is missing? Are the seed papers' own key citations present? Are adjacent fields
 // covered? The answer is stored on the project so the Sweep tab and the orchestrator share it.
 
+import { ADAM_QUERY_TIMEOUT_MS } from "./types";
 import type { Graph } from "falkordb";
 import { ADJACENT_PRESENCE, CORE_PAPERS, CORE_REFERENCE_COVERAGE, GET_PROJECT_COVERAGE, SET_PROJECT_COVERAGE } from "./queries";
 import type { QuestionPage } from "./question-page";
@@ -28,7 +29,7 @@ export interface Coverage {
   adjacentMissing: string[];
 }
 
-const params = <T>(p: T) => ({ params: p as never });
+const params = <T>(p: T) => ({ params: p as never, TIMEOUT: ADAM_QUERY_TIMEOUT_MS });
 
 export async function computeCoverage(graph: Graph, projectId: string, pass: number, page: QuestionPage): Promise<Coverage> {
   const [rows, cores, adjacency] = await Promise.all([

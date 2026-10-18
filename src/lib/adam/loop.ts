@@ -3,6 +3,7 @@
 // what the attacks and the path search left open. A scheduled re-sweep brings in papers that
 // have cited the core since the last sweep, and briefs whose evidence changed are flagged.
 
+import { ADAM_QUERY_TIMEOUT_MS } from "./types";
 import type { Graph } from "falkordb";
 import { emit } from "./events";
 import * as jobs from "./jobs";
@@ -10,7 +11,7 @@ import { PRIORITY, startProject } from "./orchestrator";
 import { CORE_OPENALEX_IDS, NEXT_PASS, OPEN_ATTACKS, OPEN_QUESTIONS, PASS_SUMMARY, SET_LAST_SWEEP } from "./queries-saturation";
 import { clusterStats } from "./saturation";
 
-const params = <T>(p: T) => ({ params: p as never });
+const params = <T>(p: T) => ({ params: p as never, TIMEOUT: ADAM_QUERY_TIMEOUT_MS });
 
 export interface Carryover {
   openAttacks: { kind: string; text: string; status: string; hypothesis: string; hypothesisStatus: string }[];
