@@ -1,3 +1,5 @@
+<img src="public/neura_query_image.png" alt="Neura Query" width="100%">
+
 # Neura Query
 
 **Hackathon submission: Adam, a research designer and experiment designer built on FalkorDB, inside a collaborative WYSIWYG research editor whose own agents run on the same graph.** 
@@ -17,8 +19,7 @@ You make the three decisions it cannot: the question, which hypothesis is worth 
 The graph is not a store beside the agent: it is Adam's memory, its job queue and its proof.
 
 > **"New results are a combination of known steps. The novelty is in the assembly, not in inventing."**
->
-> And the discipline that makes that usable: **no claim without the page it came from, and no hypothesis without the result that would kill it.**
+And the discipline that makes that usable: **no claim without the page it came from, and no hypothesis without the result that would kill it.**
 
 ![Tony Stark at work](https://media.giphy.com/media/AbYxDs20DECQw/giphy.gif)
 
