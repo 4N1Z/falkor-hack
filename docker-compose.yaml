@@ -78,7 +78,9 @@ services:
       # Read-query timeout (ms). The module default is 1 s, which the Graph Analyst's community detection exceeds on a small host
       - FALKORDB_ARGS=TIMEOUT 60000
     ports:
-      - "6379:6379"
+      # 6380 on the host: a local redis-server usually already owns 6379.
+      # Matches FALKORDB_URL=falkor://localhost:6380 in .env.example.
+      - "6380:6379"
       # FalkorDB Browser UI (host 3001 so it doesn't clash with Next on 3000)
       - "3001:3000"
     volumes:

@@ -12,8 +12,8 @@
     "lint": "eslint .",
     "generate": "drizzle-kit generate",
     "push": "drizzle-kit push --strict",
-    "serve": "tsx scripts/serve.mts",
-    "adam": "node --env-file=.env.local ./node_modules/tsx/dist/cli.mjs scripts/adam-worker.ts",
+    "serve": "node --env-file-if-exists=.env --env-file-if-exists=.env.local ./node_modules/tsx/dist/cli.mjs scripts/serve.mts",
+    "adam": "node --env-file-if-exists=.env --env-file-if-exists=.env.local ./node_modules/tsx/dist/cli.mjs scripts/adam-worker.ts",
     "pull": "drizzle-kit pull",
     "dev:all": "concurrently \"pnpm run dev\" \"pnpm run serve\" \"pnpm run adam\""
   },
