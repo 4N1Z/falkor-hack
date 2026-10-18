@@ -116,6 +116,11 @@ services:
     environment:
       - REDIS_ARGS=--appendonly yes
       - BROWSER=0
+      # Read-query timeout (ms). The module default is 1 s, which the Graph
+      # Analyst's community detection exceeds on a small host - analyze_graph
+      # was failing with "Query timed out" and burning a retry each pass.
+      # FALKORDB_ARGS is appended after --loadmodule by the image entrypoint.
+      - FALKORDB_ARGS=TIMEOUT 60000
     volumes:
       - falkordb_data:/var/lib/falkordb/data
     mem_limit: 512m
