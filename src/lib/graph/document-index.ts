@@ -16,6 +16,18 @@
 
 import { createHash } from "crypto";
 import { extractText, getDocumentProxy } from "unpdf";
+
+/**
+ * PDF.js (the bundle unpdf ships) uses the `Iterator` global, which Node added in 22. On an older
+ * runtime every PDF read throws "Iterator is not defined" and the whole pipeline quietly degrades
+ * to abstracts. Name the cause once, loudly, instead of failing paper by paper.
+ */
+export function fullTextRuntimeIssue(): string | null {
+  const major = Number(process.versions.node.split(".")[0]);
+  if (typeof (globalThis as { Iterator?: unknown }).Iterator !== "undefined" && major >= 22) return null;
+  return `Node ${process.versions.node} cannot run PDF.js (it needs the Iterator global, Node 22+): no PDF full text will be read until the runtime is upgraded`;
+}
+let warnedRuntime = false;
 import { getWorkspaceGraph } from "./client";
 import { embedTexts } from "./embeddings";
 import { normalizeDoi } from "./openalex";
@@ -177,6 +189,12 @@ export async function fetchDocumentText(url: string, opts: FetchOptions = {}): P
 
   try {
     if (type.includes("pdf") || magic === "%PDF-") {
+      const runtime = fullTextRuntimeIssue();
+      if (runtime) {
+        if (!warnedRuntime) console.error(`[graph] ${runtime}`);
+        warnedRuntime = true;
+        return { ok: false, reason: "unreadable" };
+      }
       const pdf = await getDocumentProxy(bytes);
       const out = await extractText(pdf, { mergePages: false });
       const doc = toDocumentText(out.text, "pdf");

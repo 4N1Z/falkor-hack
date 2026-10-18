@@ -22,6 +22,7 @@ export async function runSearchRing_(ctx: JobContext) {
 
   const result = await runSearchRing(ctx.graph, ctx.workspaceId, project, page, ring, { round, onlyPaperIds, recentSince, skipClusters, heartbeat: ctx.heartbeat, log: ctx.log });
   await emit(ctx.graph, project.id, "ring_done", { ...result, round });
+  if (result.fullTextNote) await emit(ctx.graph, project.id, "note", { phase: "sweep", ring, note: result.fullTextNote });
 
   // The checker: what is still missing after this ring?
   const coverage = await computeCoverage(ctx.graph, project.id, project.pass, page);

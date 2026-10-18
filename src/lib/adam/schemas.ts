@@ -8,16 +8,24 @@ import type { Section } from "../graph/document-index";
 
 export const SECTIONS = ["front", "abstract", "introduction", "related", "methods", "results", "discussion", "limitations", "conclusion", "appendix", "supplementary", "unknown"] as const satisfies readonly Section[];
 
+/** Models miscase enum values ("Results", "Figure ") often enough that a card should not die over it. */
+const lenientEnum = <T extends readonly [string, ...string[]]>(values: T, fallback: T[number]) =>
+  z.preprocess((v) => {
+    if (typeof v !== "string") return v;
+    const key = v.trim().toLowerCase().replace(/\s+/g, "_");
+    return (values as readonly string[]).includes(key) ? key : fallback;
+  }, z.enum(values));
+
 const Item = z.object({
   localId: z.string().describe("Short id unique within this card, e.g. c1, e1, m1, a1"),
   text: z.string().describe("One precise statement in your own words; keep numbers and conditions"),
   chunkId: z.string().describe("The id of the ONE chunk the quote is copied from, exactly as shown in [c:…]"),
   quote: z.string().describe("A verbatim passage (20–400 characters) copied from that chunk that supports the item"),
-  confidence: z.number().min(0).max(1).describe("How sure you are the source says this"),
+  confidence: z.coerce.number().min(0).max(1).describe("How sure you are the source says this, 0 to 1"),
 });
 
 export const ClaimItem = Item.extend({
-  section: z.enum(SECTIONS).describe("The section of the chunk the quote is from"),
+  section: lenientEnum(SECTIONS, "unknown").describe("The section of the chunk the quote is from"),
   speculative: z.boolean().describe("true when the statement is a Discussion / Conclusion interpretation rather than a Results finding"),
   conditions: z.array(z.string()).describe("Conditions under which the claim was shown to hold (dataset, scale, temperature, model size…)"),
   evidenceRefs: z.array(z.string()).describe("localIds of evidence items that back this claim"),
@@ -26,7 +34,7 @@ export const ClaimItem = Item.extend({
 });
 
 export const EvidenceItem = Item.extend({
-  kind: z.enum(["figure", "table", "statistic", "text"]),
+  kind: lenientEnum(["figure", "table", "statistic", "text"], "text"),
   locator: z.string().nullable().optional().describe("'Figure 3b', 'Table 2', 'n = 12' …"),
 });
 

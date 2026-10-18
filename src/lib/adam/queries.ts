@@ -356,3 +356,8 @@ ON CREATE SET p.inLibrary = false, p.createdAt = timestamp(), p.title = r.title,
               p.doi = r.doi, p.arxivId = r.arxivId, p.metaSuspect = false
 SET p.accessStatus = coalesce(p.accessStatus, CASE WHEN r.abstract IS NULL THEN 'unavailable' ELSE 'abstract_only' END)
 RETURN count(p) AS n`;
+
+/** What the Librarian managed for a set of library rows: full text, abstract only, or nothing. */
+export const FULLTEXT_OUTCOME = `
+MATCH (p:Paper) WHERE p.pgPaperId IN $pgIds
+RETURN coalesce(p.accessStatus, CASE WHEN coalesce(p.chunkCount, 0) > 0 THEN 'full_text' ELSE 'unavailable' END) AS status, count(p) AS n`;
