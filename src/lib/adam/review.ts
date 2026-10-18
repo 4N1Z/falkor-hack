@@ -56,8 +56,8 @@ export interface QueueItem {
   chunkSection: string;
   chunkPage: number;
   kind: QueueKind;
-  /** For conflicts: the other reading of the same passage */
-  partner?: { id: string; text: string; state: string; slot: string } | null;
+  /** For conflicts: the other reading, with its own source so the two can be cross-referenced */
+  partner?: { id: string; text: string; state: string; slot: string; quote: string; paperId: string | null; paperTitle: string; year: number | null; page: number; section: string; confidence: number } | null;
   /** Auto-review's proposal, if it has run: approve / reject, or null when it was unsure */
   autoSuggestion: "approve" | "reject" | null;
   autoConfidence: number;
@@ -80,7 +80,13 @@ async function openItems(graph: Graph, projectId: string): Promise<Omit<QueueIte
   const byId = new Map(rows.map((r) => [r.id, r]));
   const items = rows.map((r) => {
     const partner = r.conflictWith ? byId.get(r.conflictWith) : null;
-    return { ...r, kind: kindOf(r), partner: partner ? { id: partner.id, text: partner.text, state: partner.state, slot: partner.slot } : null };
+    return {
+      ...r,
+      kind: kindOf(r),
+      partner: partner
+        ? { id: partner.id, text: partner.text, state: partner.state, slot: partner.slot, quote: partner.quote, paperId: partner.paperId, paperTitle: partner.paperTitle, year: partner.year, page: partner.page, section: partner.section, confidence: partner.confidence }
+        : null,
+    };
   });
   const seen = new Set<string>();
   const out: typeof items = [];
