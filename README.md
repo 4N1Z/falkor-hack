@@ -1,8 +1,14 @@
 # Neura Query
 
-**A collaborative research editor where a team's papers live in one FalkorDB graph, and small single-purpose agents help at each step of writing. Every suggestion they make comes with the graph path behind it.**
+**Hackathon submission: Adam, a research designer and experiment designer built on FalkorDB, inside a collaborative WYSIWYG research editor whose own agents run on the same graph.** Adam does the work that sits between a research question and a lab bench. It scopes the question into sub-questions and a search vocabulary; sweeps the literature in rings and reads the core papers in full; extracts every claim, method, assumption and piece of evidence with the page and quote it came from, verified by a second agent before a person sees it; works each method up into a procedure a lab could run; finds the holes, conflicts and untested assumptions in what the field knows; writes competing hypotheses and attacks them before you spend a day on one; and designs the experiment that would test the survivor, as a chain of known procedures ordered cheapest-to-kill, with the gaps marked honestly. You make three decisions it cannot: the question, which hypothesis is worth your lab's time, and the result that would make you drop it. Then you run the experiment, record what you observed, and the verdict goes back into the graph for the next pass. The graph is not a store beside the agent: it is Adam's memory, its job queue and its proof.
 
-When three people write a paper together, each one brings a different reading list. Neura Query puts all of those lists into one research graph per workspace: papers, citations, authors, concepts, full-text passages, who imported what, and the team's own hypotheses. Agents in the editor then draw on that graph:
+> **"New results are a combination of known steps. The novelty is in the assembly, not in inventing."**
+>
+> And the discipline that makes that usable: **no claim without the page it came from, and no hypothesis without the result that would kill it.**
+
+![Tony Stark at work](https://media.giphy.com/media/AbYxDs20DECQw/giphy.gif)
+
+Adam lives inside **Neura Query**, a collaborative WYSIWYG research editor (TipTap, real-time multi-user) where a team's papers already live in one FalkorDB graph per workspace, and small single-purpose agents work in the editor itself, each suggestion carrying the graph path behind it:
 
 - **Cite Scout** suggests a citation for the sentence you're writing, drawn from *any* collaborator's library, and shows the citation path that connects it to your own papers.
 - **Citation Checker** reads the cited paper's text and tells you whether each claim is supported, contradicted or uncited.
@@ -12,14 +18,13 @@ When three people write a paper together, each one brings a different reading li
 
 Agents only *propose*. Nothing is inserted until a person accepts it, so the researcher stays the author.
 
-> Built for the **WeMakeDevs × FalkorDB hackathon** (Oct 15–18 2026), Track 01: *Agents That Act on Connected Data*.
-> The full phase-by-phase plan, decisions and verification notes are in [`docs/falkordb-hackathon-plan.md`](docs/falkordb-hackathon-plan.md).
+[Adam](#adam-the-research-agent-system) · [The Cypher and graph algorithms it depends on](GRAPH_QUERIES.md) · [Graph model](#graph-model)
 
 ---
 
 ## Why a graph
 
-Most "chat with your papers" tools use vector search over chunks. That answers *"which passage is similar to this?"* It can't answer the questions a research team actually has:
+A research team's questions are about relationships: who read what, which paper supports which sentence and through which citations, which method a result depends on, which assumption three findings silently share, where a chain of procedures breaks. Similarity over passages answers none of those. Each one is a path, a count or a traversal, which is why the whole product, Adam and the editor agents alike, runs on one FalkorDB graph per workspace:
 
 | Question | What it takes in FalkorDB |
 |---|---|
@@ -211,17 +216,20 @@ claude mcp add --transport http neura http://localhost:3000/api/mcp --header "Au
 | `src/components/novel/` | Editor integrations: Cite Scout panel, ghost text, citation check, notebook, draft review |
 | `src/components/graph/research-graph-view.tsx` | Research graph page: team map, paper focus and agent provenance on `@falkordb/canvas` |
 | `src/components/library/` | Research library: library, index health, OpenAlex search, new papers, upload/import |
+| `src/lib/adam/`, `src/components/adam/`, `src/app/api/adam/`, `scripts/adam-worker.ts` | Adam: agents, phases, handlers, per-area Cypher, the five-step and advanced UIs, the API, the worker |
+| [`GRAPH_QUERIES.md`](GRAPH_QUERIES.md) | **The Cypher queries and graph algorithms the product depends on**, with where each is used |
 
 ### Built during the hackathon vs. pre-existing
 
-**Pre-existing:** the neura-query app itself (auth, workspaces, folders and files, the TipTap/Yjs collaborative editor, Zotero OAuth, the original bubble-menu AI and Stripe) was imported in the first commit.
+**Pre-existing:** the neura-query app itself (auth, workspaces, folders and files, the TipTap/Yjs collaborative editor, Zotero OAuth, the original bubble-menu AI and Stripe) was imported.
 
-**Built during the hackathon (Oct 15–18):**
+**Built during the hackathon :**
 - Everything under `src/lib/graph`, `src/lib/agents`, `src/lib/jev.ts` and `src/lib/citations.ts`.
-- The agent, graph and MCP routes.
+- The agent and graph.
 - The research library rebuild: OpenAlex search and import, full-text indexing, and index health.
 - Every editor integration listed above.
 - The Research graph page and the seed and report scripts.
+- **Adam** : the research-agent system, its job queue in the graph, the worker, the hypothesis-as-query path search, the five-step UI, observations and verdicts. See [GRAPH_QUERIES.md](GRAPH_QUERIES.md).
 - Upgrade to Next 16.
 - Fixes to the editor plumbing it depended on:
   - slash commands and Tab indentation;
