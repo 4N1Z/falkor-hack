@@ -25,7 +25,7 @@ type Tab = "question" | "sweep" | "queue" | "knowledge" | "methods" | "hypothese
 const TABS: { id: Tab; label: string }[] = [
   { id: "question", label: "Question" },
   { id: "sweep", label: "Sweep" },
-  { id: "queue", label: "Queue" },
+  { id: "queue", label: "Extraction queue" },
   { id: "knowledge", label: "Knowledge" },
   { id: "methods", label: "Methods" },
   { id: "hypotheses", label: "Hypotheses" },

@@ -473,10 +473,15 @@ function QueueCard({ item: it, active, selected, onSelect, busy, correcting, dra
           )}
           {it.reason && <p className="text-xs text-muted-foreground">{REASON[it.reason] ?? REASON[it.reason.split(":")[0]] ?? it.reason}</p>}
           {it.partner && (
-            <div className="rounded-md border border-rose-100 bg-rose-50/50 p-2 text-sm">
-              <p className="text-[11px] uppercase tracking-wide text-rose-700 mb-1">The other extractor read it as</p>
-              <p className="leading-relaxed">{it.partner.text}</p>
-              <Button size="sm" variant="outline" className="mt-2 h-7 text-xs" disabled={busy} onClick={(e) => { e.stopPropagation(); onKeepPartner(); }}>Keep this one instead</Button>
+            <div className="rounded-md border border-rose-100 bg-rose-50/50 p-2 text-sm flex flex-col gap-2">
+              <p className="text-[11px] uppercase tracking-wide text-rose-700">Two readings of the same passage</p>
+              <ConflictReading label={`Reading ${it.slot.toUpperCase() || "A"}`} text={it.text} quote={it.quote} paperTitle={it.paperTitle} year={it.year} page={it.chunkPage || it.page} section={it.chunkSection || it.section} confidence={it.confidence} current />
+              <ConflictReading label={`Reading ${it.partner.slot.toUpperCase() || "B"}`} text={it.partner.text} quote={it.partner.quote} paperTitle={it.partner.paperTitle} year={it.partner.year} page={it.partner.page} section={it.partner.section} confidence={it.partner.confidence} />
+              <div className="flex flex-wrap gap-2">
+                <Button size="sm" variant="outline" className="h-7 text-xs" disabled={busy} onClick={(e) => { e.stopPropagation(); onApprove(); }}>Keep reading {it.slot.toUpperCase() || "A"}</Button>
+                <Button size="sm" variant="outline" className="h-7 text-xs" disabled={busy} onClick={(e) => { e.stopPropagation(); onKeepPartner(); }}>Keep reading {it.partner.slot.toUpperCase() || "B"}</Button>
+                <span className="text-[11px] text-muted-foreground self-center">Keeping one retracts the other. Correct rewrites reading {it.slot.toUpperCase() || "A"} in your words.</span>
+              </div>
             </div>
           )}
           {it.aliases.length > 0 && (
@@ -531,5 +536,23 @@ function QueueCard({ item: it, active, selected, onSelect, busy, correcting, dra
         )}
       </footer>
     </article>
+  );
+}
+
+/** One side of a conflict: the reading, the source it came from, and the quote it rests on. */
+function ConflictReading({ label, text, quote, paperTitle, year, page, section, confidence, current }: { label: string; text: string; quote: string; paperTitle: string; year: number | null; page: number; section: string; confidence: number; current?: boolean }) {
+  return (
+    <div className={cn("rounded border bg-white p-2", current ? "border-rose-200" : "border-slate-200")}>
+      <p className="text-[11px] text-muted-foreground flex flex-wrap items-center gap-x-2">
+        <span className={cn("font-medium", current ? "text-rose-700" : "text-slate-700")}>{label}</span>
+        <span className="truncate max-w-[22rem]" title={paperTitle}>{paperTitle || "No paper"}</span>
+        {year && <span>({year})</span>}
+        {page > 0 && <span>· p.{page}</span>}
+        {section && <span>· {section}</span>}
+        <span className="ml-auto tabular-nums">confidence {Math.round(confidence * 100)}%</span>
+      </p>
+      <p className="leading-relaxed mt-1">{text}</p>
+      {quote && <p className="mt-1 text-xs text-muted-foreground border-l-2 border-slate-200 pl-2 italic">“{quote.length > 280 ? `${quote.slice(0, 280)}…` : quote}”</p>}
+    </div>
   );
 }
