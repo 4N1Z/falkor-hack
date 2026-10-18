@@ -11,6 +11,7 @@
  */
 import { hostname } from "os";
 import { getFalkor, getWorkspaceGraph } from "../src/lib/graph/client";
+import { fullTextRuntimeIssue } from "../src/lib/graph/document-index";
 import { HANDLERS, type JobContext } from "../src/lib/adam/handlers";
 import * as jobs from "../src/lib/adam/jobs";
 import { getProject } from "../src/lib/adam/project";
@@ -126,6 +127,9 @@ async function poll() {
 
 async function main() {
   log(`worker ${WORKER} up, ${SLOTS} slots${ONCE ? ", one pass" : ""}`);
+  const runtime = fullTextRuntimeIssue();
+  if (runtime) log(`WARNING: ${runtime}`);
+  if (!process.env.OPENALEX_API_KEY) log("WARNING: no OPENALEX_API_KEY in this worker's environment; keyless OpenAlex allows ~100 requests a day and a sweep makes ~250");
   const stop = () => {
     if (stopping) return;
     stopping = true;

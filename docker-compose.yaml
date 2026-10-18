@@ -39,6 +39,12 @@ services:
       - AUTH_URL=${AUTH_URL}
       - NEXT_PUBLIC_WS_URL=${NEXT_PUBLIC_WS_URL}
       - FALKORDB_URL=falkor://falkordb:6379
+      # Adam needs an OpenAlex key (keyless traffic is ~100 requests a day; a sweep makes ~250)
+      - OPENALEX_API_KEY=${OPENALEX_API_KEY}
+      - OPENALEX_MAILTO=${OPENALEX_MAILTO}
+      - DEEPSEEK_HEAVY_MODEL=${DEEPSEEK_HEAVY_MODEL}
+      - ADAM_JOB_TIMEOUT_MIN=${ADAM_JOB_TIMEOUT_MIN}
+      - ADAM_QUERY_TIMEOUT_MS=${ADAM_QUERY_TIMEOUT_MS}
       - TYPESAFE_API_KEY=${TYPESAFE_API_KEY}
     depends_on:
       - falkordb
@@ -68,6 +74,9 @@ services:
   # Research graph store. Run alone for local dev: `docker compose up falkordb`
   falkordb:
     image: falkordb/falkordb:latest
+    environment:
+      # Read-query timeout (ms). The module default is 1 s, which the Graph Analyst's community detection exceeds on a small host
+      - FALKORDB_ARGS=TIMEOUT 60000
     ports:
       - "6379:6379"
       # FalkorDB Browser UI (host 3001 so it doesn't clash with Next on 3000)

@@ -1,5 +1,6 @@
 # Base node image
-FROM node:20-alpine3.19 AS base
+# Node 22+: PDF.js (via unpdf) needs the Iterator global; on Node 20 every PDF read fails and Adam sees abstracts only
+FROM node:22-alpine AS base
 WORKDIR /app
 # Add Chrome dependencies
 RUN apk add --no-cache chromium

@@ -18,12 +18,13 @@ import db from "@/db";
 import { papers } from "@/db/schema";
 import { startRun, type AgentRunRecorder } from "../../agents/base";
 import { embedTexts, paperEmbeddingText } from "../../graph/embeddings";
+import { fullTextRuntimeIssue } from "../../graph/document-index";
 import { ingestPaperRows, type PaperRow } from "../../graph/ingest-rows";
 import { getCitingSweepWorks, getRecentCitingWorks, OpenAlexBudgetError, searchWorksFiltered, titleKey, type SweepWork } from "../../graph/openalex";
 import { PAPERS_BY_PG_ID, TEAM_PAPER_DETAILS } from "../../graph/queries";
 import { classifyMany } from "../../jev";
 import { spend } from "../project";
-import { BACKWARD_CANDIDATES, CONCEPT_OVERLAP_CANDIDATES, CORE_PAPERS, TRIAGED_IDS, UPSERT_SWEEP_PAPERS, UPSERT_TRIAGED } from "../queries";
+import { BACKWARD_CANDIDATES, CONCEPT_OVERLAP_CANDIDATES, CORE_PAPERS, FULLTEXT_OUTCOME, TRIAGED_IDS, UPSERT_SWEEP_PAPERS, UPSERT_TRIAGED } from "../queries";
 import type { QuestionPage } from "../question-page";
 import type { AdamProject } from "../types";
 
@@ -354,6 +355,10 @@ export interface RingResult {
   triaged: Record<TriageLabel, number>;
   readFully: number;
   newPapers: number;
+  /** How the papers meant to be read fully ended up: full text, abstract only, or nothing */
+  fullText: { full_text: number; abstract_only: number; unavailable: number };
+  /** Why full text is missing when it mostly is (shown to the researcher as a note) */
+  fullTextNote?: string;
 }
 
 export async function runSearchRing(
@@ -473,7 +478,22 @@ export async function runSearchRing(
   }
   for (const r of triagedRows) run.highlight.add(r.paperId);
 
-  const result: RingResult = { ring, candidates: candidates.length, triaged: counts, readFully: toRead.length, newPapers };
+  // How the read-fully papers actually ended up. A ring where no PDF yielded text is a runtime or
+  // network problem, not a property of the literature, and the researcher must hear about it.
+  const fullText = { full_text: 0, abstract_only: 0, unavailable: 0 };
+  if (rows.length) {
+    const outcome = (await graph.roQuery<{ status: string; n: number }>(FULLTEXT_OUTCOME, params({ pgIds: rows.map((r) => r.id) }))).data ?? [];
+    for (const o of outcome) if (o.status in fullText) fullText[o.status as keyof typeof fullText] += o.n;
+  }
+  let fullTextNote: string | undefined;
+  if (rows.length >= 3 && fullText.full_text === 0) {
+    const runtime = fullTextRuntimeIssue();
+    fullTextNote = runtime
+      ? `None of the ${rows.length} papers chosen for full reading yielded text: ${runtime}.`
+      : `None of the ${rows.length} papers chosen for full reading yielded text (no open-access PDF reachable, or every PDF unreadable). Extraction will run on abstracts; supply PDFs from the Sweep tab.`;
+    opts.log?.(fullTextNote);
+  }
+  const result: RingResult = { ring, candidates: candidates.length, triaged: counts, readFully: toRead.length, newPapers, fullText, fullTextNote };
   await run.finish("ANSWERED", [result], project.createdBy);
   return result;
 }
