@@ -112,25 +112,86 @@ export function toGraphPaper(work: OpenAlexWork): GraphPaper {
   };
 }
 
+/** Thrown when OpenAlex's daily budget is spent: retrying inside the job would sleep for hours. */
+export class OpenAlexBudgetError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = "OpenAlexBudgetError";
+  }
+}
+
+export interface OpenAlexBudget {
+  remaining: number | null;
+  limit: number | null;
+  /** When the budget refills (epoch ms), when known */
+  resetAt: number | null;
+  seenAt: number;
+  keyed: boolean;
+}
+
+let lastBudget: OpenAlexBudget | null = null;
+/** The budget headers from the most recent OpenAlex response (measured: 1,000 units a day keyless, 10 per request). */
+export const getOpenAlexBudget = () => lastBudget;
+
+const REQUEST_TIMEOUT_MS = 30_000;
+/** A Retry-After longer than this means the daily budget, not a burst: fail now, with the reason. */
+const MAX_RETRY_WAIT_MS = 90_000;
+
+function readBudget(res: Response) {
+  const remaining = res.headers.get("x-ratelimit-remaining");
+  const limit = res.headers.get("x-ratelimit-limit");
+  const reset = res.headers.get("x-ratelimit-reset");
+  if (remaining === null && limit === null) return;
+  lastBudget = {
+    remaining: remaining === null ? null : Number(remaining),
+    limit: limit === null ? null : Number(limit),
+    resetAt: reset === null ? null : Date.now() + Number(reset) * 1000,
+    seenAt: Date.now(),
+    keyed: !!API_KEY,
+  };
+}
+
+const hours = (ms: number) => `${Math.floor(ms / 3600_000)}h ${Math.round((ms % 3600_000) / 60_000)}m`;
+
+function budgetMessage(retryAfterMs: number) {
+  const b = lastBudget;
+  const left = b?.remaining !== null && b?.remaining !== undefined ? `${b.remaining} of ${b.limit ?? "?"} units left` : "budget spent";
+  const reset = b?.resetAt ? ` resets in ${hours(b.resetAt - Date.now())}` : retryAfterMs ? ` retry asked in ${hours(retryAfterMs)}` : "";
+  return `OpenAlex daily budget spent (${left};${reset}). ${API_KEY ? "The key's quota is used up." : "No OPENALEX_API_KEY in this worker's environment: keyless traffic gets about 100 requests a day. Set the key where the worker runs and restart it."}`;
+}
+
 async function openAlexFetch<T>(path: string, params: Record<string, string>): Promise<T | null> {
   const url = new URL(`${BASE}${path}`);
   for (const [k, v] of Object.entries(params)) url.searchParams.set(k, v);
   url.searchParams.set("mailto", MAILTO);
   if (API_KEY) url.searchParams.set("api_key", API_KEY);
 
+  let lastError = "";
   for (let attempt = 0; attempt < 6; attempt++) {
-    const res = await fetch(url, { headers: { Accept: "application/json" } });
+    let res: Response;
+    try {
+      // A stalled connection must not hold a job forever
+      res = await fetch(url, { headers: { Accept: "application/json" }, signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS) });
+    } catch (err) {
+      lastError = err instanceof Error ? err.message : String(err);
+      await new Promise((r) => setTimeout(r, 1000 * 2 ** attempt));
+      continue;
+    }
+    readBudget(res);
     if (res.ok) return (await res.json()) as T;
     if (res.status === 404) return null;
     if (res.status === 429 || res.status >= 500) {
-      // The polite pool allows ~10 req/s; a burst of searches trips it, so back off for real
-      const retryAfter = Number(res.headers.get("retry-after")) * 1000;
-      await new Promise((r) => setTimeout(r, Math.max(retryAfter || 0, 1000 * 2 ** attempt)));
+      const retryAfterMs = Number(res.headers.get("retry-after")) * 1000 || 0;
+      // The polite pool allows ~10 req/s and a burst trips it: back off. A long Retry-After or an
+      // empty budget is the daily limit: sleeping on it would look like a hung sweep, so fail now.
+      if (res.status === 429 && (retryAfterMs > MAX_RETRY_WAIT_MS || lastBudget?.remaining === 0)) throw new OpenAlexBudgetError(budgetMessage(retryAfterMs));
+      lastError = `HTTP ${res.status}`;
+      await new Promise((r) => setTimeout(r, Math.min(Math.max(retryAfterMs, 1000 * 2 ** attempt), MAX_RETRY_WAIT_MS)));
       continue;
     }
     throw new Error(`OpenAlex ${res.status} for ${url.pathname}`);
   }
-  throw new Error(`OpenAlex kept failing for ${url.pathname} (rate limited${API_KEY ? "" : "; no OPENALEX_API_KEY set, the keyless daily budget may be spent"})`);
+  throw new Error(`OpenAlex kept failing for ${url.pathname} (${lastError || "rate limited"}${API_KEY ? "" : "; no OPENALEX_API_KEY set, the keyless daily budget may be spent"})`);
 }
 
 export async function getWorkByDoi(doi: string): Promise<OpenAlexWork | null> {

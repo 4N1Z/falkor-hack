@@ -18,7 +18,7 @@ import { papers } from "@/db/schema";
 import { startRun, type AgentRunRecorder } from "../../agents/base";
 import { embedTexts, paperEmbeddingText } from "../../graph/embeddings";
 import { ingestPaperRows, type PaperRow } from "../../graph/ingest-rows";
-import { getCitingSweepWorks, getRecentCitingWorks, searchWorksFiltered, titleKey, type SweepWork } from "../../graph/openalex";
+import { getCitingSweepWorks, getRecentCitingWorks, OpenAlexBudgetError, searchWorksFiltered, titleKey, type SweepWork } from "../../graph/openalex";
 import { PAPERS_BY_PG_ID, TEAM_PAPER_DETAILS } from "../../graph/queries";
 import { classifyMany } from "../../jev";
 import { spend } from "../project";
@@ -166,7 +166,13 @@ async function gatherSeed(graph: Graph, project: AdamProject, page: QuestionPage
 async function searchEach(queries: string[], perPage: number): Promise<SweepWork[][]> {
   const out: SweepWork[][] = [];
   for (const q of queries) {
-    out.push(await searchWorksFiltered(q, { perPage }).catch(() => []));
+    // One odd term may 400; a spent budget is the ring's problem, not the term's, so it propagates
+    out.push(
+      await searchWorksFiltered(q, { perPage }).catch((err) => {
+        if (err instanceof OpenAlexBudgetError) throw err;
+        return [];
+      }),
+    );
     await sleep(150);
   }
   return out;

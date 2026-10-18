@@ -162,14 +162,18 @@ MATCH (j:AdamJob {id: $id, status: 'running'})
 SET j.heartbeatAt = $now, j.progress = coalesce($progress, j.progress)
 RETURN j.id AS id`;
 
+/** Only the worker holding the job may finish it: a handler abandoned after a timeout, or a worker
+ *  that lost the job to the stale requeue, must not overwrite another worker's run. */
 export const COMPLETE_JOB = `
 MATCH (j:AdamJob {id: $id})
+WHERE j.status = 'running' AND ($worker IS NULL OR j.lockedBy = $worker)
 SET j.status = 'done', j.result = $result, j.finishedAt = $now, j.error = null
 RETURN j.id AS id`;
 
 /** Retry with backoff until maxAttempts, then failed. The caller computes status and runAfter. */
 export const FAIL_JOB = `
 MATCH (j:AdamJob {id: $id})
+WHERE j.status = 'running' AND ($worker IS NULL OR j.lockedBy = $worker)
 SET j.status = $status, j.error = $error, j.runAfter = $runAfter, j.lockedBy = null,
     j.finishedAt = CASE WHEN $status = 'failed' THEN $now ELSE null END
 RETURN j.id AS id`;

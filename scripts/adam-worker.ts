@@ -21,6 +21,8 @@ const SLOTS = Number(process.argv.find((a) => a.startsWith("--slots="))?.slice(8
 const ONCE = process.argv.includes("--once");
 const POLL_MS = 2000;
 const HEARTBEAT_MS = 30_000;
+/** Longest any single job may run. Rings and extractions finish in minutes; an hour means something upstream hung. */
+const JOB_TIMEOUT_MS = Number(process.env.ADAM_JOB_TIMEOUT_MIN ?? 60) * 60_000;
 const WORKER = `${hostname()}#${process.pid}`;
 
 let running = 0;
@@ -62,14 +64,29 @@ async function runJob(workspaceId: string, job: AdamJob) {
       heartbeat: (progress) => jobs.heartbeat(graph, job.id, progress),
       log: (m) => log(`${label}: ${m}`),
     };
-    const result = await handler(ctx);
-    await jobs.complete(graph, job.id, result);
+    // A handler that never returns (a stalled upstream call, a sleep on a long Retry-After) must not
+    // hold the job forever while its heartbeat keeps it from the stale requeue
+    let timer: NodeJS.Timeout | undefined;
+    const timeout = new Promise<never>((_, reject) => {
+      timer = setTimeout(() => reject(new Error(`gave up after ${Math.round(JOB_TIMEOUT_MS / 60_000)} min with no result (the handler was abandoned)`)), JOB_TIMEOUT_MS);
+      timer.unref();
+    });
+    const result = await Promise.race([handler(ctx), timeout]).finally(() => clearTimeout(timer));
+    const held = await jobs.complete(graph, job.id, result, WORKER);
+    if (!held) {
+      log(`· ${label} finished but this worker no longer holds it; result dropped`);
+      return;
+    }
     // A cycling job (the orchestrator) asks to run again; this must follow the completion write
     const again = result && typeof result === "object" && "rescheduleAt" in result ? Number((result as { rescheduleAt: number }).rescheduleAt) : null;
     if (again) await jobs.reschedule(graph, job.id, again);
     log(`✓ ${label} in ${Date.now() - t0}ms${again ? ` · again in ${Math.max(0, Math.round((again - Date.now()) / 1000))}s` : ""}`);
   } catch (err) {
-    const { exhausted, message } = await jobs.fail(graph, job, err);
+    const { exhausted, message, held } = await jobs.fail(graph, job, err, WORKER);
+    if (!held) {
+      log(`· ${label} failed (${message}) but this worker no longer holds it`);
+      return;
+    }
     log(`${exhausted ? "✗ failed" : "↻ retry"} ${label}: ${message}`);
     if (job.projectId) await emit(graph, job.projectId, exhausted ? "job_failed" : "job_retry", { kind: job.kind, subject: job.subject, error: message });
   } finally {

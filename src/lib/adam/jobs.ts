@@ -94,25 +94,28 @@ export async function heartbeat(graph: Graph, jobId: string, progress?: Record<s
   await graph.query(HEARTBEAT_JOB, params({ id: jobId, now: Date.now(), progress: progress ? JSON.stringify(progress) : null }));
 }
 
-export async function complete(graph: Graph, jobId: string, result: unknown) {
-  await graph.query(COMPLETE_JOB, params({ id: jobId, now: Date.now(), result: JSON.stringify(result ?? null).slice(0, 8000) }));
+/** Marks the job done. False when this worker no longer holds it (requeued as stale, or finished elsewhere). */
+export async function complete(graph: Graph, jobId: string, result: unknown, worker: string | null = null): Promise<boolean> {
+  const res = await graph.query<{ id: string }>(COMPLETE_JOB, params({ id: jobId, worker, now: Date.now(), result: JSON.stringify(result ?? null).slice(0, 8000) }));
+  return (res.data?.length ?? 0) > 0;
 }
 
 /** Retry with exponential backoff until maxAttempts; then failed. */
-export async function fail(graph: Graph, job: AdamJob, err: unknown) {
+export async function fail(graph: Graph, job: AdamJob, err: unknown, worker: string | null = null) {
   const message = (err instanceof Error ? err.message : String(err)).slice(0, 500);
   const exhausted = job.attempts >= job.maxAttempts;
-  await graph.query(
+  const res = await graph.query<{ id: string }>(
     FAIL_JOB,
     params({
       id: job.id,
+      worker,
       status: exhausted ? "failed" : "queued",
       error: message,
       runAfter: Date.now() + BACKOFF_MS * 2 ** Math.max(0, job.attempts - 1),
       now: Date.now(),
     }),
   );
-  return { exhausted, message };
+  return { exhausted, message, held: (res.data?.length ?? 0) > 0 };
 }
 
 export async function requeueStale(graph: Graph): Promise<number> {
