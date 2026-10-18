@@ -1,5 +1,9 @@
-# Base node image
-FROM node:20-alpine3.19 AS base
+# Base node image.
+# Node 22, not 20: PDF.js needs the `Iterator` global (and its helpers), which
+# only exists from Node 22. On 20 every full-text PDF fetch died with
+# "ReferenceError: Iterator is not defined", so papers were indexed from title
+# and abstract alone and the agents reported missing_data / 0 sources.
+FROM node:22-alpine AS base
 WORKDIR /app
 # Add Chrome dependencies
 RUN apk add --no-cache chromium
