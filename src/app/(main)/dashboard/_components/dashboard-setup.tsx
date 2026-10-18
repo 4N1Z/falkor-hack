@@ -23,10 +23,8 @@ import { useAppState } from "@/lib/providers/state-providers";
 import { WorkspaceFormSchema } from "@/lib/types";
 import { z } from "zod";
 import { toast } from "sonner";
-import { createClient } from "@/utils/supabase/client";
 import EmojiPicker from "@/components/emoji-picker";
 import { Loader } from "lucide-react";
-import Image from "next/image";
 import { User } from "next-auth";
 
 interface DashboardSetupProps {
@@ -44,11 +42,6 @@ const DashboardSetup: React.FC<DashboardSetupProps> = ({
 
   const { dispatch } = useAppState();
   const [selectedEmoji, setSelectedEmoji] = useState("💼");
-  const [uploaded, setUploaded] = useState<String>("");
-
-  // TODO : Possiblility of error : 70%
-
-  const supabase = createClient();
 
   const {
     register,
@@ -67,36 +60,9 @@ const DashboardSetup: React.FC<DashboardSetupProps> = ({
   const onSubmit: SubmitHandler<z.infer<typeof WorkspaceFormSchema>> = async (
     value
   ) => {
-    const file = value.logo?.[0];
     const workspaceId = v4();
-    let filePath = null;
 
     try {
-      if (file) {
-        const { data, error } = await supabase.storage
-          .from("workspace")
-          .upload(`workspace.${workspaceId}`, file, {
-            cacheControl: "3600",
-            upsert: true,
-          });
-
-        if (error) {
-          console.error("Error while uploading:", error);
-          throw new Error("File upload failed");
-        }
-
-        const { data: fileData } = await supabase.storage
-          .from("workspace")
-          .getPublicUrl(data?.path);
-
-        setUploaded(fileData?.publicUrl || "");
-        filePath = data?.path || null;
-      } else {
-        console.warn("No file uploaded");
-      }
-      // TODO : Future, check to see if the URL needs to be appended or not.
-      // TODO :  As of now only file_path is added to DB.
-
       const newWorkspace: workspace = {
         createdAt: new Date().toISOString(),
         iconId: selectedEmoji,
@@ -104,7 +70,7 @@ const DashboardSetup: React.FC<DashboardSetupProps> = ({
         inTrash: "",
         title: value.workspaceName,
         workspaceOwner: user.id!,
-        logo: filePath || null,
+        logo: null,
         bannerUrl: "",
         updatedAt: new Date().toISOString(),
       };
@@ -192,51 +158,6 @@ const DashboardSetup: React.FC<DashboardSetupProps> = ({
                   {errors?.workspaceName?.message?.toString()}
                 </small>
               </div>
-            </div>
-            <div>
-              <Label
-                htmlFor="logo"
-                className="text-sm
-                  text-muted-foreground
-                "
-              >
-                Workspace Logo
-              </Label>
-              <Input
-                id="logo"
-                type="file"
-                accept="image/*"
-                placeholder="Workspace Name"
-                // disabled={isLoading || subscription?.status !== 'active'}
-                {...register("logo", {
-                  required: false,
-                })}
-              />
-              <small className="text-red-600">
-                {errors?.logo?.message?.toString()}
-              </small>
-              {subscription?.status !== "active" && (
-                <small
-                  className="
-                  text-muted-foreground
-                  block
-              "
-                >
-                  To customize your workspace, you need to be on a Pro Plan
-                </small>
-              )}
-            </div>
-            <div>
-              Workspce uplaoded image
-              {uploaded && (
-                <Image
-                  src={uploaded as string}
-                  alt=""
-                  height={120}
-                  width={120}
-                  className="my-5 max-w-[400px]"
-                />
-              )}
             </div>
             <div className="self-end">
               <Button disabled={isLoading} type="submit">

@@ -20,7 +20,6 @@ export default function OnboardingForm() {
   const router = useRouter();
   const [currentStep, setCurrentStep] = useState(0);
   const [isSubmitting, setIsSubmitting] = useState(false);
-  const [isNavigating, setIsNavigating] = useState(false);
   const [formData, setFormData] = useState<OnboardingFormData>({
     name: "",
     university: "",
@@ -33,23 +32,12 @@ export default function OnboardingForm() {
     Partial<Record<keyof OnboardingFormData, string[]>>
   >({});
 
-  const handleNext = async () => {
-    if (currentStep < steps.length - 1) {
-      setIsNavigating(true);
-      // Simulate a small delay for smoother transitions
-      await new Promise((resolve) => setTimeout(resolve, 300));
-      setCurrentStep(currentStep + 1);
-      setIsNavigating(false);
-    }
+  const handleNext = () => {
+    if (currentStep < steps.length - 1) setCurrentStep(currentStep + 1);
   };
 
-  const handleBack = async () => {
-    if (currentStep > 0) {
-      setIsNavigating(true);
-      await new Promise((resolve) => setTimeout(resolve, 300));
-      setCurrentStep(currentStep - 1);
-      setIsNavigating(false);
-    }
+  const handleBack = () => {
+    if (currentStep > 0) setCurrentStep(currentStep - 1);
   };
 
   const handleSubmit = async () => {
@@ -77,8 +65,8 @@ export default function OnboardingForm() {
     setServerErrors({ ...serverErrors, [field]: undefined });
   };
 
-  // Navigation buttons component
-  const NavigationButtons = ({
+  // Plain render function, not a component: a component defined here remounts on every render
+  const renderNavigationButtons = ({
     onNext,
     showNext = true,
     nextDisabled = false,
@@ -130,7 +118,7 @@ export default function OnboardingForm() {
      }
    `}
         >
-          {isSubmitting || isNavigating ? (
+          {isSubmitting ? (
             <Loader2 className="w-4 h-4 animate-spin text-primary" />
           ) : submitButton ? (
             <p className="py-0 px-3">Submit</p>
@@ -166,12 +154,10 @@ export default function OnboardingForm() {
               value={formData.name}
               onChange={(value) => updateFormData("name", value)}
               error={serverErrors.name?.[0]}
-              NavigationButtons={
-                <NavigationButtons
-                  onNext={handleNext}
-                  nextDisabled={!formData.name.trim()}
-                />
-              }
+              NavigationButtons={renderNavigationButtons({
+                onNext: handleNext,
+                nextDisabled: !formData.name.trim(),
+              })}
             />
           )}
 
@@ -180,12 +166,10 @@ export default function OnboardingForm() {
               value={formData.university}
               onChange={(value) => updateFormData("university", value)}
               error={serverErrors.university?.[0]}
-              NavigationButtons={
-                <NavigationButtons
-                  onNext={handleNext}
-                  nextDisabled={!formData.university.trim()}
-                />
-              }
+              NavigationButtons={renderNavigationButtons({
+                onNext: handleNext,
+                nextDisabled: !formData.university.trim(),
+              })}
             />
           )}
 
@@ -194,12 +178,10 @@ export default function OnboardingForm() {
               value={formData.designation}
               onChange={(value) => updateFormData("designation", value)}
               error={serverErrors.designation?.[0]}
-              NavigationButtons={
-                <NavigationButtons
-                  onNext={handleNext}
-                  nextDisabled={!formData.designation.trim()}
-                />
-              }
+              NavigationButtons={renderNavigationButtons({
+                onNext: handleNext,
+                nextDisabled: !formData.designation.trim(),
+              })}
             />
           )}
 
@@ -208,16 +190,13 @@ export default function OnboardingForm() {
               value={formData.researchAreas}
               onChange={(value) => updateFormData("researchAreas", value)}
               error={serverErrors.researchAreas?.[0]}
-              NavigationButtons={
-                <NavigationButtons
-                  onNext={handleSubmit}
-                  nextDisabled={
-                    formData.researchAreas.length === 0 ||
-                    formData.researchAreas.length > 4
-                  }
-                  submitButton={true}
-                />
-              }
+              NavigationButtons={renderNavigationButtons({
+                onNext: handleSubmit,
+                nextDisabled:
+                  formData.researchAreas.length === 0 ||
+                  formData.researchAreas.length > 4,
+                submitButton: true,
+              })}
             />
           )}
         </div>
