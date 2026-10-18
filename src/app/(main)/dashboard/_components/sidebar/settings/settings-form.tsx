@@ -589,8 +589,7 @@ function PlanSection() {
         </div>
         <div className="mt-5 border-t border-border/60 pt-4">
           <Link
-            href="/"
-            target="_blank"
+            href="/dashboard"
             className="inline-flex items-center gap-1.5 text-sm font-medium text-primary hover:underline underline-offset-4"
           >
             View plans <ExternalLink className="size-3.5" />
