@@ -1,3 +1,5 @@
+<img src="public/neura_query_image.png" alt="Neura Query" width="100%">
+
 # Neura Query
 
 **Hackathon submission: Adam, a research designer and experiment designer built on FalkorDB, inside a collaborative WYSIWYG research editor whose own agents run on the same graph.** 
