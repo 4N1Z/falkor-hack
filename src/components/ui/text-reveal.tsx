@@ -48,12 +48,12 @@ export const TextRevealByWord: FC<TextRevealByWordProps> = ({
 
   return (
     <div ref={targetRef} className={cn("relative z-10" , className)}>
-      <div className=" mx-auto flex min-h-[70vh] max-w-4xl items-center py-20 md:py-10 ">
-        <div className="flex flex-col gap-8 pt-10 px-1 md:p-8">
+      <div className="mx-auto flex max-w-4xl items-center py-6 md:py-8">
+        <div className="flex flex-col gap-5 px-1 md:px-8">
           {processedParagraphs.map((paragraph, pIndex) => (
             <p
               key={pIndex}
-              className="flex flex-wrap text-26 tracking-6 md:text-32 leading-[1.5]"
+              className="flex flex-wrap text-lg tracking-6 md:text-2xl leading-[1.5]"
             >
               {paragraph.map((word, wIndex) => {
                 const previousParagraphsWordCount = processedParagraphs

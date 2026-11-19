@@ -1,6 +1,7 @@
 import FeatureEditor from "@/components/landing/feature-section/feature-editor";
 import { NeuraCard, FeatureSideCard } from "./bento-cards.";
-import { cloudLogo, toolsLogo, workspaceLogo } from "@/lib/logos";
+import { cloudLogo, hypothesisLogo, toolsLogo, workspaceLogo } from "@/lib/logos";
+import AdamCard from "./adam-card";
 import FeatureAI from "@/components/landing/feature-section/feature-ai";
 import FeaturePlugin from "@/components/landing/feature-section/feature-plugin";
 import ResearchGraphMock from "./research-graph-mock";
@@ -8,9 +9,9 @@ import ResearchGraphMock from "./research-graph-mock";
 
 export default function Features() {
   return (
-    <section className="w-full min-h-screen py-20">
+    <section className="w-full pt-8 md:pt-10">
       <div className="flex flex-col items-center justify-center">
-        <div className="grid gap-5 md:gap-10 grid-cols-1 md:grid-cols-3 md:grid-rows-2 min-h-[60vh] md:min-h-[90vh] ">
+        <div className="grid w-full gap-4 md:gap-5 grid-cols-1 md:grid-cols-3 md:grid-rows-[1fr_1fr_auto]">
           {/* First Square Card */}
           <NeuraCard
             variant="square"
@@ -65,6 +66,19 @@ export default function Features() {
             <div className="absolute inset-0 pb-28 z-[1]">
               <ResearchGraphMock />
             </div>
+          </NeuraCard>
+
+          <NeuraCard
+            variant="longHorizontal"
+            className="md:col-span-3 relative min-h-[520px] md:min-h-[400px]"
+          >
+            <AdamCard />
+            <FeatureSideCard
+              logo={hypothesisLogo}
+              title="Adam, from question to experiment"
+              description="Reads the field, extracts claims with their pages, attacks its own hypotheses, and plans the cheapest experiment that could prove them wrong. You make the four decisions."
+            />
+            <div className="absolute h-[260px] w-[260px] -top-10 -right-10 bg-secondary rounded-full z-[1] filter blur-3xl" />
           </NeuraCard>
         </div>
       </div>

@@ -106,7 +106,7 @@ const NeuraAIBtn = () => {
         >
           {neuraQueryLogo}
         </div>
-        <p className="text-xl font-semibold bg-gradient-to-r from-[#305EFF] to-[#8DC4FB] bg-clip-text text-transparent">
+        <p className="text-base font-semibold bg-gradient-to-r from-[#305EFF] to-[#8DC4FB] bg-clip-text text-transparent">
           Ask Neura AI
         </p>
     
@@ -132,9 +132,9 @@ const NeuraAIBtn = () => {
             )}>
               {neuraQueryLogo}
             </div>
-            <span className="text-sm font-semibold text-primary opacity-75">Neura AI</span>
+            <span className="text-[13px] font-semibold text-primary opacity-75">Neura AI</span>
           </div>
-          <div className="text-sm text-foreground opacity-75 min-h-[120px]">
+          <div className="text-[13px] text-foreground opacity-75 min-h-[120px]">
             {isLoading ? (
               <div className="flex items-center gap-2">
                 <Loader2 className="animate-spin" size={16} />
@@ -186,7 +186,7 @@ function AIWriting() {
       )}
     >
       <Loader2 className="animate-spin" size={16} />
-      <h1 className="text-lg text-left font-semibold text-primary opacity-75">
+      <h1 className="text-base text-left font-semibold text-primary opacity-75">
         AI Writing
       </h1>
     </div>
@@ -196,7 +196,7 @@ export default function FeatureAI({ className }: { className?: string }) {
   return (
     <div className={cn("relative grid grid-rows-2 h-full ", className)}>
       <div className="flex justify-start items-start">
-        <h1 className="text-26 text-left font-regualar tracking-4 max-w-[70%]">
+        <h1 className="text-xl text-left font-regualar tracking-4 max-w-[70%]">
           Specialized
           <span className="text-primary font-serif font-semibold italic">
             {" "}

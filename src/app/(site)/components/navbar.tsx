@@ -8,21 +8,20 @@ import { Sheet, SheetContent, SheetTitle, SheetTrigger } from "@/components/ui/s
 
 const links = [
   { href: "#home", label: "home" },
-  { href: "#adam", label: "adam" },
   { href: "#features", label: "features" },
   { href: "#upgrade", label: "what's new" },
 ];
 
 export default function Navbar() {
   return (
-    <MaxWidthContainer className="w-full flex justify-between items-center mt-2 md:mt-4">
+    <MaxWidthContainer className="w-full flex justify-between items-center border-x border-sky-100 py-4 md:py-5 px-4 md:px-12">
       <Link href={"/"} className="flex items-center gap-2 ">
         <div className="w-8 h-8">{neuraQueryLogo}</div>
-        <span className="text-primary text-xl md:text-26 font-medium">neura query</span>
+        <span className="text-primary text-lg font-medium">neura query</span>
       </Link>
 
       {/* Desktop Navigation */}
-      <div className="hidden md:flex gap-2 text-foreground text-26">
+      <div className="hidden md:flex gap-2 text-foreground text-base">
         {links.map((link, i) => (
           <Fragment key={link.href}>
             {i > 0 && <span className="text-primary font-bold">/</span>}
@@ -36,7 +35,7 @@ export default function Navbar() {
         ))}
       </div>
 
-      <Button asChild variant="neura" className="hidden md:inline-flex text-16">
+      <Button asChild variant="neura" className="hidden md:inline-flex text-sm">
         <Link href="/dashboard">Open dashboard</Link>
       </Button>
 
@@ -54,12 +53,12 @@ export default function Navbar() {
               <Link
                 key={link.href}
                 href={link.href}
-                className="text-xl hover:text-primary transition-colors duration-150"
+                className="text-base hover:text-primary transition-colors duration-150"
               >
                 {link.label}
               </Link>
             ))}
-            <Button asChild variant="neura" className="text-16 w-full">
+            <Button asChild variant="neura" className="text-sm w-full">
               <Link href="/dashboard">Open dashboard</Link>
             </Button>
           </div>

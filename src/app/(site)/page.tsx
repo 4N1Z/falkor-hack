@@ -1,23 +1,26 @@
 import Hero from "./components/hero";
-import MaxWidthContainer from "./components/max-width-container";
 import Navbar from "./components/navbar";
 import TrustedBy from "./components/trusted.by";
 import AboutNeura from "./components/about-neura";
 import Footer from "./components/footer";
 import FeatureSection from "./components/feature-section";
-import AdamSection from "./components/adam-section";
 import UpgradeSection from "./components/upgrade-section";
+import RailSection from "./components/rail-section";
 
 export default async function Home() {
   return (
     <>
       <Navbar />
-      <MaxWidthContainer className="w-full flex flex-col gap-0 md:gap-12 pt-4 md:pt-12 ">
+      <RailSection id="home" className="py-8 md:py-12">
         <Hero />
+      </RailSection>
+      <RailSection className="py-6 md:py-8">
         <TrustedBy />
+      </RailSection>
+      <RailSection className="py-2 md:py-4">
         <AboutNeura />
-      </MaxWidthContainer>
-      <AdamSection />
+      </RailSection>
+      <RailSection className="h-10 md:h-14" />
       <FeatureSection />
       <UpgradeSection />
       <Footer />

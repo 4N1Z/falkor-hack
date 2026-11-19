@@ -23,8 +23,8 @@ export default function TrustedBy() {
   
 
   return (
-    <BlurFade className="w-full flex flex-col items-center justify-center gap-8 mt-12 md:mt-0" delay={0.5} inView>
-      <h2 className="text-xl tracking-6 leading-[1.2] lowercase text-primary ">
+    <BlurFade className="w-full flex flex-col items-center justify-center gap-5" delay={0.5} inView>
+      <h2 className="text-base tracking-6 leading-[1.2] lowercase text-primary ">
         Trusted by
       </h2>
     {/* on hover i need to show a contact btn , and need to add a backdrop blur to the carousel */}

@@ -19,7 +19,7 @@ export function CustomPeopleCursor({
       <span style={{ color: color }}>{peopleCursor}</span>
       <p
         className={cn(
-          `text-sm font-medium  text-white  rounded-full px-2 py-1`
+          `text-[13px] font-medium  text-white  rounded-full px-2 py-1`
         )}
         style={{ backgroundColor: color }}
       >
@@ -79,21 +79,21 @@ export default function FeatureEditor({ className }: { className?: string }) {
           <div className="flex flex-col gap-2">
             <div className="flex gap-2 px-0 bg-green-100 p-1 items-center justify-center text-green-600 rounded-md">
               <ImagePlus size={18} />
-              <p className="text-sm font-medium">Upload Banner</p>
+              <p className="text-[13px] font-medium">Upload Banner</p>
             </div>
 
             <div className="flex flex-col">
-              <h1 className="text-lg font-medium text-foreground leading-none">
+              <h1 className="text-base font-medium text-foreground leading-none">
                 Research Assistant
               </h1>
-              <p className="text-sm text-muted-foreground leading-none">
+              <p className="text-[13px] text-muted-foreground leading-none">
                 Neura Query
               </p>
             </div>
           </div>
         </div>
         <div className="w-full flex flex-col gap-4 py-4">
-          <h2 className="text-xl font-medium">Research is hard</h2>
+          <h2 className="text-base font-medium">Research is hard</h2>
 
           <p className="text-muted-foreground font-regular">
             There are countless challenges in the research process. From

@@ -1,6 +1,6 @@
 import BlurFade from "@/components/ui/blur-fade";
 import { cn } from "@/lib/utils";
-import MaxWidthContainer from "./max-width-container";
+import RailSection from "./rail-section";
 import { glassCard, innerCard } from "./styles";
 
 const beforeAfter = [
@@ -84,27 +84,28 @@ const editorFixes = [
 function Heading({ kicker, children }: { kicker: string; children: React.ReactNode }) {
   return (
     <div className="flex flex-col gap-2 max-w-2xl">
-      <p className="text-sm uppercase tracking-normal text-primary/70 font-medium">{kicker}</p>
-      <h3 className="text-26 md:text-32 tracking-6 leading-[1.2] lowercase text-foreground">{children}</h3>
+      <p className="text-[11px] uppercase tracking-wide text-primary/70 font-medium">{kicker}</p>
+      <h3 className="text-xl md:text-2xl tracking-6 leading-[1.2] lowercase text-foreground">{children}</h3>
     </div>
   );
 }
 
 export default function UpgradeSection() {
   return (
-    <section id="upgrade" className="relative w-full overflow-hidden scroll-mt-8 mt-16 md:mt-24">
-      <div className="absolute h-[400px] w-[400px] top-40 -right-40 bg-secondary rounded-full filter blur-3xl opacity-50 pointer-events-none" />
-
-      <MaxWidthContainer className="relative flex flex-col gap-24 md:gap-32 py-16 md:py-24">
+    <RailSection
+      id="upgrade"
+      className="flex flex-col gap-14 md:gap-20 pt-20 md:pt-24 pb-12 md:pb-16"
+      backdrop={<div className="absolute top-40 right-[8%] h-[520px] w-[520px] rounded-full bg-secondary opacity-40 blur-[120px]" />}
+    >
         {/* intro */}
         <BlurFade delay={0.1} inView>
           <div className="flex flex-col gap-6 max-w-3xl">
-            <h2 className="text-32 md:text-56 tracking-6 leading-[1.1] lowercase text-foreground">
+            <h2 className="text-2xl md:text-[2.5rem] tracking-6 leading-[1.1] lowercase text-foreground">
               the same workspace,{" "}
               <span className="text-primary font-serif font-semibold italic">rebuilt</span> around a
               knowledge graph
             </h2>
-            <p className="text-lg text-muted-foreground leading-snug">
+            <p className="text-base text-muted-foreground leading-snug">
               Every paper a team member imports or uploads now goes into the workspace&apos;s
               FalkorDB graph first. The editor&apos;s agents and Adam read the same graph, so a
               claim Adam verified is exactly what the Citation Checker judges your draft against.
@@ -115,7 +116,7 @@ export default function UpgradeSection() {
         {/* before / after */}
         <BlurFade delay={0.15} inView>
           <div className={cn(glassCard, "relative overflow-hidden p-2 md:p-4")}>
-            <div className="hidden md:grid grid-cols-[10rem_1fr_1.6fr] gap-4 px-4 py-3 text-sm text-primary/70 font-medium uppercase">
+            <div className="hidden md:grid grid-cols-[10rem_1fr_1.6fr] gap-4 px-4 py-3 text-[13px] text-primary/70 font-medium uppercase">
               <span>Area</span>
               <span>Before</span>
               <span>Now</span>
@@ -130,10 +131,10 @@ export default function UpgradeSection() {
                   )}
                 >
                   <span className="font-medium text-primary">{row.area}</span>
-                  <span className="text-sm text-muted-foreground line-through decoration-primary/30">
+                  <span className="text-[13px] text-muted-foreground line-through decoration-primary/30">
                     {row.before}
                   </span>
-                  <span className="text-sm text-foreground leading-snug">{row.after}</span>
+                  <span className="text-[13px] text-foreground leading-snug">{row.after}</span>
                 </div>
               ))}
             </div>
@@ -141,7 +142,7 @@ export default function UpgradeSection() {
         </BlurFade>
 
         {/* editor agents */}
-        <div className="flex flex-col gap-10">
+        <div className="flex flex-col gap-6">
           <BlurFade delay={0.1} inView>
             <Heading kicker="Agents in the editor">
               help that{" "}
@@ -152,8 +153,8 @@ export default function UpgradeSection() {
             {editorAgents.map((agent, i) => (
               <BlurFade key={agent.name} delay={0.04 * i} inView>
                 <div className={cn(innerCard, "h-full p-4 flex flex-col gap-2")}>
-                  <p className="text-lg font-medium text-primary">{agent.name}</p>
-                  <p className="text-sm text-muted-foreground leading-snug">{agent.job}</p>
+                  <p className="text-base font-medium text-primary">{agent.name}</p>
+                  <p className="text-[13px] text-muted-foreground leading-snug">{agent.job}</p>
                 </div>
               </BlurFade>
             ))}
@@ -161,8 +162,8 @@ export default function UpgradeSection() {
         </div>
 
         {/* rules + graph */}
-        <div className="grid grid-cols-1 lg:grid-cols-[1.3fr_1fr] gap-12">
-          <div className="flex flex-col gap-8">
+        <div className="grid grid-cols-1 lg:grid-cols-[1.3fr_1fr] gap-8">
+          <div className="flex flex-col gap-5">
             <BlurFade delay={0.1} inView>
               <Heading kicker="Three rules every agent follows">
                 built so you can{" "}
@@ -173,12 +174,12 @@ export default function UpgradeSection() {
               {rules.map((rule, i) => (
                 <BlurFade key={rule.title} delay={0.05 * i} inView>
                   <div className={cn(innerCard, "p-4 flex gap-4 items-start")}>
-                    <span className="w-8 h-8 shrink-0 rounded-full bg-primary text-white text-sm font-semibold flex items-center justify-center">
+                    <span className="w-8 h-8 shrink-0 rounded-full bg-primary text-white text-[13px] font-semibold flex items-center justify-center">
                       {i + 1}
                     </span>
                     <div className="flex flex-col gap-1">
                       <p className="font-medium text-foreground">{rule.title}</p>
-                      <p className="text-sm text-muted-foreground leading-snug">{rule.body}</p>
+                      <p className="text-[13px] text-muted-foreground leading-snug">{rule.body}</p>
                     </div>
                   </div>
                 </BlurFade>
@@ -186,7 +187,7 @@ export default function UpgradeSection() {
             </div>
           </div>
 
-          <div className="flex flex-col gap-8">
+          <div className="flex flex-col gap-5">
             <BlurFade delay={0.1} inView>
               <Heading kicker="Running on FalkorDB">
                 the graph is memory,{" "}
@@ -195,7 +196,7 @@ export default function UpgradeSection() {
             </BlurFade>
             <BlurFade delay={0.15} inView>
               <div className={cn(glassCard, "p-4 md:p-6 flex flex-col gap-4")}>
-                <p className="text-base text-muted-foreground leading-snug">
+                <p className="text-sm text-muted-foreground leading-snug">
                   Not a store beside the agents: Adam&apos;s job queue, its loop state, every
                   extracted claim and the papers it came from live in the same graph.
                 </p>
@@ -215,7 +216,7 @@ export default function UpgradeSection() {
         </div>
 
         {/* editor fixes */}
-        <div className="flex flex-col gap-10">
+        <div className="flex flex-col gap-6">
           <BlurFade delay={0.1} inView>
             <Heading kicker="And under the hood">
               the editor,{" "}
@@ -226,14 +227,13 @@ export default function UpgradeSection() {
             {editorFixes.map((fix, i) => (
               <BlurFade key={fix.title} delay={0.05 * i} inView>
                 <div className={cn(innerCard, "h-full p-4 flex flex-col gap-2")}>
-                  <p className="text-lg font-medium text-primary">{fix.title}</p>
-                  <p className="text-sm text-muted-foreground leading-snug">{fix.body}</p>
+                  <p className="text-base font-medium text-primary">{fix.title}</p>
+                  <p className="text-[13px] text-muted-foreground leading-snug">{fix.body}</p>
                 </div>
               </BlurFade>
             ))}
           </div>
         </div>
-      </MaxWidthContainer>
-    </section>
+    </RailSection>
   );
 }

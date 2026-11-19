@@ -1,6 +1,6 @@
 import { circles, neuraQuery_Text } from "@/lib/logos";
 import Link from "next/link";
-import MaxWidthContainer from "./max-width-container";
+import RailSection from "./rail-section";
 import { Button } from "@/components/ui/button";
 
 export const neuraQuery_mob = (
@@ -57,18 +57,14 @@ export const neuraQuery_mob = (
 export default function Footer() {
   return (
     <div className="relative overflow-clip">
-      <MaxWidthContainer>
-        <section
-          className="w-full min-h-[80vh] gap-12 flex flex-col items-center justify-end"
-          id="footer"
-        >
+      <RailSection id="footer" className="min-h-[60vh] gap-8 flex flex-col items-center justify-end py-6 md:py-12">
           <div className="w-[100%] flex flex-col items-center justify-center md:items-end md:justify-end">
             <div className="flex flex-col items-center md:items-end gap-4 pb-4 text-center md:text-right">
-              <p className="text-26 md:text-32 tracking-6 leading-[1.2] lowercase text-foreground max-w-xl">
+              <p className="text-xl md:text-2xl tracking-6 leading-[1.2] lowercase text-foreground max-w-xl">
                 bring your question,{" "}
                 <span className="text-primary font-serif italic">leave with an experiment</span>
               </p>
-              <Button asChild variant="neura" size="lg" className="text-16">
+              <Button asChild variant="neura" size="lg" className="text-sm">
                 <Link href="/dashboard">Start researching</Link>
               </Button>
             </div>
@@ -80,7 +76,7 @@ export default function Footer() {
             </div>
           </div>
 
-          <div className="flex flex-col md:flex-row w-full text-16 justify-between items-center gap-2 text-primary ">
+          <div className="flex flex-col md:flex-row w-full text-sm justify-between items-center gap-2 text-primary ">
             <div className="flex flex-row gap-4 opacity-50">
               <p>Privacy Policy </p>
               <p>Terms of Service</p>
@@ -99,8 +95,7 @@ export default function Footer() {
               </Link>
             </h1>
           </div>
-        </section>
-      </MaxWidthContainer>
+      </RailSection>
       <div className="absolute bottom-0 left-1/2 -translate-x-1/2 -z-50 opacity-10">{circles}</div>
 
     </div>

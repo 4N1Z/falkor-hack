@@ -32,18 +32,18 @@ export const curve = (
 );
 export default function FeatureSection() {
   return (
-    <section className="relative w-full min-h-screen flex flex-col items-start justify-center mt-5 md:mt-20" id="features">
+    <section className="relative w-full flex flex-col items-start justify-center" id="features">
       <div className="absolute bottom-[99.8%] left-1/2 -translate-x-1/2 w-full  z-10">
         <div className="grid items-center text-foreground rotate-180">
           {curve}
         </div>
       </div>
-      <div className="bg-foreground pt-10 flex w-full items-center justify-center">
+      <div className="bg-foreground flex w-full items-center justify-center">
 
-      <MaxWidthContainer className="">
+      <MaxWidthContainer className="border-x border-white/10 px-4 md:px-12 py-10 md:py-14">
         <div className="max-w-xl">
           <BlurFade delay={0.2} inView> 
-            <h1 className="text-32 tracking-6 leading-[1.2] lowercase text-background">
+            <h1 className="text-2xl tracking-6 leading-[1.2] lowercase text-background">
             the
             <span className="text-secondary font-serif font-semibold italic">
               {" "}

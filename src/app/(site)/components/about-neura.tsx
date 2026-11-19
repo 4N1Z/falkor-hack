@@ -12,7 +12,7 @@ const aboutNeura = `
 
 export default function AboutNeura() {
   return (
-    <div className=" w-full flex flex-col items-center justify-center">
+    <div className="w-full flex flex-col items-center justify-center">
       <TextRevealByWord text={aboutNeura} />
     </div>
   );

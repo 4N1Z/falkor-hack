@@ -67,9 +67,9 @@ export const FeatureSideCard = ({
       >
         <div className="flex gap-2 text-primary z-10">
           {logo}
-          <p className="text-xl font-medium">{title}</p>
+          <p className="text-base font-medium">{title}</p>
         </div>
-        <p className="text-base opacity-60 leading-none z-10">{description}</p>
+        <p className="text-sm opacity-60 leading-none z-10">{description}</p>
         {/* <div className="absolute h-[200px] w-[200px] top-0 -left-10 bg-secondary rounded-full -z-1 filter blur-3xl opacity-70" /> */}
       </div>
     </>
